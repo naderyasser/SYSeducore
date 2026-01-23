@@ -16,7 +16,8 @@ class GroupAdmin(admin.ModelAdmin):
     list_filter = ['schedule_day', 'is_active', 'teacher']
     search_fields = ['group_name', 'teacher__full_name']
     ordering = ['group_name']
-    
+    autocomplete_fields = ['teacher']
+
     fieldsets = (
         ('معلومات المجموعة', {
             'fields': ('group_name', 'teacher', 'is_active')
