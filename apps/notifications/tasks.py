@@ -8,12 +8,11 @@ from apps.attendance.models import Session
 @shared_task
 def send_attendance_notifications_task():
     """
-    مهمة تعمل كل دقيقة للتحقق من الحصص التي انتهت قبل 15 دقيقة
+    مهمة تعمل كل دقيقة للتحقق من الحصص التي انتهت قبل 10 دقائق
     """
     notification_service = NotificationService()
     now = timezone.now()
-    fifteen_min_ago = now - timedelta(minutes=15)
-    
+
     # البحث عن الحصص التي تحتاج إشعارات
     sessions = Session.objects.filter(
         session_date=now.date(),
@@ -28,8 +27,8 @@ def send_attendance_notifications_task():
             datetime.combine(session.session_date, session.group.schedule_time)
         )
         
-        # التحقق من مرور 15 دقيقة
-        if now >= session_start + timedelta(minutes=15):
+        # التحقق من مرور 10 دقائق
+        if now >= session_start + timedelta(minutes=10):
             notification_service.send_attendance_notifications(session.session_id)
 
 
