@@ -1,0 +1,163 @@
+{% extends 'base.html' %} {% load static %} {% block title %}{% if student
+%}تعديل الطالب - {{ student.full_name }}{% else %}إضافة طالب جديد{% endif %}{%
+endblock %} {% block content %}
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h4>
+        {% if student %}✏️ تعديل الطالب - {{ student.full_name }}{% else %}➕
+        إضافة طالب جديد{% endif %}
+      </h4>
+    </div>
+    <div class="card-body">
+      <form method="post" action="{% url 'students:create' %}">
+        {% csrf_token %}
+
+        <div class="mb-3">
+          <label for="barcode" class="form-label">كود الباركود</label>
+          <input
+            type="text"
+            name="barcode"
+            class="form-control"
+            value="{% if student %}{{ student.barcode }}{% endif %}"
+            required
+          />
+        </div>
+
+        <div class="mb-3">
+          <label for="full_name" class="form-label">الاسم الكامل</label>
+          <input
+            type="text"
+            name="full_name"
+            class="form-control"
+            value="{% if student %}{{ student.full_name }}{% endif %}"
+            required
+          />
+        </div>
+
+        <div class="mb-3">
+          <label for="group" class="form-label">المجموعة</label>
+          <select name="group" class="form-control" required>
+            <option value="">اختر مجموعة...</option>
+            {% for group in groups %}
+            <option value="{{ group.group_id }}">{{ group.group_name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label for="parent_phone" class="form-label">رقم ولي الأمر</label>
+          <input
+            type="text"
+            name="parent_phone"
+            class="form-control"
+            value="{% if student %}{{ student.parent_phone }}{% endif %}"
+            required
+          />
+        </div>
+
+        <div class="mb-3">
+          <label for="financial_status" class="form-label"
+            >الحالة المالية</label
+          >
+          <select name="financial_status" class="form-control" required>
+            <option
+              value="normal"
+              {%
+              if
+              student.financial_status=""
+              ="normal"
+              %}selected{%
+              endif
+              %}
+            >
+              عادي
+            </option>
+            <option
+              value="symbolic"
+              {%
+              if
+              student.financial_status=""
+              ="symbolic"
+              %}selected{%
+              endif
+              %}
+            >
+              مبلغ رمزي
+            </option>
+            <option
+              value="exempt"
+              {%
+              if
+              student.financial_status=""
+              ="exempt"
+              %}selected{%
+              endif
+              %}
+            >
+              إعفاء كامل
+            </option>
+          </select>
+        </div>
+
+        <div class="mb-3" id="customFeeContainer" style="display: none">
+          <label for="custom_fee" class="form-label">المبلغ المخصص</label>
+          <input
+            type="number"
+            name="custom_fee"
+            class="form-control"
+            value="{% if student %}{{ student.custom_fee }}{% endif %}"
+            step="0.01"
+            min="0"
+          />
+        </div>
+
+        <div class="mb-3">
+          <label for="is_active" class="form-label">الحالة</label>
+          <div class="form-check">
+            <input
+              type="checkbox"
+              name="is_active"
+              class="form-check-input"
+              {%
+              if
+              student.is_active
+              %}checked{%
+              endif
+              %}
+              id="isActive"
+            />
+            <label for="isActive" class="form-check-label">نشط</label>
+          </div>
+        </div>
+
+        <div class="text-center mt-4">
+          <button type="submit" class="btn btn-primary">
+            {% if student %}حفظ التغييرات{% else %}إضافة الطالب{% endif %}
+          </button>
+          <a href="{% url 'students:list' %}" class="btn btn-secondary">
+            إلغاء
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const financialStatusSelect = document.querySelector(
+      'select[name="financial_status"]',
+    );
+    const customFeeContainer = document.getElementById("customFeeContainer");
+
+    financialStatusSelect.addEventListener("change", function () {
+      if (this.value === "symbolic") {
+        customFeeContainer.style.display = "block";
+      } else {
+        customFeeContainer.style.display = "none";
+      }
+    });
+  });
+</script>
+{% endblock %}

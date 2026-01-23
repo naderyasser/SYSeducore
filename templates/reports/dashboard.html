@@ -1,0 +1,83 @@
+{% extends 'base.html' %} {% block title %}لوحة التحكم{% endblock %} {% block
+content %}
+<div class="card mb-4">
+  <div class="card-header">
+    <h4>📊 لوحة التحكم</h4>
+  </div>
+  <div class="card-body">
+    <div class="row">
+      <div class="col-md-3">
+        <div class="card mb-3">
+          <div class="card-header">
+            <h5>🎯 إحصائيات سريعة</h5>
+          </div>
+          <div class="card-body">
+            <div class="stat-item">
+              <span class="stat-number">{{ total_students }}</span>
+              <span class="stat-label">طالب نشط</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">{{ total_teachers }}</span>
+              <span class="stat-label">مدرس</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">{{ total_groups }}</span>
+              <span class="stat-label">مجموعة</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-number">{{ today_attendances }}</span>
+              <span class="stat-label">حضور اليوم</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-9">
+        <div class="card mb-3">
+          <div class="card-header">
+            <h5>📅 التقارير</h5>
+          </div>
+          <div class="card-body">
+            <a
+              href="{% url 'reports:attendance' %}"
+              class="btn btn-primary btn-lg w-100"
+            >
+              تقرير الحضور
+            </a>
+            <a
+              href="{% url 'reports:payments' %}"
+              class="btn btn-success btn-lg w-100 mt-2"
+            >
+              تقرير المدفوعات
+            </a>
+          </div>
+        </div>
+        <div class="card mb-3">
+          <div class="card-header">
+            <h5>⚡ الإجراءات السريعة</h5>
+          </div>
+          <div class="card-body">
+            <a
+              href="{% url 'students:create' %}"
+              class="btn btn-warning btn-lg w-100"
+            >
+              ➕ إضافة طالب جديد
+            </a>
+            <a
+              href="{% url 'teachers:list' %}"
+              class="btn btn-primary btn-lg w-100 mt-2"
+            >
+              👨 إدارة المدرسين
+            </a>
+            <a
+              href="{% url 'attendance:scanner' %}"
+              class="btn btn-success btn-lg w-100 mt-2"
+            >
+              📷 مسح الباركود
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

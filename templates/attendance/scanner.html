@@ -1,0 +1,58 @@
+{% extends 'base.html' %} {% load static %} {% block title %}تسجيل الحضور{%
+endblock %} {% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/scanner.css' %}" />
+{% endblock %} {% block content %}
+<div class="scanner-container">
+  <div class="scanner-header">
+    <h1>📷 تسجيل حضور الطلاب</h1>
+    <div class="status-indicator" id="statusIndicator">
+      <span class="status-dot"></span>
+      <span class="status-text">جاهز للمسح</span>
+    </div>
+  </div>
+
+  <div class="scanner-body">
+    <!-- Barcode Input -->
+    <div class="input-section">
+      <label for="barcodeInput">امسح الباركود أو أدخله يدوياً</label>
+      <input
+        type="text"
+        id="barcodeInput"
+        class="barcode-input"
+        placeholder="ضع المؤشر هنا ثم امسح الكارنيه"
+        autofocus
+      />
+    </div>
+
+    <!-- Result Display -->
+    <div class="result-section" id="resultSection" style="display: none">
+      <div class="result-card" id="resultCard">
+        <div class="result-icon" id="resultIcon"></div>
+        <div class="result-message" id="resultMessage"></div>
+        <div class="result-details" id="resultDetails"></div>
+      </div>
+    </div>
+
+    <!-- Recent Scans -->
+    <div class="recent-scans">
+      <h3>📋 آخر عمليات المسح</h3>
+      <div class="scans-list" id="scansList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Audio for feedback -->
+<audio id="successSound" src="{% static 'sounds/success.mp3' %}"></audio>
+<audio id="errorSound" src="{% static 'sounds/error.mp3' %}"></audio>
+
+{% block extra_js %}
+<script src="{% static 'js/utils/api.js' %}"></script>
+<script src="{% static 'js/models/Attendance.js' %}"></script>
+<script src="{% static 'js/views/ScannerView.js' %}"></script>
+<script src="{% static 'js/controllers/ScannerController.js' %}"></script>
+<script>
+  // Initialize Scanner
+  const scannerController = new ScannerController();
+  scannerController.init();
+</script>
+{% endblock %}

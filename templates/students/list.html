@@ -1,0 +1,62 @@
+{% extends 'base.html' %} {% load static %} {% block title %}الطلاب{% endblock
+%} {% block content %}
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h4>👨 قائمة الطلاب</h4>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead>
+            <tr>
+              <th>الباركود</th>
+              <th>الاسم</th>
+              <th>المجموعة</th>
+              <th>الحالة المالية</th>
+              <th>رقم الهاتف</th>
+              <th>الحالة</th>
+              <th>الإجراءات</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student in students %}
+            <tr>
+              <td>{{ student.barcode }}</td>
+              <td>{{ student.full_name }}</td>
+              <td>{{ student.group.group_name }}</td>
+              <td>
+                <span class="status-{{ student.financial_status }}">
+                  {{ student.get_financial_status_display }}
+                </span>
+              </td>
+              <td>{{ student.parent_phone }}</td>
+              <td>
+                <span class="status-active">نشط</span>
+              </td>
+              <td>
+                <a
+                  href="{% url 'students:update' student_id=student.student_id %}"
+                  class="btn btn-sm btn-primary"
+                >
+                  ✏️ تعديل
+                </a>
+                <a
+                  href="{% url 'students:detail' student_id=student.student_id %}"
+                  class="btn btn-sm btn-info"
+                >
+                  👁 عرض
+                </a>
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="8" class="text-center text-muted">لا يوجد طلاب</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endblock %}
+</div>

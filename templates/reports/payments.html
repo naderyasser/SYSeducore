@@ -1,0 +1,35 @@
+{% extends 'base.html' %} {% load static %} {% block title %}تقرير المدفوعات{%
+endblock %} {% block content %}
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h4>💰 تقرير المدفوعات</h4>
+    </div>
+    <div class="card-body">
+      <div class="row">
+        <div class="col-md-6">
+          <div class="card mb-3">
+            <div class="card-header">
+              <h5>📅 ملخص الدفعات</h5>
+            </div>
+            <div class="card-body">
+              <div class="stat-item">
+                <span class="stat-number">{{ total_payments }}</span>
+                <span class="stat-label">إجمالي الدفعات</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-number">{{ total_paid }}</span>
+                <span class="stat-label">المبالغ المدفوع</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-number">{{ total_pending }}</span>
+                <span class="stat-label">متأخر الدفع</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endblock %}
+</div>

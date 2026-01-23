@@ -1,0 +1,41 @@
+{% extends 'base.html' %} {% load static %} {% block title %}تقرير الحضور{%
+endblock %} {% block content %}
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h4>📅 تقرير الحضور</h4>
+    </div>
+    <div class="card-body">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead>
+            <tr>
+              <th>التاريخ</th>
+              <th>المجموعة</th>
+              <th>المدرس</th>
+              <th>عدد الحضور</th>
+              <th>عدد الغياب</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for attendance in attendances %}
+            <tr>
+              <td>{{ attendance.session.session_date|date:"Y-m-d" }}</td>
+              <td>{{ attendance.session.group.group_name }}</td>
+              <td>{{ attendance.session.group.teacher.full_name }}</td>
+              <td>{{ attendance.session.attendances.count }}</td>
+              <td>
+                {{ attendance.attendances.filter(status='absent').count }}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="text-center text-muted">لا يوجد سجلات</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

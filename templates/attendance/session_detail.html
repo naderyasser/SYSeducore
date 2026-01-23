@@ -1,0 +1,70 @@
+{% extends 'base.html' %} {% block title %}تفاصيل الحصة{% endblock %} {% block
+content %}
+<div class="container mt-4">
+  <div class="card">
+    <div class="card-header">
+      <h4>📅 تفاصيل الحصة</h4>
+    </div>
+    <div class="card-body">
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <h5>معلومات الحصة</h5>
+          <p><strong>المجموعة:</strong> {{ session.group.group_name }}</p>
+          <p><strong>المدرس:</strong> {{ session.group.teacher.full_name }}</p>
+          <p>
+            <strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}
+          </p>
+          <p>
+            <strong>الوقت:</strong> {{ session.group.schedule_time|time:"H:i" }}
+          </p>
+          <p>
+            <strong>حضور المدرس:</strong>
+            {% if session.teacher_attended %}
+            <span class="text-success"
+              >✅ نعم ({{ session.teacher_checkin_time|time:"H:i" }})</span
+            >
+            {% else %}
+            <span class="text-danger">❌ لا</span>
+            {% endif %}
+          </p>
+        </div>
+        <div class="col-md-6">
+          <h5>حضور الطلاب</h5>
+          <div class="table-responsive">
+            <table class="table table-striped">
+              <thead>
+                <tr>
+                  <th>الطالب</th>
+                  <th>الحالة</th>
+                  <th>وقت المسح</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for attendance in session.attendances.all %}
+                <tr>
+                  <td>{{ attendance.student.full_name }}</td>
+                  <td>
+                    <span class="status-{{ attendance.status }}">
+                      {% if attendance.status == 'present' %}حاضر {% elif
+                      attendance.status == 'late' %}متأخر {% elif
+                      attendance.status == 'absent' %}غائب {% endif %}
+                    </span>
+                  </td>
+                  <td>{{ attendance.scan_time|time:"H:i" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                  <td colspan="3" class="text-center text-muted">
+                    لا يوجد سجلات حضور
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
