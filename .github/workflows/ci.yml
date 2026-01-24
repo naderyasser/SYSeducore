@@ -1,0 +1,283 @@
+name: CI - Continuous Integration
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  POSTGRES_DB: test_educore
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+
+jobs:
+  # ==========================================
+  # Job 1: Code Quality & Linting
+  # ==========================================
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black isort pylint
+
+      - name: Run Black (Code Formatting)
+        run: |
+          black --check --diff .
+        continue-on-error: true
+
+      - name: Run isort (Import Sorting)
+        run: |
+          isort --check-only --diff .
+        continue-on-error: true
+
+      - name: Run Flake8 (Linting)
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        continue-on-error: true
+
+  # ==========================================
+  # Job 2: Security Scanning
+  # ==========================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install bandit safety
+
+      - name: Run Bandit (Security Linter)
+        run: |
+          bandit -r apps/ config/ -ll -f json -o bandit-report.json || true
+          bandit -r apps/ config/ -ll
+        continue-on-error: true
+
+      - name: Run Safety (Dependency Vulnerability Check)
+        run: |
+          safety check --json || true
+        continue-on-error: true
+
+      - name: Upload Bandit Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+
+  # ==========================================
+  # Job 3: Unit Tests with Coverage
+  # ==========================================
+  test:
+    name: Unit Tests & Coverage
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install coverage pytest pytest-django pytest-cov
+
+      - name: Setup environment variables
+        run: |
+          cp .env.example .env
+          echo "SECRET_KEY=test-secret-key-for-ci-only" >> .env
+          echo "DEBUG=True" >> .env
+          echo "DB_ENGINE=django.db.backends.postgresql" >> .env
+          echo "DB_NAME=${{ env.POSTGRES_DB }}" >> .env
+          echo "DB_USER=${{ env.POSTGRES_USER }}" >> .env
+          echo "DB_PASSWORD=${{ env.POSTGRES_PASSWORD }}" >> .env
+          echo "DB_HOST=localhost" >> .env
+          echo "DB_PORT=5432" >> .env
+          echo "REDIS_URL=redis://localhost:6379/0" >> .env
+          echo "CELERY_BROKER_URL=redis://localhost:6379/0" >> .env
+
+      - name: Run migrations
+        run: |
+          python manage.py makemigrations --check --dry-run --no-input
+          python manage.py migrate --no-input
+
+      - name: Run tests with coverage
+        run: |
+          coverage run --source='apps' manage.py test --no-input
+          coverage report -m
+          coverage xml
+          coverage html
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-educore
+          fail_ci_if_error: false
+
+      - name: Upload coverage HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+      - name: Coverage Summary
+        run: |
+          coverage report --fail-under=50
+
+  # ==========================================
+  # Job 4: Django System Checks
+  # ==========================================
+  django-checks:
+    name: Django System Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Setup environment
+        run: |
+          cp .env.example .env
+          echo "SECRET_KEY=test-secret-key" >> .env
+
+      - name: Run Django checks
+        run: |
+          python manage.py check --deploy --fail-level WARNING
+
+      - name: Check for missing migrations
+        run: |
+          python manage.py makemigrations --check --dry-run --no-input
+
+  # ==========================================
+  # Job 5: Build Test
+  # ==========================================
+  build:
+    name: Build Test
+    runs-on: ubuntu-latest
+    needs: [code-quality, test]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Collect static files
+        run: |
+          cp .env.example .env
+          echo "SECRET_KEY=test-secret-key" >> .env
+          python manage.py collectstatic --no-input
+
+      - name: Check for Python syntax errors
+        run: |
+          python -m py_compile $(find . -name "*.py" -not -path "./venv/*" -not -path "./.venv/*")
+
+  # ==========================================
+  # Final Status Check
+  # ==========================================
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [code-quality, security, test, django-checks, build]
+    if: always()
+
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.code-quality.result }}" == "success" ]] && \
+             [[ "${{ needs.security.result }}" == "success" ]] && \
+             [[ "${{ needs.test.result }}" == "success" ]] && \
+             [[ "${{ needs.django-checks.result }}" == "success" ]] && \
+             [[ "${{ needs.build.result }}" == "success" ]]; then
+            echo "✅ All CI checks passed!"
+            exit 0
+          else
+            echo "❌ Some CI checks failed"
+            exit 1
+          fi
