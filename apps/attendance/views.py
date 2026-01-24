@@ -3,18 +3,64 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 from .models import Session, Attendance
+from .services import AttendanceService
 from apps.students.models import Student
+import json
 
 
 @login_required
 def scanner_page(request):
     """
-    صفحة مسح الباركود
+    صفحة إدخال كود الطالب (النظام الجديد)
     """
     return render(request, 'attendance/scanner.html', {
-        'page_title': 'تسجيل الحضور'
+        'page_title': 'تسجيل الحضور - إدخال يدوي'
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def process_student_code(request):
+    """
+    API Endpoint: معالجة كود الطالب
+
+    النظام الجديد: استقبال كود الطالب يدوياً بدلاً من الباركود
+    الخوارزمية: 4 خطوات صارمة
+    """
+    try:
+        # قراءة البيانات من الطلب
+        data = json.loads(request.body)
+        student_code = data.get('student_code', '').strip()
+
+        if not student_code:
+            return JsonResponse({
+                'success': False,
+                'message': 'الرجاء إدخال كود الطالب',
+                'sound': 'error'
+            })
+
+        # معالجة الكود باستخدام الخدمة الجديدة
+        result = AttendanceService.process_scan(
+            student_code=student_code,
+            supervisor=request.user
+        )
+
+        return JsonResponse(result)
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'message': 'خطأ في البيانات المرسلة',
+            'sound': 'error'
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'خطأ في النظام: {str(e)}',
+            'sound': 'error'
+        })
 
 
 @login_required
