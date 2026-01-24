@@ -1,37 +1,53 @@
 from datetime import datetime, timedelta
 from django.utils import timezone
 from .models import Attendance, Session
-from apps.students.models import Student
+from apps.students.models import Student, StudentGroupEnrollment
 from apps.payments.models import Payment
 
 
 class AttendanceService:
-    
+    """
+    خدمة تسجيل الحضور - النظام الثابت
+    الخوارزمية: 4 خطوات صارمة بدون تعقيدات
+    """
+
+    # ثوابت النظام
+    STRICT_GRACE_PERIOD_MINUTES = 10  # قاعدة الـ 10 دقائق الصارمة
+    EARLY_ARRIVAL_LIMIT_MINUTES = 30  # السماح بالوصول قبل 30 دقيقة
+
     @staticmethod
-    def process_scan(barcode, supervisor):
+    def process_scan(student_code, supervisor):
         """
-        معالجة مسح الباركود مع الفحص الثلاثي
-        النظام يدعم الآن انتساب الطالب لأكثر من مجموعة
+        معالجة إدخال كود الطالب - النظام المبسط
+
+        الخوارزمية (4 خطوات):
+        1. جلب الطالب بـ student_code
+        2. مطابقة الجدول (الوقت واليوم الحاليين)
+        3. قاعدة 10 دقائق صارمة (>10 = BLOCK)
+        4. فحص مالي
         """
+        # ========================================
+        # الخطوة 1: التعريف - جلب الطالب
+        # ========================================
         try:
-            # 1. البحث عن الطالب
             student = Student.objects.prefetch_related('groups').get(
-                barcode=barcode,
+                student_code=student_code,
                 is_active=True
             )
         except Student.DoesNotExist:
             return {
                 'success': False,
-                'message': 'كارنيه غير صالح',
+                'message': 'كود غير صالح',
                 'sound': 'error'
             }
 
-        # 2. البحث عن المجموعة المناسبة بناءً على الوقت واليوم
+        # ========================================
+        # الخطوة 2: مطابقة الجدول
+        # ========================================
         current_time = timezone.now()
-        current_day = current_time.weekday()
+        current_day_name = AttendanceService.get_current_day_name()
 
         # جلب كل المجموعات المسجل فيها الطالب
-        from apps.students.models import StudentGroupEnrollment
         enrollments = StudentGroupEnrollment.objects.filter(
             student=student,
             is_active=True
@@ -40,51 +56,32 @@ class AttendanceService:
         matching_group = None
         enrollment = None
 
+        # البحث عن المجموعة التي موعدها الآن (نفس اليوم فقط)
         for enr in enrollments:
             group = enr.group
-            # فحص اليوم
-            day_check = AttendanceService.check_day(group.schedule_day)
-            if not day_check['allowed']:
+
+            # مطابقة اليوم
+            if group.schedule_day != current_day_name:
                 continue
 
-            # فحص الوقت
-            time_check = AttendanceService.check_time(
-                current_time,
-                group.schedule_time,
-                group.grace_period
-            )
-            if time_check['allowed']:
-                matching_group = group
-                enrollment = enr
-                break
+            # هذه هي المجموعة المطابقة لليوم
+            matching_group = group
+            enrollment = enr
+            break
 
         if not matching_group:
             return {
                 'success': False,
-                'message': 'لا توجد حصة مناسبة الآن لهذا الطالب',
+                'message': 'لا توجد حصة مجدولة لك اليوم',
                 'sound': 'error'
             }
 
-        # 3. الحصول على أو إنشاء الحصة
-        session, created = Session.objects.get_or_create(
-            group=matching_group,
-            session_date=timezone.now().date(),
-            defaults={'teacher_attended': False}
-        )
-
-        # 4. التحقق من عدم التسجيل المسبق
-        if Attendance.objects.filter(student=student, session=session).exists():
-            return {
-                'success': False,
-                'message': 'تم تسجيل الحضور مسبقاً',
-                'sound': 'error'
-            }
-
-        # 5. Triple Check - فحص الوقت مرة أخرى بالتفصيل
-        time_check = AttendanceService.check_time(
+        # ========================================
+        # الخطوة 3: قاعدة الـ 10 دقائق الصارمة
+        # ========================================
+        time_check = AttendanceService.check_strict_time(
             current_time,
-            matching_group.schedule_time,
-            matching_group.grace_period
+            matching_group.schedule_time
         )
 
         if not time_check['allowed']:
@@ -94,7 +91,9 @@ class AttendanceService:
                 'sound': 'error'
             }
 
-        # 6. فحص الحالة المالية للمجموعة المحددة
+        # ========================================
+        # الخطوة 4: الفحص المالي
+        # ========================================
         financial_check = AttendanceService.check_financial_status(
             student,
             matching_group
@@ -107,7 +106,25 @@ class AttendanceService:
                 'sound': 'error'
             }
 
-        # 7. تسجيل الحضور
+        # ========================================
+        # التسجيل النهائي
+        # ========================================
+        # الحصول على أو إنشاء الحصة
+        session, _ = Session.objects.get_or_create(
+            group=matching_group,
+            session_date=timezone.now().date(),
+            defaults={'teacher_attended': False}
+        )
+
+        # التحقق من عدم التسجيل المسبق
+        if Attendance.objects.filter(student=student, session=session).exists():
+            return {
+                'success': False,
+                'message': 'تم تسجيل الحضور مسبقاً',
+                'sound': 'error'
+            }
+
+        # تسجيل الحضور
         attendance = Attendance.objects.create(
             student=student,
             session=session,
@@ -116,7 +133,7 @@ class AttendanceService:
             supervisor=supervisor
         )
 
-        # 8. تحديث عدد الحصص في Payment
+        # تحديث عدد الحصص في Payment
         AttendanceService.update_payment_sessions(student, matching_group)
 
         return {
@@ -130,64 +147,63 @@ class AttendanceService:
         }
     
     @staticmethod
-    def check_time(scan_time, schedule_time, grace_period):
+    def get_current_day_name():
         """
-        Check 1: فحص الوقت
+        الحصول على اسم اليوم الحالي بالإنجليزي
+        """
+        days_map = {
+            0: 'Monday',
+            1: 'Tuesday',
+            2: 'Wednesday',
+            3: 'Thursday',
+            4: 'Friday',
+            5: 'Saturday',
+            6: 'Sunday',
+        }
+        today = timezone.now().weekday()
+        return days_map.get(today)
+
+    @staticmethod
+    def check_strict_time(scan_time, schedule_time):
+        """
+        الخطوة 3: قاعدة الـ 10 دقائق الصارمة
+
+        القواعد:
+        - الوقت الفعلي مقارنة بالجدول الرسمي
+        - ≤10 دقائق: قبول (حاضر)
+        - >10 دقائق: رفض كامل (BLOCK)
+        - لا يوجد "تأخير"، فقط قبول أو رفض
         """
         # تحويل schedule_time إلى datetime
         today = timezone.now().date()
         session_start = timezone.make_aware(
             datetime.combine(today, schedule_time)
         )
-        
+
+        # حساب الفرق بالدقائق
         diff = scan_time - session_start
         diff_minutes = diff.total_seconds() / 60
-        
-        # السماح بالوصول قبل 30 دقيقة
-        if diff_minutes < -30:
+
+        # السماح بالوصول المبكر (30 دقيقة قبل الموعد)
+        if diff_minutes < -AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES:
             return {
                 'allowed': False,
-                'reason': 'وصلت مبكراً جداً'
+                'reason': f'وصلت مبكراً جداً. الموعد: {schedule_time.strftime("%I:%M %p")}'
             }
-        
-        # فحص وقت السماح
-        if diff_minutes > grace_period:
+
+        # القاعدة الصارمة: أكثر من 10 دقائق = رفض
+        if diff_minutes > AttendanceService.STRICT_GRACE_PERIOD_MINUTES:
             return {
                 'allowed': False,
-                'reason': f'انتهى وقت السماح (تأخرت {int(diff_minutes)} دقيقة)'
+                'reason': f'ممنوع الدخول - تأخرت {int(diff_minutes)} دقيقة (الحد المسموح: 10 دقائق)'
             }
-        
+
+        # قبول: في الموعد أو في حدود الـ 10 دقائق
         return {
             'allowed': True,
-            'status': 'late' if diff_minutes > 0 else 'present',
+            'status': 'present',  # لا يوجد late، فقط present
             'minutes_late': max(0, int(diff_minutes))
         }
-    
-    @staticmethod
-    def check_day(schedule_day):
-        """
-        Check 2: فحص اليوم
-        """
-        days_map = {
-            'Saturday': 5,
-            'Sunday': 6,
-            'Monday': 0,
-            'Tuesday': 1,
-            'Wednesday': 2,
-            'Thursday': 3,
-            'Friday': 4,
-        }
-        
-        today = timezone.now().weekday()
-        expected_day = days_map.get(schedule_day)
-        
-        if today != expected_day:
-            return {
-                'allowed': False,
-                'reason': f'ليس موعد مجموعتك (موعدك يوم {schedule_day})'
-            }
-        
-        return {'allowed': True}
     
     @staticmethod
     def is_student_first_month_in_group(student, group):
@@ -215,11 +231,9 @@ class AttendanceService:
     @staticmethod
     def check_financial_status(student, group):
         """
-        Check 3: فحص الحالة المالية
+        الخطوة 4: فحص الحالة المالية
         يتحقق من الحالة المالية للطالب في المجموعة المحددة
         """
-        from apps.students.models import StudentGroupEnrollment
-
         # جلب معلومات التسجيل في المجموعة
         try:
             enrollment = StudentGroupEnrollment.objects.get(

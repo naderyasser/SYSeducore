@@ -9,11 +9,12 @@ class Student(models.Model):
     """
 
     student_id = models.AutoField(primary_key=True)
-    barcode = models.CharField(
-        max_length=50,
+    student_code = models.CharField(
+        max_length=10,
         unique=True,
         db_index=True,
-        verbose_name="كود الباركود"
+        verbose_name="كود الطالب",
+        help_text="كود قصير ومميز (مثال: 1001، 5050)"
     )
     full_name = models.CharField(max_length=255, verbose_name="الاسم الكامل")
     groups = models.ManyToManyField(

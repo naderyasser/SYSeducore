@@ -5,7 +5,12 @@ Django settings for attendance_system project.
 import os
 from pathlib import Path
 from decouple import config, Csv
-from celery.schedules import crontab
+
+# Optional Celery import
+try:
+    from celery.schedules import crontab
+except ImportError:
+    crontab = None
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -213,16 +218,20 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
 
-CELERY_BEAT_SCHEDULE = {
-    'send-attendance-notifications': {
-        'task': 'apps.notifications.tasks.send_attendance_notifications_task',
-        'schedule': crontab(minute='*/1'),  # Every minute
-    },
-    'send-monthly-reminders': {
-        'task': 'apps.notifications.tasks.send_monthly_reminders_task',
-        'schedule': crontab(hour=9, minute=0, day_of_month=1),  # 1st of every month at 9 AM
-    },
-}
+# Celery Beat Schedule (only if celery is installed)
+if crontab is not None:
+    CELERY_BEAT_SCHEDULE = {
+        'send-attendance-notifications': {
+            'task': 'apps.notifications.tasks.send_attendance_notifications_task',
+            'schedule': crontab(minute='*/1'),  # Every minute
+        },
+        'send-monthly-reminders': {
+            'task': 'apps.notifications.tasks.send_monthly_reminders_task',
+            'schedule': crontab(hour=9, minute=0, day_of_month=1),  # 1st of every month at 9 AM
+        },
+    }
+else:
+    CELERY_BEAT_SCHEDULE = {}
 
 
 # WhatsApp Configuration (UltraMsg)

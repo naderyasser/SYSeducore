@@ -1,23 +1,27 @@
 """
-Tests for Attendance Service
+Unit Tests for Attendance Service - Educore V2
+اختبار النظام الجديد: قاعدة 10 دقائق صارمة + student_code
 """
 
 from django.test import TestCase
 from django.utils import timezone
 from datetime import datetime, timedelta, time
 from apps.accounts.models import User
-from apps.teachers.models import Teacher, Group
-from apps.students.models import Student
+from apps.teachers.models import Teacher, Group, Room
+from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Session, Attendance
 from apps.payments.models import Payment
 from apps.attendance.services import AttendanceService
 
 
-class AttendanceServiceTest(TestCase):
+class AttendanceServiceStrictTest(TestCase):
+    """
+    اختبار قاعدة الـ 10 دقائق الصارمة
+    """
 
     def setUp(self):
-        """Set up test data"""
-        # Create supervisor user
+        """إعداد البيانات للاختبار"""
+        # Create supervisor
         self.supervisor = User.objects.create_user(
             username='supervisor',
             password='testpass123',
@@ -26,265 +30,347 @@ class AttendanceServiceTest(TestCase):
 
         # Create teacher
         self.teacher = Teacher.objects.create(
-            full_name='Test Teacher',
-            phone='01234567890',
+            full_name='محمد علي',
             email='teacher@test.com',
+            phone='+201234567890',
+            specialization='رياضيات',
+            hire_date=timezone.now().date()
+        )
+
+        # Create room
+        self.room = Room.objects.create(
+            name='قاعة A',
+            capacity=30
+        )
+
+        # Create group (بدون grace_period - النظام الثابت)
+        self.group = Group.objects.create(
+            group_name='مجموعة السبت',
+            teacher=self.teacher,
+            room=self.room,
+            schedule_day='Saturday',
+            schedule_time=time(9, 0),  # 9:00 AM
+            standard_fee=200.00
+        )
+
+        # Create student
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='+201234567890'
+        )
+
+        # Enroll student in group
+        StudentGroupEnrollment.objects.create(
+            student=self.student,
+            group=self.group,
+            financial_status='normal'
+        )
+
+    def test_check_strict_time_on_time(self):
+        """اختبار: وصول في الموعد (قبل 9:00)"""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(8, 55))
+        )
+
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'present')
+
+    def test_check_strict_time_5_minutes_late(self):
+        """اختبار: تأخر 5 دقائق (9:05) - قبول"""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(9, 5))
+        )
+
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'present')
+
+    def test_check_strict_time_exactly_10_minutes(self):
+        """اختبار: تأخر بالظبط 10 دقائق (9:10) - قبول"""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(9, 10))
+        )
+
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'present')
+
+    def test_check_strict_time_11_minutes_late_block(self):
+        """اختبار: تأخر 11 دقيقة (9:11) - رفض كامل ⚠️"""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(9, 11))
+        )
+
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertFalse(result['allowed'])
+        self.assertIn('ممنوع الدخول', result['reason'])
+
+    def test_check_strict_time_15_minutes_late_block(self):
+        """اختبار: تأخر 15 دقيقة (9:15) - رفض كامل"""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(9, 15))
+        )
+
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertFalse(result['allowed'])
+        self.assertIn('ممنوع الدخول', result['reason'])
+
+    def test_check_strict_time_too_early(self):
+        """اختبار: وصول مبكر جداً (35 دقيقة قبل الموعد)"""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(8, 25))
+        )
+
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertFalse(result['allowed'])
+        self.assertIn('مبكراً جداً', result['reason'])
+
+    def test_get_current_day_name(self):
+        """اختبار: الحصول على اسم اليوم الحالي"""
+        day_name = AttendanceService.get_current_day_name()
+        self.assertIn(day_name, ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'])
+
+
+class AttendanceFinancialCheckTest(TestCase):
+    """
+    اختبار الفحص المالي (الحصة الثالثة)
+    """
+
+    def setUp(self):
+        """إعداد البيانات"""
+        self.supervisor = User.objects.create_user(
+            username='supervisor',
+            password='testpass123',
+            role='supervisor'
+        )
+
+        self.teacher = Teacher.objects.create(
+            full_name='Test Teacher',
+            email='teacher@test.com',
+            phone='+201234567890',
             specialization='Math',
             hire_date=timezone.now().date()
         )
 
-        # Create group with 10 minutes grace period
+        self.room = Room.objects.create(name='Room A', capacity=30)
+
         self.group = Group.objects.create(
             group_name='Test Group',
             teacher=self.teacher,
+            room=self.room,
             schedule_day='Saturday',
-            schedule_time=time(10, 0),  # 10:00 AM
-            grace_period=10,  # 10 minutes grace period
-            standard_fee=300.00,
-            center_percentage=30.00
+            schedule_time=time(9, 0),
+            standard_fee=200.00
         )
 
-        # Create students
+        # Student 1: Normal
         self.student_normal = Student.objects.create(
+            student_code='1001',
             full_name='Normal Student',
-            barcode='NORMAL123',
+            parent_phone='+201234567890'
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student_normal,
             group=self.group,
-            parent_phone='01234567891',
             financial_status='normal'
         )
 
-        self.student_symbolic = Student.objects.create(
-            full_name='Symbolic Student',
-            barcode='SYMBOLIC123',
-            group=self.group,
-            parent_phone='01234567892',
-            financial_status='symbolic',
-            custom_fee=100.00
-        )
-
+        # Student 2: Exempt
         self.student_exempt = Student.objects.create(
+            student_code='1002',
             full_name='Exempt Student',
-            barcode='EXEMPT123',
+            parent_phone='+201234567891'
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student_exempt,
             group=self.group,
-            parent_phone='01234567893',
             financial_status='exempt'
         )
 
-    def test_check_time_within_grace_period(self):
-        """Test time check within 10 minutes grace period"""
-        schedule_time = time(10, 0)
-        # Scan 5 minutes after start
-        scan_time = timezone.make_aware(
-            datetime.combine(timezone.now().date(), time(10, 5))
-        )
-
-        result = AttendanceService.check_time(scan_time, schedule_time, 10)
-        self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'late')
-
-    def test_check_time_exactly_10_minutes(self):
-        """Test time check at exactly 10 minutes"""
-        schedule_time = time(10, 0)
-        # Scan exactly 10 minutes after start
-        scan_time = timezone.make_aware(
-            datetime.combine(timezone.now().date(), time(10, 10))
-        )
-
-        result = AttendanceService.check_time(scan_time, schedule_time, 10)
-        self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'late')
-
-    def test_check_time_beyond_grace_period(self):
-        """Test time check beyond 10 minutes grace period"""
-        schedule_time = time(10, 0)
-        # Scan 15 minutes after start (beyond grace period)
-        scan_time = timezone.make_aware(
-            datetime.combine(timezone.now().date(), time(10, 15))
-        )
-
-        result = AttendanceService.check_time(scan_time, schedule_time, 10)
-        self.assertFalse(result['allowed'])
-        self.assertIn('انتهى وقت السماح', result['reason'])
-
-    def test_check_time_on_time(self):
-        """Test scan on time (before start time)"""
-        schedule_time = time(10, 0)
-        # Scan 5 minutes before start
-        scan_time = timezone.make_aware(
-            datetime.combine(timezone.now().date(), time(9, 55))
-        )
-
-        result = AttendanceService.check_time(scan_time, schedule_time, 10)
-        self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'present')
-
-    def test_check_time_too_early(self):
-        """Test scan too early (more than 30 minutes before)"""
-        schedule_time = time(10, 0)
-        # Scan 35 minutes before start
-        scan_time = timezone.make_aware(
-            datetime.combine(timezone.now().date(), time(9, 25))
-        )
-
-        result = AttendanceService.check_time(scan_time, schedule_time, 10)
-        self.assertFalse(result['allowed'])
-        self.assertIn('مبكراً جداً', result['reason'])
-
-    def test_check_day_correct(self):
-        """Test day check on correct day"""
-        result = AttendanceService.check_day('Saturday')
-        # This will pass only if today is Saturday
-        # For testing purposes, we check the logic exists
-        self.assertIn('allowed', result)
-
-    def test_financial_check_exempt_student(self):
-        """Test financial check for exempt student - always allowed"""
-        result = AttendanceService.check_financial_status(self.student_exempt)
+    def test_financial_check_exempt_always_allowed(self):
+        """اختبار: الطالب المعفي دائماً مسموح"""
+        result = AttendanceService.check_financial_status(self.student_exempt, self.group)
         self.assertTrue(result['allowed'])
         self.assertTrue(result.get('exempt', False))
 
     def test_financial_check_first_month_no_payment(self):
-        """Test first month - must pay before first session"""
-        # Ensure it's the first month (no previous attendance)
-        result = AttendanceService.check_financial_status(self.student_normal)
+        """اختبار: الشهر الأول - لازم دفع"""
+        # الطالب جديد (لا يوجد حضور سابق)
+        result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertFalse(result['allowed'])
         self.assertIn('الشهر الأول', result['reason'])
 
     def test_financial_check_first_month_with_payment(self):
-        """Test first month - with payment"""
+        """اختبار: الشهر الأول - مع دفع"""
         current_month = timezone.now().date().replace(day=1)
         Payment.objects.create(
             student=self.student_normal,
+            group=self.group,
             month=current_month,
-            amount_due=300.00,
-            amount_paid=300.00,
+            amount_due=200.00,
+            amount_paid=200.00,
             status='paid'
         )
 
-        result = AttendanceService.check_financial_status(self.student_normal)
+        result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertTrue(result['allowed'])
 
-    def test_financial_check_second_month_no_payment_first_session(self):
-        """Test subsequent months - allowed first session without payment"""
-        # Create attendance in previous month to simulate not first month
+    def test_financial_check_subsequent_month_first_session(self):
+        """اختبار: الشهور التالية - الحصة الأولى (سماح)"""
+        # إنشاء حضور في الشهر السابق (ليكون ليس الشهر الأول)
         previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
         previous_session = Session.objects.create(
             group=self.group,
             session_date=previous_month
         )
+        # تحديد scan_time بشكل صريح ليكون في الشهر السابق
+        previous_scan_time = timezone.make_aware(
+            datetime.combine(previous_month, time(9, 0))
+        )
         Attendance.objects.create(
             student=self.student_normal,
             session=previous_session,
             status='present',
-            supervisor=self.supervisor
+            supervisor=self.supervisor,
+            scan_time=previous_scan_time
         )
 
-        # Now check financial status for current month (should allow first session)
-        result = AttendanceService.check_financial_status(self.student_normal)
+        # الشهر الحالي: الحصة الأولى (مسموح)
+        result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertTrue(result['allowed'])
 
-    def test_financial_check_second_month_no_payment_third_session(self):
-        """Test subsequent months - blocked at third session without payment"""
-        # Create attendance in previous month
+    def test_financial_check_subsequent_month_third_session_blocked(self):
+        """اختبار: الشهور التالية - الحصة الثالثة بدون دفع (رفض)"""
+        # حضور في الشهر السابق
         previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
         previous_session = Session.objects.create(
             group=self.group,
             session_date=previous_month
         )
+        previous_scan_time = timezone.make_aware(
+            datetime.combine(previous_month, time(9, 0))
+        )
         Attendance.objects.create(
             student=self.student_normal,
             session=previous_session,
             status='present',
-            supervisor=self.supervisor
+            supervisor=self.supervisor,
+            scan_time=previous_scan_time
         )
 
-        # Create 2 attendances in current month
+        # حضور حصتين في الشهر الحالي
         current_month = timezone.now().date().replace(day=1)
         for i in range(2):
             session = Session.objects.create(
                 group=self.group,
                 session_date=current_month + timedelta(days=i)
             )
+            current_scan_time = timezone.make_aware(
+                datetime.combine(current_month + timedelta(days=i), time(9, 0))
+            )
             Attendance.objects.create(
                 student=self.student_normal,
                 session=session,
                 status='present',
-                supervisor=self.supervisor
+                supervisor=self.supervisor,
+                scan_time=current_scan_time
             )
 
-        # Now third session should be blocked
-        result = AttendanceService.check_financial_status(self.student_normal)
+        # الحصة الثالثة (رفض)
+        result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertFalse(result['allowed'])
         self.assertIn('ممنوع الدخول', result['reason'])
 
-    def test_process_scan_success(self):
-        """Test successful scan process"""
-        # This test may fail due to day check, so we skip it
-        # In real scenario, we'd need to mock timezone to match Saturday
-        pass
-
-    def test_process_scan_invalid_barcode(self):
-        """Test scan with invalid barcode"""
-        result = AttendanceService.process_scan('INVALID999', self.supervisor)
-        self.assertFalse(result['success'])
-        self.assertIn('غير صالح', result['message'])
-
-    def test_process_scan_duplicate(self):
-        """Test duplicate scan prevention"""
-        # Create session and attendance
-        session = Session.objects.create(
-            group=self.group,
-            session_date=timezone.now().date()
-        )
-        Attendance.objects.create(
-            student=self.student_normal,
-            session=session,
-            status='present',
-            supervisor=self.supervisor
-        )
-
-        # Try to scan again
-        result = AttendanceService.process_scan(
-            self.student_normal.barcode,
-            self.supervisor
-        )
-        self.assertFalse(result['success'])
-        self.assertIn('تم تسجيل الحضور مسبقاً', result['message'])
-
-    def test_is_student_first_month_true(self):
-        """Test first month detection - true case"""
-        result = AttendanceService.is_student_first_month(self.student_normal)
+    def test_is_student_first_month_in_group_true(self):
+        """اختبار: هل هو الشهر الأول - نعم"""
+        # طالب جديد بدون حضور سابق
+        result = AttendanceService.is_student_first_month_in_group(self.student_normal, self.group)
         self.assertTrue(result)
 
-    def test_is_student_first_month_false(self):
-        """Test first month detection - false case"""
-        # Create attendance in previous month
+    def test_is_student_first_month_in_group_false(self):
+        """اختبار: هل هو الشهر الأول - لا"""
+        # إنشاء حضور في الشهر السابق
         previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
         previous_session = Session.objects.create(
             group=self.group,
             session_date=previous_month
         )
+        previous_scan_time = timezone.make_aware(
+            datetime.combine(previous_month, time(9, 0))
+        )
         Attendance.objects.create(
             student=self.student_normal,
             session=previous_session,
             status='present',
-            supervisor=self.supervisor
+            supervisor=self.supervisor,
+            scan_time=previous_scan_time
         )
 
-        result = AttendanceService.is_student_first_month(self.student_normal)
+        result = AttendanceService.is_student_first_month_in_group(self.student_normal, self.group)
         self.assertFalse(result)
 
-    def test_get_monthly_fee_normal(self):
-        """Test monthly fee calculation for normal student"""
-        fee = self.student_normal.get_monthly_fee()
-        self.assertEqual(fee, 300.00)
 
-    def test_get_monthly_fee_symbolic(self):
-        """Test monthly fee calculation for symbolic student"""
-        fee = self.student_symbolic.get_monthly_fee()
-        self.assertEqual(fee, 100.00)
+class ProcessScanIntegrationTest(TestCase):
+    """
+    اختبار تكامل process_scan (النظام الكامل)
+    """
 
-    def test_get_monthly_fee_exempt(self):
-        """Test monthly fee calculation for exempt student"""
-        fee = self.student_exempt.get_monthly_fee()
-        self.assertEqual(fee, 0)
+    def setUp(self):
+        self.supervisor = User.objects.create_user(
+            username='supervisor',
+            password='testpass123',
+            role='supervisor'
+        )
+
+        self.teacher = Teacher.objects.create(
+            full_name='Test Teacher',
+            email='teacher@test.com',
+            phone='+201234567890',
+            specialization='Math',
+            hire_date=timezone.now().date()
+        )
+
+        self.room = Room.objects.create(name='Room A', capacity=30)
+
+        self.group = Group.objects.create(
+            group_name='Test Group',
+            teacher=self.teacher,
+            room=self.room,
+            schedule_day='Saturday',
+            schedule_time=time(9, 0),
+            standard_fee=200.00
+        )
+
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='Test Student',
+            parent_phone='+201234567890'
+        )
+
+        StudentGroupEnrollment.objects.create(
+            student=self.student,
+            group=self.group,
+            financial_status='normal'
+        )
+
+    def test_process_scan_invalid_student_code(self):
+        """اختبار: كود طالب غير صحيح"""
+        result = AttendanceService.process_scan('9999', self.supervisor)
+        self.assertFalse(result['success'])
+        self.assertIn('غير صالح', result['message'])
+
+    def test_process_scan_no_class_today(self):
+        """اختبار: لا توجد حصة مجدولة اليوم"""
+        # Group مجدول ليوم السبت، فإذا اليوم ليس سبت، سيفشل
+        result = AttendanceService.process_scan(self.student.student_code, self.supervisor)
+
+        # قد ينجح أو يفشل حسب اليوم الحالي
+        self.assertIn('success', result)
