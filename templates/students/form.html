@@ -1,84 +1,95 @@
 {% extends 'base.html' %}
-{% load static %}
 
-{% block title %}{% if student %}تعديل الطالب - {{ student.full_name }}{% else %}إضافة طالب جديد{% endif %}{% endblock %}
+{% block title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <div class="card">
-    <div class="card-header">
-      <h4>
-        {% if student %}✏️ تعديل الطالب - {{ student.full_name }}{% else %}➕ إضافة طالب جديد{% endif %}
-      </h4>
+<div class="mb-4">
+    <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    {% if student %}
+                    <i class="bi bi-pencil me-2"></i>تعديل الطالب - {{ student.full_name }}
+                    {% else %}
+                    <i class="bi bi-person-plus me-2"></i>إضافة طالب جديد
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="student_code" class="form-label">كود الطالب <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-hash"></i></span>
+                                <input type="text" name="student_code" id="student_code" class="form-control"
+                                    value="{{ student.student_code|default:'' }}" required placeholder="مثال: 1001">
+                            </div>
+                            <small class="text-muted">رقم مميز لكل طالب يستخدم لتسجيل الحضور</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="full_name" class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person"></i></span>
+                                <input type="text" name="full_name" id="full_name" class="form-control"
+                                    value="{{ student.full_name|default:'' }}" required placeholder="اسم الطالب">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="parent_phone" class="form-label">رقم ولي الأمر <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                <input type="text" name="parent_phone" id="parent_phone" class="form-control"
+                                    value="{{ student.parent_phone|default:'' }}" required placeholder="01xxxxxxxxx">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="groups" class="form-label">المجموعات</label>
+                            <select name="groups" id="groups" class="form-select" multiple style="height: 120px;">
+                                {% for group in groups %}
+                                <option value="{{ group.group_id }}"
+                                    {% if student and group in student.groups.all %}selected{% endif %}>
+                                    {{ group.group_name }} - {{ group.teacher.full_name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">اضغط Ctrl للاختيار المتعدد</small>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="form-check form-switch">
+                                <input type="checkbox" name="is_active" class="form-check-input" id="isActive"
+                                    {% if not student or student.is_active %}checked{% endif %}>
+                                <label for="isActive" class="form-check-label">طالب نشط</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-top mt-4 pt-4">
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x me-2"></i>إلغاء
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-2"></i>
+                                {% if student %}حفظ التغييرات{% else %}إضافة الطالب{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
-      <form method="post">
-        {% csrf_token %}
-
-        <div class="mb-3">
-          <label for="student_code" class="form-label">كود الطالب</label>
-          <input
-            type="text"
-            name="student_code"
-            class="form-control"
-            value="{{ student.student_code|default:'' }}"
-            required
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="full_name" class="form-label">الاسم الكامل</label>
-          <input
-            type="text"
-            name="full_name"
-            class="form-control"
-            value="{{ student.full_name|default:'' }}"
-            required
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="parent_phone" class="form-label">رقم ولي الأمر</label>
-          <input
-            type="text"
-            name="parent_phone"
-            class="form-control"
-            value="{{ student.parent_phone|default:'' }}"
-            required
-          />
-        </div>
-
-        <div class="mb-3">
-          <label for="groups" class="form-label">المجموعات</label>
-          <select name="groups" class="form-control" multiple>
-            {% for group in groups %}
-            <option value="{{ group.group_id }}">{{ group.group_name }} - {{ group.teacher.full_name }}</option>
-            {% endfor %}
-          </select>
-          <small class="text-muted">يمكنك اختيار أكثر من مجموعة</small>
-        </div>
-
-        <div class="mb-3">
-          <div class="form-check">
-            <input
-              type="checkbox"
-              name="is_active"
-              class="form-check-input"
-              id="isActive"
-              {% if student.is_active %}checked{% endif %}
-            />
-            <label for="isActive" class="form-check-label">نشط</label>
-          </div>
-        </div>
-
-        <div class="text-center mt-4">
-          <button type="submit" class="btn btn-primary">
-            {% if student %}حفظ التغييرات{% else %}إضافة الطالب{% endif %}
-          </button>
-          <a href="{% url 'students:list' %}" class="btn btn-secondary">إلغاء</a>
-        </div>
-      </form>
-    </div>
-  </div>
 </div>
 {% endblock %}
