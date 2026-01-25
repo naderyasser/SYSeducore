@@ -1,7 +1,13 @@
-{% extends 'base.html' %} {% load static %} {% block title %}تسجيل الحضور{%
-endblock %} {% block extra_css %}
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}تسجيل الحضور{% endblock %}
+
+{% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/scanner.css' %}" />
-{% endblock %} {% block content %}
+{% endblock %}
+
+{% block content %}
 <div class="scanner-container">
   <div class="scanner-header">
     <h1>📷 تسجيل حضور الطلاب</h1>
@@ -44,6 +50,7 @@ endblock %} {% block extra_css %}
 <!-- Audio for feedback -->
 <audio id="successSound" src="{% static 'sounds/success.mp3' %}"></audio>
 <audio id="errorSound" src="{% static 'sounds/error.mp3' %}"></audio>
+{% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/utils/api.js' %}"></script>

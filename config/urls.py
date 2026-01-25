@@ -11,7 +11,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     
     # Redirect root to dashboard
-    path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
+    path('', RedirectView.as_view(url='/reports/', permanent=False)),
+    path('dashboard/', RedirectView.as_view(url='/reports/', permanent=False)),
     
     # App URLs
     path('accounts/', include('apps.accounts.urls')),
