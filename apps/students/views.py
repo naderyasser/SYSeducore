@@ -11,7 +11,7 @@ def student_list(request):
     """
     List all students.
     """
-    students = Student.objects.select_related('group').filter(is_active=True)
+    students = Student.objects.filter(is_active=True)
     return render(request, 'students/list.html', {'students': students})
 
 
