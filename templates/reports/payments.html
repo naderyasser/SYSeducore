@@ -1,5 +1,9 @@
-{% extends 'base.html' %} {% load static %} {% block title %}تقرير المدفوعات{%
-endblock %} {% block content %}
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}تقرير المدفوعات{% endblock %}
+
+{% block content %}
 <div class="container mt-4">
   <div class="card">
     <div class="card-header">
@@ -14,22 +18,40 @@ endblock %} {% block content %}
             </div>
             <div class="card-body">
               <div class="stat-item">
-                <span class="stat-number">{{ total_payments }}</span>
+                <span class="stat-number">{{ payments.count }}</span>
                 <span class="stat-label">إجمالي الدفعات</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-number">{{ total_paid }}</span>
-                <span class="stat-label">المبالغ المدفوع</span>
-              </div>
-              <div class="stat-item">
-                <span class="stat-number">{{ total_pending }}</span>
-                <span class="stat-label">متأخر الدفع</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+      <div class="table-responsive">
+        <table class="table table-striped table-hover">
+          <thead>
+            <tr>
+              <th>الطالب</th>
+              <th>المبلغ</th>
+              <th>التاريخ</th>
+              <th>الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for payment in payments %}
+            <tr>
+              <td>{{ payment.student.full_name }}</td>
+              <td>{{ payment.amount }}</td>
+              <td>{{ payment.payment_date|date:"Y-m-d" }}</td>
+              <td>{{ payment.status }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="4" class="text-center text-muted">لا يوجد سجلات</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
-  {% endblock %}
 </div>
+{% endblock %}

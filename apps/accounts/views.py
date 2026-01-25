@@ -10,7 +10,7 @@ def login_view(request):
     Login view for users.
     """
     if request.user.is_authenticated:
-        return redirect('dashboard:home')
+        return redirect('reports:dashboard')
     
     if request.method == 'POST':
         form = LoginForm(request.POST)
@@ -23,7 +23,7 @@ def login_view(request):
                 if user.is_active:
                     login(request, user)
                     messages.success(request, f'مرحباً {user.get_full_name()}')
-                    return redirect('dashboard:home')
+                    return redirect('reports:dashboard')
                 else:
                     messages.error(request, 'حسابك غير نشط')
             else:

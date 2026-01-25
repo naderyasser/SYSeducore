@@ -1,5 +1,9 @@
-{% extends 'base.html' %} {% load static %} {% block title %}تقرير الحضور{%
-endblock %} {% block content %}
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}تقرير الحضور{% endblock %}
+
+{% block content %}
 <div class="container mt-4">
   <div class="card">
     <div class="card-header">
@@ -13,8 +17,8 @@ endblock %} {% block content %}
               <th>التاريخ</th>
               <th>المجموعة</th>
               <th>المدرس</th>
-              <th>عدد الحضور</th>
-              <th>عدد الغياب</th>
+              <th>الطالب</th>
+              <th>الحالة</th>
             </tr>
           </thead>
           <tbody>
@@ -23,15 +27,21 @@ endblock %} {% block content %}
               <td>{{ attendance.session.session_date|date:"Y-m-d" }}</td>
               <td>{{ attendance.session.group.group_name }}</td>
               <td>{{ attendance.session.group.teacher.full_name }}</td>
-              <td>{{ attendance.session.attendances.count }}</td>
+              <td>{{ attendance.student.full_name }}</td>
               <td>
-                {{ attendance.attendances.filter(status='absent').count }}
+                <span class="status-{{ attendance.status }}">
+                  {% if attendance.status == 'present' %}حاضر
+                  {% elif attendance.status == 'late' %}متأخر
+                  {% elif attendance.status == 'absent' %}غائب
+                  {% endif %}
+                </span>
               </td>
             </tr>
             {% empty %}
             <tr>
-              <td colspan="4" class="text-center text-muted">لا يوجد سجلات</td>
+              <td colspan="5" class="text-center text-muted">لا يوجد سجلات</td>
             </tr>
+            {% endfor %}
           </tbody>
         </table>
       </div>

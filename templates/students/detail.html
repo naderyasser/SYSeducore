@@ -1,15 +1,17 @@
-{% extends 'base.html' %} {% load static %} {% block title %}تفاصيل الطالب - {{
-student.full_name }}{% endblock %} {% block content %}
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}تفاصيل الطالب - {{ student.full_name }}{% endblock %}
+
+{% block content %}
 <div class="container mt-4">
   <div class="row">
-    <!-- Back Button -->
     <div class="col-md-12">
       <a href="{% url 'students:list' %}" class="btn btn-secondary mb-3">
         ← العودة للقائمة
       </a>
     </div>
 
-    <!-- Student Details -->
     <div class="col-md-12">
       <div class="card">
         <div class="card-header">
@@ -18,49 +20,37 @@ student.full_name }}{% endblock %} {% block content %}
         <div class="card-body">
           <div class="row">
             <div class="col-md-6">
-              <div class="detail-item">
-                <strong>الباركود:</strong>
-                <p class="detail-value">{{ student.barcode }}</p>
+              <div class="mb-3">
+                <strong>الكود:</strong>
+                <p>{{ student.student_code }}</p>
               </div>
-              <div class="detail-item">
+              <div class="mb-3">
                 <strong>الاسم الكامل:</strong>
-                <p class="detail-value">{{ student.full_name }}</p>
+                <p>{{ student.full_name }}</p>
               </div>
-              <div class="detail-item">
-                <strong>المجموعة:</strong>
-                <p class="detail-value">{{ student.group.group_name }}</p>
-              </div>
-              <div class="detail-item">
-                <strong>المدرس:</strong>
-                <p class="detail-value">
-                  {{ student.group.teacher.full_name }}
-                </p>
-              </div>
-              <div class="detail-item">
-                <strong>الحالة المالية:</strong>
-                <p class="detail-value">
-                  <span class="status-{{ student.financial_status }}">
-                    {{ student.get_financial_status_display }}
-                  </span>
-                </p>
-              </div>
-              <div class="detail-item">
-                <strong>المبلغ المخصص:</strong>
-                <p class="detail-value">{{ student.custom_fee|default:"-" }}</p>
-              </div>
-              <div class="detail-item">
+              <div class="mb-3">
                 <strong>رقم ولي الأمر:</strong>
-                <p class="detail-value">{{ student.parent_phone }}</p>
+                <p>{{ student.parent_phone }}</p>
               </div>
-              <div class="detail-item">
+              <div class="mb-3">
                 <strong>الحالة:</strong>
-                <p class="detail-value">
+                <p>
                   {% if student.is_active %}
-                  <span class="status-active">نشط</span>
+                  <span class="badge bg-success">نشط</span>
                   {% else %}
-                  <span class="status-inactive">غير نشط</span>
+                  <span class="badge bg-secondary">غير نشط</span>
                   {% endif %}
                 </p>
+              </div>
+              <div class="mb-3">
+                <strong>المجموعات:</strong>
+                <ul>
+                  {% for enrollment in student.studentgroupenrollment_set.all %}
+                  <li>{{ enrollment.group.group_name }} - {{ enrollment.group.teacher.full_name }}</li>
+                  {% empty %}
+                  <li class="text-muted">لا يوجد مجموعات</li>
+                  {% endfor %}
+                </ul>
               </div>
             </div>
 
@@ -72,31 +62,28 @@ student.full_name }}{% endblock %} {% block content %}
                     <tr>
                       <th>التاريخ</th>
                       <th>الحالة</th>
+                      <th>الوقت</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {% for attendance in
-                    student.attendances.all|order_by('-scan_time')|slice:":10"
-                    %}
+                    {% for attendance in recent_attendances %}
                     <tr>
-                      <td>
-                        {{ attendance.session.session_date|date:"Y-m-d" }}
-                      </td>
+                      <td>{{ attendance.session.session_date|date:"Y-m-d" }}</td>
                       <td>
                         <span class="status-{{ attendance.status }}">
-                          {% if attendance.status == 'present' %}حاضر {% elif
-                          attendance.status == 'late' %}متأخر {% elif
-                          attendance.status == 'absent' %}غائب {% endif %}
+                          {% if attendance.status == 'present' %}حاضر
+                          {% elif attendance.status == 'late' %}متأخر
+                          {% elif attendance.status == 'absent' %}غائب
+                          {% endif %}
                         </span>
                       </td>
                       <td>{{ attendance.scan_time|time:"H:i" }}</td>
                     </tr>
                     {% empty %}
                     <tr>
-                      <td colspan="3" class="text-center text-muted">
-                        لا يوجد سجل حضور
-                      </td>
+                      <td colspan="3" class="text-center text-muted">لا يوجد سجل حضور</td>
                     </tr>
+                    {% endfor %}
                   </tbody>
                 </table>
               </div>
@@ -106,5 +93,5 @@ student.full_name }}{% endblock %} {% block content %}
       </div>
     </div>
   </div>
-  {% endblock %}
 </div>
+{% endblock %}

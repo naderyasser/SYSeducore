@@ -16,10 +16,6 @@ django-celery-beat==2.5.0
 # WhatsApp
 requests==2.31.0
 
-# Notification Settings
-NOTIFICATION_METHOD=whatsapp
-ENABLE_FIRST_MONTH_STRICT_PAYMENT=True
-
 # Security
 django-ratelimit==4.1.0
 python-decouple==3.8
@@ -29,6 +25,12 @@ Pillow==10.2.0
 python-barcode==0.15.1
 reportlab==4.0.9
 openpyxl==3.1.2
+
+# Production static files
+whitenoise==6.6.0
+
+# Production server
+gunicorn==21.2.0
 
 # Development
 django-debug-toolbar==4.2.0
