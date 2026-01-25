@@ -13,7 +13,7 @@ def payment_list(request):
     """
     List all payments.
     """
-    payments = Payment.objects.select_related('student', 'student__group').all()
+    payments = Payment.objects.select_related('student').all()
     return render(request, 'payments/list.html', {'payments': payments})
 
 
