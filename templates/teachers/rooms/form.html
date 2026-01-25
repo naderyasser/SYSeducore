@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if room %}تعديل القاعة{% else %}إضافة قاعة جديدة{% endif %}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{% url 'teachers:room_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    {% if room %}
+                    <i class="bi bi-pencil me-2"></i>تعديل القاعة - {{ room.name }}
+                    {% else %}
+                    <i class="bi bi-door-open me-2"></i>إضافة قاعة جديدة
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label class="form-label">اسم القاعة <span class="text-danger">*</span></label>
+                        {{ form.name }}
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">السعة القصوى <span class="text-danger">*</span></label>
+                        {{ form.capacity }}
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check form-switch">
+                            {{ form.is_active }}
+                            <label class="form-check-label">قاعة نشطة</label>
+                        </div>
+                    </div>
+
+                    <div class="border-top mt-4 pt-4">
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{% url 'teachers:room_list' %}" class="btn btn-outline-secondary">إلغاء</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-2"></i>
+                                {% if room %}حفظ التغييرات{% else %}إضافة القاعة{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

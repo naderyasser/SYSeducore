@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if group %}تعديل المجموعة{% else %}إضافة مجموعة جديدة{% endif %}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{% url 'teachers:group_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    {% if group %}
+                    <i class="bi bi-pencil me-2"></i>تعديل المجموعة - {{ group.group_name }}
+                    {% else %}
+                    <i class="bi bi-collection me-2"></i>إضافة مجموعة جديدة
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">اسم المجموعة <span class="text-danger">*</span></label>
+                            {{ form.group_name }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">المدرس <span class="text-danger">*</span></label>
+                            {{ form.teacher }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">القاعة</label>
+                            {{ form.room }}
+                            <small class="text-muted">اختياري - النظام يمنع التعارضات تلقائياً</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">يوم الحصة <span class="text-danger">*</span></label>
+                            {{ form.schedule_day }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">وقت الحصة <span class="text-danger">*</span></label>
+                            {{ form.schedule_time }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">السعر الشهري <span class="text-danger">*</span></label>
+                            {{ form.standard_fee }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">نسبة السنتر %</label>
+                            {{ form.center_percentage }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-4">
+                                {{ form.is_active }}
+                                <label class="form-check-label">مجموعة نشطة</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-top mt-4 pt-4">
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{% url 'teachers:group_list' %}" class="btn btn-outline-secondary">إلغاء</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-2"></i>
+                                {% if group %}حفظ التغييرات{% else %}إضافة المجموعة{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
