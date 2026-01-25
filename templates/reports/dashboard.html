@@ -3,84 +3,115 @@
 {% block title %}لوحة التحكم{% endblock %}
 
 {% block content %}
-<div class="card mb-4">
-  <div class="card-header">
-    <h4>📊 لوحة التحكم</h4>
-  </div>
-  <div class="card-body">
-    <div class="row">
-      <div class="col-md-3">
-        <div class="card mb-3">
-          <div class="card-header">
-            <h5>🎯 إحصائيات سريعة</h5>
-          </div>
-          <div class="card-body">
-            <div class="stat-item">
-              <span class="stat-number">{{ total_students }}</span>
-              <span class="stat-label">طالب نشط</span>
+<!-- Stats Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body stat-card">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="rounded-circle p-3" style="background: rgba(79, 70, 229, 0.1);">
+                        <i class="bi bi-people-fill text-primary" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <span class="stat-number">{{ total_students }}</span>
+                <span class="stat-label">طالب نشط</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ total_teachers }}</span>
-              <span class="stat-label">مدرس</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ total_groups }}</span>
-              <span class="stat-label">مجموعة</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ today_attendances }}</span>
-              <span class="stat-label">حضور اليوم</span>
-            </div>
-          </div>
         </div>
-      </div>
-      <div class="col-md-9">
-        <div class="card mb-3">
-          <div class="card-header">
-            <h5>📅 التقارير</h5>
-          </div>
-          <div class="card-body">
-            <a
-              href="{% url 'reports:attendance' %}"
-              class="btn btn-primary btn-lg w-100"
-            >
-              تقرير الحضور
-            </a>
-            <a
-              href="{% url 'reports:payments' %}"
-              class="btn btn-success btn-lg w-100 mt-2"
-            >
-              تقرير المدفوعات
-            </a>
-          </div>
-        </div>
-        <div class="card mb-3">
-          <div class="card-header">
-            <h5>⚡ الإجراءات السريعة</h5>
-          </div>
-          <div class="card-body">
-            <a
-              href="{% url 'students:create' %}"
-              class="btn btn-warning btn-lg w-100"
-            >
-              ➕ إضافة طالب جديد
-            </a>
-            <a
-              href="{% url 'teachers:list' %}"
-              class="btn btn-primary btn-lg w-100 mt-2"
-            >
-              👨 إدارة المدرسين
-            </a>
-            <a
-              href="{% url 'attendance:scanner' %}"
-              class="btn btn-success btn-lg w-100 mt-2"
-            >
-              تسجيل حضور الطلاب
-            </a>
-          </div>
-        </div>
-      </div>
     </div>
-  </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body stat-card">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="rounded-circle p-3" style="background: rgba(16, 185, 129, 0.1);">
+                        <i class="bi bi-person-workspace text-success" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <span class="stat-number" style="color: #10b981;">{{ total_teachers }}</span>
+                <span class="stat-label">مدرس</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body stat-card">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="rounded-circle p-3" style="background: rgba(245, 158, 11, 0.1);">
+                        <i class="bi bi-collection text-warning" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <span class="stat-number" style="color: #f59e0b;">{{ total_groups }}</span>
+                <span class="stat-label">مجموعة</span>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card h-100">
+            <div class="card-body stat-card">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="rounded-circle p-3" style="background: rgba(99, 102, 241, 0.1);">
+                        <i class="bi bi-calendar-check text-info" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <span class="stat-number" style="color: #6366f1;">{{ today_attendances }}</span>
+                <span class="stat-label">حضور اليوم</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Quick Actions -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning-charge me-2"></i>إجراءات سريعة</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-3">
+                    <a href="{% url 'attendance:scanner' %}" class="btn btn-primary btn-lg">
+                        <i class="bi bi-person-check me-2"></i>
+                        تسجيل حضور الطلاب
+                    </a>
+                    <a href="{% url 'students:create' %}" class="btn btn-success btn-lg">
+                        <i class="bi bi-person-plus me-2"></i>
+                        إضافة طالب جديد
+                    </a>
+                    <a href="{% url 'students:list' %}" class="btn btn-outline-primary btn-lg">
+                        <i class="bi bi-people me-2"></i>
+                        عرض الطلاب
+                    </a>
+                    <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary btn-lg">
+                        <i class="bi bi-person-workspace me-2"></i>
+                        إدارة المدرسين
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reports -->
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-file-earmark-bar-graph me-2"></i>التقارير</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-3">
+                    <a href="{% url 'reports:attendance' %}" class="btn btn-outline-primary btn-lg">
+                        <i class="bi bi-calendar-check me-2"></i>
+                        تقرير الحضور
+                    </a>
+                    <a href="{% url 'reports:payments' %}" class="btn btn-outline-success btn-lg">
+                        <i class="bi bi-wallet2 me-2"></i>
+                        تقرير المدفوعات
+                    </a>
+                    <a href="{% url 'payments:list' %}" class="btn btn-outline-warning btn-lg">
+                        <i class="bi bi-cash-coin me-2"></i>
+                        إدارة المدفوعات
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

@@ -1,74 +1,97 @@
 {% extends 'base.html' %}
-{% load static %}
 
 {% block title %}{{ teacher.full_name }}{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <div class="card mb-4">
-    <div class="card-header">
-      <h4>معلومات المدرس</h4>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        <div class="col-md-6">
-          <p><strong>الاسم:</strong> {{ teacher.full_name }}</p>
-          <p><strong>رقم الهاتف:</strong> {{ teacher.phone }}</p>
-          <p><strong>البريد الإلكتروني:</strong> {{ teacher.email|default:"-" }}</p>
-        </div>
-        <div class="col-md-6">
-          <p>
-            <strong>الحالة:</strong>
-            {% if teacher.is_active %}
-            <span class="badge bg-success">نشط</span>
-            {% else %}
-            <span class="badge bg-secondary">غير نشط</span>
-            {% endif %}
-          </p>
-          <p><strong>تاريخ الانضمام:</strong> {{ teacher.created_at|date:"Y-m-d" }}</p>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="mb-4">
+    <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+    </a>
+</div>
 
-  <div class="card">
-    <div class="card-header">
-      <h4>المجموعات</h4>
-    </div>
-    <div class="card-body">
-      <div class="table-responsive">
-        <table class="table table-striped table-hover">
-          <thead>
-            <tr>
-              <th>اسم المجموعة</th>
-              <th>القاعة</th>
-              <th>اليوم</th>
-              <th>الوقت</th>
-              <th>عدد الطلاب</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for group in groups %}
-            <tr>
-              <td>{{ group.group_name }}</td>
-              <td>{{ group.room.room_name|default:"-" }}</td>
-              <td>{{ group.get_schedule_day_display }}</td>
-              <td>{{ group.schedule_time|time:"H:i" }}</td>
-              <td>{{ group.students.count }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="5" class="text-center text-muted">لا توجد مجموعات</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+<div class="row g-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <div class="rounded-circle bg-primary d-inline-flex align-items-center justify-content-center mb-3" style="width: 100px; height: 100px;">
+                    <i class="bi bi-person-fill text-white" style="font-size: 3rem;"></i>
+                </div>
+                <h4 class="mb-1">{{ teacher.full_name }}</h4>
+                {% if teacher.is_active %}
+                <span class="badge bg-success">نشط</span>
+                {% else %}
+                <span class="badge bg-secondary">غير نشط</span>
+                {% endif %}
 
-  <div class="mt-3">
-    <a href="{% url 'teachers:list' %}" class="btn btn-secondary">رجوع</a>
-  </div>
+                <div class="border-top mt-4 pt-4">
+                    <div class="d-flex justify-content-between mb-3">
+                        <span class="text-muted"><i class="bi bi-phone me-2"></i>الهاتف</span>
+                        <span class="fw-semibold">{{ teacher.phone }}</span>
+                    </div>
+                    {% if teacher.email %}
+                    <div class="d-flex justify-content-between mb-3">
+                        <span class="text-muted"><i class="bi bi-envelope me-2"></i>البريد</span>
+                        <span class="fw-semibold">{{ teacher.email }}</span>
+                    </div>
+                    {% endif %}
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted"><i class="bi bi-calendar me-2"></i>تاريخ الانضمام</span>
+                        <span class="fw-semibold">{{ teacher.created_at|date:"Y-m-d" }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-collection me-2"></i>المجموعات</h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>اسم المجموعة</th>
+                                <th>القاعة</th>
+                                <th>اليوم</th>
+                                <th>الوقت</th>
+                                <th>عدد الطلاب</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for group in groups %}
+                            <tr>
+                                <td>
+                                    <span class="fw-semibold">{{ group.group_name }}</span>
+                                </td>
+                                <td>
+                                    {% if group.room %}
+                                    <span class="badge bg-secondary">{{ group.room.room_name }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ group.get_schedule_day_display }}</td>
+                                <td>{{ group.schedule_time|time:"H:i" }}</td>
+                                <td>
+                                    <span class="badge bg-primary">{{ group.students.count }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center py-5 text-muted">
+                                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                    <p class="mt-2 mb-0">لا توجد مجموعات</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

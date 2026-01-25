@@ -1,178 +1,323 @@
 {% extends 'base.html' %}
-{% load static %}
 
 {% block title %}تسجيل الحضور{% endblock %}
 
 {% block extra_css %}
 <style>
-  .scanner-container {
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 20px;
-  }
-  .scanner-header {
-    text-align: center;
-    margin-bottom: 30px;
-  }
-  .scanner-header h1 {
-    color: #333;
-    margin-bottom: 10px;
-  }
-  .status-indicator {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 16px;
-    background: #e8f5e9;
-    border-radius: 20px;
-  }
-  .status-dot {
-    width: 12px;
-    height: 12px;
-    background: #4caf50;
-    border-radius: 50%;
-    margin-left: 8px;
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-  .input-section {
-    margin-bottom: 30px;
-  }
-  .input-section label {
-    display: block;
-    margin-bottom: 10px;
-    font-weight: bold;
-    color: #555;
-  }
-  .code-input {
-    width: 100%;
-    padding: 20px;
-    font-size: 2rem;
-    text-align: center;
-    border: 3px solid #007bff;
-    border-radius: 10px;
-    letter-spacing: 5px;
-  }
-  .code-input:focus {
-    outline: none;
-    border-color: #0056b3;
-    box-shadow: 0 0 10px rgba(0,123,255,0.3);
-  }
-  .rules-section {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-    border-radius: 10px;
-    padding: 15px;
-    margin-bottom: 20px;
-  }
-  .rules-section h4 {
-    color: #856404;
-    margin-bottom: 10px;
-  }
-  .rules-section ul {
-    margin: 0;
-    padding-right: 20px;
-    color: #856404;
-  }
-  .result-section {
-    margin-top: 20px;
-  }
-  .result-card {
-    padding: 20px;
-    border-radius: 10px;
-    text-align: center;
-  }
-  .result-card.success {
-    background: #d4edda;
-    border: 2px solid #28a745;
-  }
-  .result-card.error {
-    background: #f8d7da;
-    border: 2px solid #dc3545;
-  }
-  .result-icon {
-    font-size: 3rem;
-    margin-bottom: 10px;
-  }
-  .result-message {
-    font-size: 1.2rem;
-    font-weight: bold;
-  }
-  .recent-scans {
-    margin-top: 30px;
-  }
-  .recent-scans h3 {
-    margin-bottom: 15px;
-    color: #333;
-  }
-  .scan-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 10px 15px;
-    background: #f8f9fa;
-    border-radius: 5px;
-    margin-bottom: 8px;
-  }
-  .scan-item.success {
-    border-right: 4px solid #28a745;
-  }
-  .scan-item.error {
-    border-right: 4px solid #dc3545;
-  }
+    .attendance-container {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+
+    .code-entry-card {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        border-radius: 16px;
+        padding: 2rem;
+        color: white;
+        text-align: center;
+        margin-bottom: 1.5rem;
+    }
+
+    .code-entry-card h2 {
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .code-entry-card p {
+        opacity: 0.9;
+        margin-bottom: 1.5rem;
+    }
+
+    .code-input-wrapper {
+        position: relative;
+        max-width: 300px;
+        margin: 0 auto;
+    }
+
+    .code-input {
+        width: 100%;
+        padding: 1.25rem;
+        font-size: 2rem;
+        font-weight: 700;
+        text-align: center;
+        border: none;
+        border-radius: 12px;
+        letter-spacing: 8px;
+        background: white;
+        color: #1e293b;
+    }
+
+    .code-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.3);
+    }
+
+    .code-input::placeholder {
+        color: #94a3b8;
+        font-size: 1rem;
+        letter-spacing: normal;
+    }
+
+    .input-hint {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        opacity: 0.8;
+    }
+
+    .input-hint i {
+        margin-left: 0.25rem;
+    }
+
+    .rules-card {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: none;
+        border-radius: 12px;
+    }
+
+    .rules-card .card-body {
+        padding: 1.25rem;
+    }
+
+    .rules-card h5 {
+        color: #92400e;
+        font-weight: 600;
+        margin-bottom: 1rem;
+    }
+
+    .rules-card h5 i {
+        margin-left: 0.5rem;
+    }
+
+    .rule-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 0.75rem;
+        color: #78350f;
+    }
+
+    .rule-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .rule-item i {
+        margin-left: 0.75rem;
+        margin-top: 0.25rem;
+        flex-shrink: 0;
+    }
+
+    .rule-item strong {
+        color: #92400e;
+    }
+
+    .result-card {
+        border-radius: 12px;
+        padding: 1.5rem;
+        text-align: center;
+        animation: slideDown 0.3s ease-out;
+        margin-bottom: 1.5rem;
+    }
+
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .result-card.success {
+        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+        border: 2px solid #10b981;
+    }
+
+    .result-card.error {
+        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+        border: 2px solid #ef4444;
+    }
+
+    .result-icon {
+        font-size: 3rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .result-message {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .result-details {
+        font-size: 0.875rem;
+        color: #64748b;
+        margin-top: 0.5rem;
+    }
+
+    .history-card .card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .history-card .card-header h5 {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .history-card .card-header h5 i {
+        margin-left: 0.5rem;
+        color: var(--primary-color);
+    }
+
+    .history-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.875rem 1rem;
+        border-radius: 8px;
+        margin-bottom: 0.5rem;
+        transition: background 0.2s ease;
+    }
+
+    .history-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .history-item.success {
+        background: #f0fdf4;
+        border-right: 3px solid #10b981;
+    }
+
+    .history-item.error {
+        background: #fef2f2;
+        border-right: 3px solid #ef4444;
+    }
+
+    .history-item-code {
+        font-weight: 600;
+        font-size: 1.125rem;
+        color: #1e293b;
+    }
+
+    .history-item-message {
+        color: #64748b;
+        font-size: 0.875rem;
+    }
+
+    .history-item-time {
+        color: #94a3b8;
+        font-size: 0.75rem;
+    }
+
+    .empty-history {
+        text-align: center;
+        padding: 2rem;
+        color: #94a3b8;
+    }
+
+    .empty-history i {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        display: block;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.375rem 0.75rem;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        font-size: 0.875rem;
+    }
+
+    .status-badge .dot {
+        width: 8px;
+        height: 8px;
+        background: #4ade80;
+        border-radius: 50%;
+        margin-left: 0.5rem;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="scanner-container">
-  <div class="scanner-header">
-    <h1>⌨️ تسجيل حضور الطلاب</h1>
-    <p class="text-muted">إدخال كود الطالب يدوياً</p>
-    <div class="status-indicator" id="statusIndicator">
-      <span class="status-dot"></span>
-      <span class="status-text">جاهز للإدخال</span>
-    </div>
-  </div>
+<div class="attendance-container">
+    <!-- Code Entry Section -->
+    <div class="code-entry-card">
+        <h2><i class="bi bi-person-check"></i> تسجيل حضور الطلاب</h2>
+        <p>أدخل كود الطالب المميز (الرقم الذي يعطيه الأدمن لكل طالب)</p>
 
-  <div class="rules-section">
-    <h4>⚠️ قواعد الحضور الصارمة:</h4>
-    <ul>
-      <li><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</li>
-      <li><strong>الشهر الأول:</strong> يجب الدفع أولاً قبل الدخول</li>
-      <li><strong>الشهور التالية:</strong> حصتين سماح قبل الدفع</li>
-    </ul>
-  </div>
+        <div class="code-input-wrapper">
+            <input
+                type="text"
+                id="studentCodeInput"
+                class="code-input"
+                placeholder="مثال: 1001"
+                autofocus
+                autocomplete="off"
+                inputmode="numeric"
+            >
+        </div>
 
-  <div class="scanner-body">
-    <div class="input-section">
-      <label for="studentCodeInput">أدخل كود الطالب:</label>
-      <input
-        type="text"
-        id="studentCodeInput"
-        class="code-input"
-        placeholder="مثال: 1001"
-        autofocus
-        autocomplete="off"
-      />
-      <small class="text-muted d-block mt-2 text-center">اضغط Enter بعد إدخال الكود</small>
+        <div class="input-hint">
+            <i class="bi bi-keyboard"></i>
+            اضغط Enter بعد إدخال الكود
+        </div>
+
+        <div class="status-badge mt-3">
+            <span class="dot"></span>
+            جاهز للإدخال
+        </div>
     </div>
 
-    <div class="result-section" id="resultSection" style="display: none">
-      <div class="result-card" id="resultCard">
-        <div class="result-icon" id="resultIcon"></div>
-        <div class="result-message" id="resultMessage"></div>
-        <div class="result-details" id="resultDetails"></div>
-      </div>
+    <!-- Result Section -->
+    <div id="resultSection" style="display: none;">
+        <div class="result-card" id="resultCard">
+            <div class="result-icon" id="resultIcon"></div>
+            <div class="result-message" id="resultMessage"></div>
+            <div class="result-details" id="resultDetails"></div>
+        </div>
     </div>
 
-    <div class="recent-scans">
-      <h3>📋 آخر عمليات التسجيل</h3>
-      <div class="scans-list" id="scansList">
-        <p class="text-muted text-center">لا توجد عمليات بعد</p>
-      </div>
+    <!-- Rules Section -->
+    <div class="card rules-card mb-4">
+        <div class="card-body">
+            <h5><i class="bi bi-exclamation-triangle"></i> قواعد الحضور</h5>
+            <div class="rule-item">
+                <i class="bi bi-clock"></i>
+                <span><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</span>
+            </div>
+            <div class="rule-item">
+                <i class="bi bi-cash-coin"></i>
+                <span><strong>الشهر الأول:</strong> يجب الدفع أولاً قبل الدخول</span>
+            </div>
+            <div class="rule-item">
+                <i class="bi bi-calendar-check"></i>
+                <span><strong>الشهور التالية:</strong> حصتين سماح قبل الدفع</span>
+            </div>
+        </div>
     </div>
-  </div>
+
+    <!-- History Section -->
+    <div class="card history-card">
+        <div class="card-header">
+            <h5><i class="bi bi-clock-history"></i> آخر عمليات التسجيل</h5>
+        </div>
+        <div class="card-body" id="scansList">
+            <div class="empty-history">
+                <i class="bi bi-inbox"></i>
+                <p>لا توجد عمليات تسجيل بعد</p>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -221,14 +366,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function showResult(data, code) {
         resultSection.style.display = 'block';
         resultCard.className = 'result-card ' + (data.success ? 'success' : 'error');
-        resultIcon.textContent = data.success ? '✅' : '❌';
+        resultIcon.innerHTML = data.success
+            ? '<i class="bi bi-check-circle-fill text-success"></i>'
+            : '<i class="bi bi-x-circle-fill text-danger"></i>';
         resultMessage.textContent = data.message;
-        resultDetails.textContent = data.success ? `كود: ${code}` : '';
+        resultDetails.textContent = data.success ? `كود الطالب: ${code}` : '';
 
-        // Add to history
         addToHistory(code, data.success, data.message);
 
-        // Auto-hide after 5 seconds
         setTimeout(() => {
             resultSection.style.display = 'none';
         }, 5000);
@@ -245,14 +390,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function renderHistory() {
         if (scansHistory.length === 0) {
-            scansList.innerHTML = '<p class="text-muted text-center">لا توجد عمليات بعد</p>';
+            scansList.innerHTML = `
+                <div class="empty-history">
+                    <i class="bi bi-inbox"></i>
+                    <p>لا توجد عمليات تسجيل بعد</p>
+                </div>
+            `;
             return;
         }
 
         scansList.innerHTML = scansHistory.map(scan => `
-            <div class="scan-item ${scan.success ? 'success' : 'error'}">
-                <span><strong>${scan.code}</strong> - ${scan.message}</span>
-                <span class="text-muted">${scan.time}</span>
+            <div class="history-item ${scan.success ? 'success' : 'error'}">
+                <div>
+                    <div class="history-item-code">${scan.code}</div>
+                    <div class="history-item-message">${scan.message}</div>
+                </div>
+                <div class="history-item-time">${scan.time}</div>
             </div>
         `).join('');
     }

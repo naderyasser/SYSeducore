@@ -1,57 +1,74 @@
 {% extends 'base.html' %}
-{% load static %}
 
 {% block title %}تقرير المدفوعات{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-  <div class="card">
-    <div class="card-header">
-      <h4>💰 تقرير المدفوعات</h4>
-    </div>
-    <div class="card-body">
-      <div class="row">
-        <div class="col-md-6">
-          <div class="card mb-3">
-            <div class="card-header">
-              <h5>📅 ملخص الدفعات</h5>
-            </div>
-            <div class="card-body">
-              <div class="stat-item">
-                <span class="stat-number">{{ payments.count }}</span>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-wallet2 me-2"></i>تقرير المدفوعات</h4>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body stat-card">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                    <div class="rounded-circle p-3" style="background: rgba(16, 185, 129, 0.1);">
+                        <i class="bi bi-cash-stack text-success" style="font-size: 1.5rem;"></i>
+                    </div>
+                </div>
+                <span class="stat-number" style="color: #10b981;">{{ payments.count }}</span>
                 <span class="stat-label">إجمالي الدفعات</span>
-              </div>
             </div>
-          </div>
         </div>
-      </div>
-      <div class="table-responsive">
-        <table class="table table-striped table-hover">
-          <thead>
-            <tr>
-              <th>الطالب</th>
-              <th>المبلغ</th>
-              <th>التاريخ</th>
-              <th>الحالة</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for payment in payments %}
-            <tr>
-              <td>{{ payment.student.full_name }}</td>
-              <td>{{ payment.amount }}</td>
-              <td>{{ payment.payment_date|date:"Y-m-d" }}</td>
-              <td>{{ payment.status }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-              <td colspan="4" class="text-center text-muted">لا يوجد سجلات</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
     </div>
-  </div>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>الطالب</th>
+                        <th>المبلغ</th>
+                        <th>التاريخ</th>
+                        <th>الحالة</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in payments %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center me-2" style="width: 28px; height: 28px;">
+                                    <i class="bi bi-person-fill text-white" style="font-size: 0.75rem;"></i>
+                                </div>
+                                {{ payment.student.full_name }}
+                            </div>
+                        </td>
+                        <td><span class="fw-semibold">{{ payment.amount }} ج.م</span></td>
+                        <td>{{ payment.payment_date|date:"Y-m-d" }}</td>
+                        <td>
+                            {% if payment.status == 'paid' %}
+                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>مدفوع</span>
+                            {% elif payment.status == 'partial' %}
+                            <span class="badge bg-warning"><i class="bi bi-exclamation-circle me-1"></i>جزئي</span>
+                            {% else %}
+                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>غير مدفوع</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2 mb-0">لا يوجد سجلات مدفوعات</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endblock %}
