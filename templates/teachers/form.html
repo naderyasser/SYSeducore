@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if teacher %}تعديل المدرس{% else %}إضافة مدرس جديد{% endif %}{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+    </a>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    {% if teacher %}
+                    <i class="bi bi-pencil me-2"></i>تعديل المدرس - {{ teacher.full_name }}
+                    {% else %}
+                    <i class="bi bi-person-plus me-2"></i>إضافة مدرس جديد
+                    {% endif %}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
+                            {{ form.full_name }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">رقم الهاتف <span class="text-danger">*</span></label>
+                            {{ form.phone }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">البريد الإلكتروني <span class="text-danger">*</span></label>
+                            {{ form.email }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">التخصص <span class="text-danger">*</span></label>
+                            {{ form.specialization }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">تاريخ التعيين <span class="text-danger">*</span></label>
+                            {{ form.hire_date }}
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-check form-switch mt-4">
+                                {{ form.is_active }}
+                                <label class="form-check-label">مدرس نشط</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-top mt-4 pt-4">
+                        <div class="d-flex gap-2 justify-content-end">
+                            <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary">إلغاء</a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg me-2"></i>
+                                {% if teacher %}حفظ التغييرات{% else %}إضافة المدرس{% endif %}
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

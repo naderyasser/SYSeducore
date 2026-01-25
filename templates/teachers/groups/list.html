@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}المجموعات{% endblock %}
+
+{% block content %}
+<!-- Navigation Tabs -->
+<div class="mb-4">
+    <ul class="nav nav-pills">
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'teachers:list' %}">
+                <i class="bi bi-person-workspace me-2"></i>المدرسين
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="{% url 'teachers:room_list' %}">
+                <i class="bi bi-door-open me-2"></i>القاعات
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link active" href="{% url 'teachers:group_list' %}">
+                <i class="bi bi-collection me-2"></i>المجموعات
+            </a>
+        </li>
+    </ul>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-collection me-2"></i>إدارة المجموعات</h4>
+    <a href="{% url 'teachers:group_create' %}" class="btn btn-success">
+        <i class="bi bi-plus-lg me-2"></i>إضافة مجموعة
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>اسم المجموعة</th>
+                        <th>المدرس</th>
+                        <th>القاعة</th>
+                        <th>الموعد</th>
+                        <th>السعر</th>
+                        <th>الحالة</th>
+                        <th>الإجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for group in groups %}
+                    <tr>
+                        <td>
+                            <span class="fw-semibold">{{ group.group_name }}</span>
+                        </td>
+                        <td>{{ group.teacher.full_name }}</td>
+                        <td>
+                            {% if group.room %}
+                            <span class="badge bg-secondary">{{ group.room.name }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {{ group.get_schedule_day_display }}
+                            <br>
+                            <small class="text-muted">{{ group.schedule_time|time:"H:i" }}</small>
+                        </td>
+                        <td>{{ group.standard_fee }} ج.م</td>
+                        <td>
+                            {% if group.is_active %}
+                            <span class="badge bg-success">نشط</span>
+                            {% else %}
+                            <span class="badge bg-secondary">غير نشط</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'teachers:group_update' group_id=group.group_id %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                            <form method="post" action="{% url 'teachers:group_delete' group_id=group.group_id %}" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذه المجموعة؟')">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                            <p class="mt-2 mb-0">لا توجد مجموعات</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
