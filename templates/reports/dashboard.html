@@ -1,114 +1,196 @@
 {% extends 'base.html' %}
 
 {% block title %}لوحة التحكم{% endblock %}
+{% block page_title %}لوحة التحكم{% endblock %}
 
 {% block content %}
 <!-- Stats Cards -->
-<div class="row g-4 mb-4">
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-body stat-card">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <div class="rounded-circle p-3" style="background: rgba(79, 70, 229, 0.1);">
-                        <i class="bi bi-people-fill text-primary" style="font-size: 1.5rem;"></i>
-                    </div>
+<div class="row g-3 mb-4">
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon blue">
+                <i class="bi bi-people-fill"></i>
+            </div>
+            <div class="stat-number">{{ total_students }}</div>
+            <div class="stat-label">إجمالي الطلاب</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon green">
+                <i class="bi bi-person-badge"></i>
+            </div>
+            <div class="stat-number">{{ total_teachers }}</div>
+            <div class="stat-label">المدرسين</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon yellow">
+                <i class="bi bi-collection"></i>
+            </div>
+            <div class="stat-number">{{ total_groups }}</div>
+            <div class="stat-label">المجموعات</div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon blue">
+                <i class="bi bi-calendar-check"></i>
+            </div>
+            <div class="stat-number">{{ today_attendances }}</div>
+            <div class="stat-label">حضور اليوم</div>
+        </div>
+    </div>
+</div>
+
+<!-- Financial Summary -->
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label mb-2">المستحق هذا الشهر</div>
+                    <div class="stat-number">{{ month_total_due|floatformat:0 }} ج.م</div>
                 </div>
-                <span class="stat-number">{{ total_students }}</span>
-                <span class="stat-label">طالب نشط</span>
+                <div class="stat-icon yellow">
+                    <i class="bi bi-cash-stack"></i>
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-body stat-card">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <div class="rounded-circle p-3" style="background: rgba(16, 185, 129, 0.1);">
-                        <i class="bi bi-person-workspace text-success" style="font-size: 1.5rem;"></i>
-                    </div>
+    <div class="col-md-6">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <div class="stat-label mb-2">المحصل هذا الشهر</div>
+                    <div class="stat-number text-success">{{ month_total_paid|floatformat:0 }} ج.م</div>
                 </div>
-                <span class="stat-number" style="color: #10b981;">{{ total_teachers }}</span>
-                <span class="stat-label">مدرس</span>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-body stat-card">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <div class="rounded-circle p-3" style="background: rgba(245, 158, 11, 0.1);">
-                        <i class="bi bi-collection text-warning" style="font-size: 1.5rem;"></i>
-                    </div>
+                <div class="stat-icon green">
+                    <i class="bi bi-wallet2"></i>
                 </div>
-                <span class="stat-number" style="color: #f59e0b;">{{ total_groups }}</span>
-                <span class="stat-label">مجموعة</span>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-3">
-        <div class="card h-100">
-            <div class="card-body stat-card">
-                <div class="d-flex align-items-center justify-content-between mb-3">
-                    <div class="rounded-circle p-3" style="background: rgba(99, 102, 241, 0.1);">
-                        <i class="bi bi-calendar-check text-info" style="font-size: 1.5rem;"></i>
-                    </div>
-                </div>
-                <span class="stat-number" style="color: #6366f1;">{{ today_attendances }}</span>
-                <span class="stat-label">حضور اليوم</span>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row g-4">
-    <!-- Quick Actions -->
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-lightning-charge me-2"></i>إجراءات سريعة</h5>
+<!-- Attendance Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>إحصائيات الحضور (آخر 7 أيام)</span>
             </div>
             <div class="card-body">
-                <div class="d-grid gap-3">
-                    <a href="{% url 'attendance:scanner' %}" class="btn btn-primary btn-lg">
-                        <i class="bi bi-person-check me-2"></i>
-                        تسجيل حضور الطلاب
-                    </a>
-                    <a href="{% url 'students:create' %}" class="btn btn-success btn-lg">
-                        <i class="bi bi-person-plus me-2"></i>
-                        إضافة طالب جديد
-                    </a>
-                    <a href="{% url 'students:list' %}" class="btn btn-outline-primary btn-lg">
-                        <i class="bi bi-people me-2"></i>
-                        عرض الطلاب
-                    </a>
-                    <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary btn-lg">
-                        <i class="bi bi-person-workspace me-2"></i>
-                        إدارة المدرسين
-                    </a>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="p-3">
+                            <div class="fs-3 fw-bold text-success">{{ present_count }}</div>
+                            <div class="text-muted">حاضر</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-3">
+                            <div class="fs-3 fw-bold text-warning">{{ late_count }}</div>
+                            <div class="text-muted">متأخر</div>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="p-3">
+                            <div class="fs-3 fw-bold text-danger">{{ absent_count }}</div>
+                            <div class="text-muted">غائب</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Recent Attendance -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>آخر تسجيلات الحضور</span>
+                <a href="{% url 'reports:attendance' %}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>الطالب</th>
+                                <th>المجموعة</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for att in recent_attendances %}
+                            <tr>
+                                <td>{{ att.student.full_name }}</td>
+                                <td>{{ att.session.group.group_name }}</td>
+                                <td>
+                                    {% if att.status == 'present' %}
+                                    <span class="badge bg-success">حاضر</span>
+                                    {% elif att.status == 'late' %}
+                                    <span class="badge bg-warning">متأخر</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">غائب</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-4">لا توجد تسجيلات</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Reports -->
-    <div class="col-md-6">
-        <div class="card h-100">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-file-earmark-bar-graph me-2"></i>التقارير</h5>
+    <!-- Pending Payments -->
+    <div class="col-lg-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>المدفوعات المعلقة</span>
+                <a href="{% url 'payments:list' %}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
             </div>
-            <div class="card-body">
-                <div class="d-grid gap-3">
-                    <a href="{% url 'reports:attendance' %}" class="btn btn-outline-primary btn-lg">
-                        <i class="bi bi-calendar-check me-2"></i>
-                        تقرير الحضور
-                    </a>
-                    <a href="{% url 'reports:payments' %}" class="btn btn-outline-success btn-lg">
-                        <i class="bi bi-wallet2 me-2"></i>
-                        تقرير المدفوعات
-                    </a>
-                    <a href="{% url 'payments:list' %}" class="btn btn-outline-warning btn-lg">
-                        <i class="bi bi-cash-coin me-2"></i>
-                        إدارة المدفوعات
-                    </a>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>الطالب</th>
+                                <th>المجموعة</th>
+                                <th>المبلغ</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in pending_payments %}
+                            <tr>
+                                <td>{{ payment.student.full_name }}</td>
+                                <td>{{ payment.group.group_name }}</td>
+                                <td>{{ payment.amount_due|floatformat:0 }} ج.م</td>
+                                <td>
+                                    {% if payment.status == 'unpaid' %}
+                                    <span class="badge bg-danger">غير مدفوع</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">جزئي</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">لا توجد مدفوعات معلقة</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

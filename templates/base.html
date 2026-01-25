@@ -3,361 +3,440 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}نظام إدارة المركز التعليمي{% endblock %}</title>
+    <title>{% block title %}نظام إدارة المركز{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary-color: #4f46e5;
-            --primary-hover: #4338ca;
-            --secondary-color: #64748b;
-            --success-color: #10b981;
-            --danger-color: #ef4444;
-            --warning-color: #f59e0b;
-            --bg-color: #f1f5f9;
-            --card-bg: #ffffff;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-        }
-
         * {
-            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            font-family: 'Cairo', sans-serif;
         }
 
         body {
-            background-color: var(--bg-color);
-            color: var(--text-primary);
+            background-color: #f5f6fa;
             min-height: 100vh;
         }
 
-        /* Navbar */
-        .navbar {
-            background: linear-gradient(135deg, var(--primary-color) 0%, #7c3aed 100%);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            padding: 0.75rem 0;
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 260px;
+            height: 100vh;
+            background: #1a1c23;
+            z-index: 1000;
+            transition: all 0.3s;
         }
 
-        .navbar-brand {
-            font-weight: 700;
-            font-size: 1.25rem;
-            color: white !important;
+        .sidebar-header {
+            padding: 20px;
+            background: #12141a;
+            border-bottom: 1px solid #2d3039;
         }
 
-        .navbar-brand i {
-            margin-left: 0.5rem;
+        .sidebar-header h4 {
+            color: #fff;
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 600;
         }
 
-        .nav-link {
-            color: rgba(255, 255, 255, 0.9) !important;
-            font-weight: 500;
-            padding: 0.5rem 1rem !important;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            margin: 0 0.125rem;
+        .sidebar-header span {
+            color: #6c757d;
+            font-size: 0.8rem;
         }
 
-        .nav-link:hover, .nav-link.active {
-            background-color: rgba(255, 255, 255, 0.15);
-            color: white !important;
+        .sidebar-menu {
+            padding: 15px 0;
         }
 
-        .nav-link i {
-            margin-left: 0.375rem;
+        .sidebar-menu .menu-header {
+            color: #6c757d;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            padding: 10px 20px;
+            letter-spacing: 1px;
+        }
+
+        .sidebar-menu a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: #a0a4b8;
+            text-decoration: none;
+            transition: all 0.2s;
+            border-right: 3px solid transparent;
+        }
+
+        .sidebar-menu a:hover {
+            background: #23252d;
+            color: #fff;
+        }
+
+        .sidebar-menu a.active {
+            background: #23252d;
+            color: #3b82f6;
+            border-right-color: #3b82f6;
+        }
+
+        .sidebar-menu a i {
+            margin-left: 12px;
+            font-size: 1.1rem;
+            width: 22px;
         }
 
         /* Main Content */
-        .main-content {
-            padding: 1.5rem;
-            min-height: calc(100vh - 140px);
+        .main-wrapper {
+            margin-right: 260px;
+            min-height: 100vh;
+        }
+
+        /* Top Header */
+        .top-header {
+            background: #fff;
+            padding: 15px 25px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .top-header .page-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .user-info .user-name {
+            color: #374151;
+            font-weight: 500;
+        }
+
+        .user-avatar {
+            width: 38px;
+            height: 38px;
+            background: #3b82f6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+        }
+
+        /* Content Area */
+        .content-area {
+            padding: 25px;
         }
 
         /* Cards */
         .card {
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            transition: box-shadow 0.2s ease;
-        }
-
-        .card:hover {
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            background: #fff;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
         }
 
         .card-header {
-            background: transparent;
-            border-bottom: 1px solid var(--border-color);
-            padding: 1rem 1.25rem;
+            background: #fff;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 16px 20px;
             font-weight: 600;
+            color: #1f2937;
         }
 
         .card-body {
-            padding: 1.25rem;
+            padding: 20px;
+        }
+
+        /* Stats Cards */
+        .stat-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        .stat-card .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            margin-bottom: 15px;
+        }
+
+        .stat-card .stat-icon.blue { background: #dbeafe; color: #2563eb; }
+        .stat-card .stat-icon.green { background: #dcfce7; color: #16a34a; }
+        .stat-card .stat-icon.yellow { background: #fef3c7; color: #d97706; }
+        .stat-card .stat-icon.red { background: #fee2e2; color: #dc2626; }
+
+        .stat-card .stat-number {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .stat-card .stat-label {
+            color: #6b7280;
+            font-size: 0.9rem;
+        }
+
+        /* Tables */
+        .table thead th {
+            background: #f9fafb;
+            color: #6b7280;
+            font-weight: 600;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 12px 16px;
+        }
+
+        .table tbody td {
+            padding: 14px 16px;
+            vertical-align: middle;
+            border-bottom: 1px solid #f3f4f6;
+            color: #374151;
+        }
+
+        .table tbody tr:hover {
+            background: #f9fafb;
         }
 
         /* Buttons */
         .btn {
-            border-radius: 8px;
+            border-radius: 6px;
             font-weight: 500;
-            padding: 0.5rem 1rem;
-            transition: all 0.2s ease;
+            padding: 8px 16px;
         }
 
         .btn-primary {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
+            background: #3b82f6;
+            border-color: #3b82f6;
         }
 
         .btn-primary:hover {
-            background-color: var(--primary-hover);
-            border-color: var(--primary-hover);
+            background: #2563eb;
+            border-color: #2563eb;
         }
 
         .btn-success {
-            background-color: var(--success-color);
-            border-color: var(--success-color);
+            background: #10b981;
+            border-color: #10b981;
         }
 
         .btn-danger {
-            background-color: var(--danger-color);
-            border-color: var(--danger-color);
-        }
-
-        .btn-warning {
-            background-color: var(--warning-color);
-            border-color: var(--warning-color);
-            color: white;
-        }
-
-        .btn-warning:hover {
-            color: white;
-        }
-
-        /* Tables */
-        .table {
-            margin-bottom: 0;
-        }
-
-        .table thead th {
-            background-color: var(--bg-color);
-            border-bottom: 2px solid var(--border-color);
-            color: var(--text-secondary);
-            font-weight: 600;
-            font-size: 0.875rem;
-            text-transform: uppercase;
-            letter-spacing: 0.025em;
-            padding: 0.875rem 1rem;
-        }
-
-        .table tbody td {
-            padding: 1rem;
-            vertical-align: middle;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .table-hover tbody tr:hover {
-            background-color: rgba(79, 70, 229, 0.04);
+            background: #ef4444;
+            border-color: #ef4444;
         }
 
         /* Badges */
         .badge {
             font-weight: 500;
-            padding: 0.375rem 0.75rem;
-            border-radius: 6px;
+            padding: 5px 10px;
+            border-radius: 4px;
         }
 
-        .bg-success {
-            background-color: var(--success-color) !important;
-        }
-
-        .bg-danger {
-            background-color: var(--danger-color) !important;
-        }
-
-        .bg-warning {
-            background-color: var(--warning-color) !important;
-        }
-
-        /* Status Colors */
-        .status-present { color: var(--success-color); font-weight: 600; }
-        .status-late { color: var(--warning-color); font-weight: 600; }
-        .status-absent { color: var(--danger-color); font-weight: 600; }
+        .badge.bg-success { background: #dcfce7 !important; color: #166534 !important; }
+        .badge.bg-danger { background: #fee2e2 !important; color: #991b1b !important; }
+        .badge.bg-warning { background: #fef3c7 !important; color: #92400e !important; }
+        .badge.bg-primary { background: #dbeafe !important; color: #1e40af !important; }
+        .badge.bg-secondary { background: #f3f4f6 !important; color: #4b5563 !important; }
 
         /* Form Controls */
         .form-control, .form-select {
-            border-radius: 8px;
-            border: 1px solid var(--border-color);
-            padding: 0.625rem 0.875rem;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            padding: 10px 14px;
         }
 
         .form-control:focus, .form-select:focus {
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
         }
 
-        /* Footer */
-        .footer {
-            background-color: var(--text-primary);
-            color: rgba(255, 255, 255, 0.7);
-            padding: 1rem 0;
-            text-align: center;
+        .form-label {
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
         }
 
-        .footer a {
-            color: rgba(255, 255, 255, 0.9);
-            text-decoration: none;
+        /* Nav Pills */
+        .nav-pills .nav-link {
+            color: #6b7280;
+            border-radius: 6px;
+            padding: 8px 16px;
+            margin-left: 8px;
+        }
+
+        .nav-pills .nav-link.active {
+            background: #3b82f6;
+            color: #fff;
+        }
+
+        .nav-pills .nav-link:hover:not(.active) {
+            background: #f3f4f6;
+        }
+
+        /* Alerts */
+        .alert {
+            border: none;
+            border-radius: 6px;
         }
 
         /* Dropdown */
         .dropdown-menu {
-            border-radius: 10px;
-            border: 1px solid var(--border-color);
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-            padding: 0.5rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
 
         .dropdown-item {
-            border-radius: 6px;
-            padding: 0.5rem 1rem;
+            padding: 10px 16px;
         }
 
         .dropdown-item:hover {
-            background-color: var(--bg-color);
+            background: #f3f4f6;
         }
 
-        /* Page Header */
-        .page-header {
-            margin-bottom: 1.5rem;
-        }
+        /* Mobile */
+        @media (max-width: 992px) {
+            .sidebar {
+                right: -260px;
+            }
 
-        .page-header h4 {
-            margin: 0;
-            font-weight: 600;
-            color: var(--text-primary);
-        }
+            .sidebar.show {
+                right: 0;
+            }
 
-        /* Stats Cards */
-        .stat-card {
-            text-align: center;
-            padding: 1.25rem;
-        }
+            .main-wrapper {
+                margin-right: 0;
+            }
 
-        .stat-card .stat-number {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--primary-color);
-            display: block;
-        }
-
-        .stat-card .stat-label {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        /* Responsive */
-        @media (max-width: 991px) {
-            .navbar-collapse {
-                background: rgba(0, 0, 0, 0.1);
-                border-radius: 10px;
-                padding: 1rem;
-                margin-top: 0.5rem;
+            .mobile-toggle {
+                display: block !important;
             }
         }
+
+        .mobile-toggle {
+            display: none;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #374151;
+        }
+
+        /* Status badges */
+        .status-present { color: #16a34a; }
+        .status-late { color: #d97706; }
+        .status-absent { color: #dc2626; }
 
         {% block extra_css %}{% endblock %}
     </style>
 </head>
 <body>
-    <!-- Navbar -->
-    <nav class="navbar navbar-expand-lg">
-        <div class="container">
-            <a class="navbar-brand" href="{% url 'reports:dashboard' %}">
-                <i class="bi bi-mortarboard-fill"></i>
-                نظام إدارة المركز
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'reports:dashboard' %}">
-                            <i class="bi bi-speedometer2"></i>
-                            الرئيسية
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'attendance:scanner' %}">
-                            <i class="bi bi-person-check"></i>
-                            تسجيل الحضور
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'students:list' %}">
-                            <i class="bi bi-people"></i>
-                            الطلاب
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'teachers:list' %}">
-                            <i class="bi bi-person-workspace"></i>
-                            المدرسين
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{% url 'payments:list' %}">
-                            <i class="bi bi-wallet2"></i>
-                            المدفوعات
-                        </a>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-file-earmark-text"></i>
-                            التقارير
-                        </a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{% url 'reports:attendance' %}">تقرير الحضور</a></li>
-                            <li><a class="dropdown-item" href="{% url 'reports:payments' %}">تقرير المدفوعات</a></li>
-                        </ul>
-                    </li>
-                </ul>
-                <ul class="navbar-nav">
-                    {% if user.is_authenticated %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="bi bi-person-circle"></i>
-                            {{ user.get_full_name|default:user.username }}
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
-                            <li><a class="dropdown-item" href="{% url 'accounts:logout' %}">
-                                <i class="bi bi-box-arrow-right"></i>
-                                تسجيل الخروج
-                            </a></li>
-                        </ul>
-                    </li>
-                    {% endif %}
-                </ul>
-            </div>
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h4><i class="bi bi-mortarboard-fill me-2"></i>المركز التعليمي</h4>
+            <span>نظام إدارة الحضور والمدفوعات</span>
         </div>
-    </nav>
+        <nav class="sidebar-menu">
+            <div class="menu-header">القائمة الرئيسية</div>
+            <a href="{% url 'reports:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                <i class="bi bi-grid-1x2"></i>
+                لوحة التحكم
+            </a>
+            <a href="{% url 'attendance:scanner' %}" class="{% if 'scanner' in request.path %}active{% endif %}">
+                <i class="bi bi-qr-code-scan"></i>
+                تسجيل الحضور
+            </a>
+
+            <div class="menu-header">إدارة البيانات</div>
+            <a href="{% url 'students:list' %}" class="{% if 'students' in request.path %}active{% endif %}">
+                <i class="bi bi-people"></i>
+                الطلاب
+            </a>
+            <a href="{% url 'teachers:list' %}" class="{% if 'teachers' in request.path %}active{% endif %}">
+                <i class="bi bi-person-badge"></i>
+                المدرسين
+            </a>
+            <a href="{% url 'payments:list' %}" class="{% if 'payments' in request.path %}active{% endif %}">
+                <i class="bi bi-credit-card"></i>
+                المدفوعات
+            </a>
+
+            <div class="menu-header">التقارير</div>
+            <a href="{% url 'reports:attendance' %}" class="{% if 'attendance' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-clipboard-check"></i>
+                تقرير الحضور
+            </a>
+            <a href="{% url 'reports:payments' %}" class="{% if request.resolver_match.url_name == 'payments' and 'reports' in request.path %}active{% endif %}">
+                <i class="bi bi-receipt"></i>
+                تقرير المدفوعات
+            </a>
+
+            {% if user.is_authenticated %}
+            <div class="menu-header">الحساب</div>
+            <a href="{% url 'accounts:logout' %}">
+                <i class="bi bi-box-arrow-right"></i>
+                تسجيل الخروج
+            </a>
+            {% endif %}
+        </nav>
+    </aside>
 
     <!-- Main Content -->
-    <main class="main-content">
-        <div class="container">
+    <div class="main-wrapper">
+        <!-- Top Header -->
+        <header class="top-header">
+            <div class="d-flex align-items-center">
+                <button class="mobile-toggle me-3" onclick="toggleSidebar()">
+                    <i class="bi bi-list"></i>
+                </button>
+                <h1 class="page-title">{% block page_title %}لوحة التحكم{% endblock %}</h1>
+            </div>
+            {% if user.is_authenticated %}
+            <div class="user-info">
+                <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
+                <div class="user-avatar">
+                    <i class="bi bi-person"></i>
+                </div>
+            </div>
+            {% endif %}
+        </header>
+
+        <!-- Content Area -->
+        <main class="content-area">
+            {% if messages %}
+            {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            {% endif %}
+
             {% block content %}{% endblock %}
-        </div>
-    </main>
+        </main>
+    </div>
 
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <p class="mb-0">نظام إدارة المركز التعليمي &copy; 2026</p>
-        </div>
-    </footer>
-
-    <!-- Scripts -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('show');
+        }
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
