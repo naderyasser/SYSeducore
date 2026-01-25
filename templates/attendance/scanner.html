@@ -4,33 +4,160 @@
 {% block title %}تسجيل الحضور{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/scanner.css' %}" />
+<style>
+  .scanner-container {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .scanner-header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  .scanner-header h1 {
+    color: #333;
+    margin-bottom: 10px;
+  }
+  .status-indicator {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: #e8f5e9;
+    border-radius: 20px;
+  }
+  .status-dot {
+    width: 12px;
+    height: 12px;
+    background: #4caf50;
+    border-radius: 50%;
+    margin-left: 8px;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .input-section {
+    margin-bottom: 30px;
+  }
+  .input-section label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+    color: #555;
+  }
+  .code-input {
+    width: 100%;
+    padding: 20px;
+    font-size: 2rem;
+    text-align: center;
+    border: 3px solid #007bff;
+    border-radius: 10px;
+    letter-spacing: 5px;
+  }
+  .code-input:focus {
+    outline: none;
+    border-color: #0056b3;
+    box-shadow: 0 0 10px rgba(0,123,255,0.3);
+  }
+  .rules-section {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 10px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+  .rules-section h4 {
+    color: #856404;
+    margin-bottom: 10px;
+  }
+  .rules-section ul {
+    margin: 0;
+    padding-right: 20px;
+    color: #856404;
+  }
+  .result-section {
+    margin-top: 20px;
+  }
+  .result-card {
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+  }
+  .result-card.success {
+    background: #d4edda;
+    border: 2px solid #28a745;
+  }
+  .result-card.error {
+    background: #f8d7da;
+    border: 2px solid #dc3545;
+  }
+  .result-icon {
+    font-size: 3rem;
+    margin-bottom: 10px;
+  }
+  .result-message {
+    font-size: 1.2rem;
+    font-weight: bold;
+  }
+  .recent-scans {
+    margin-top: 30px;
+  }
+  .recent-scans h3 {
+    margin-bottom: 15px;
+    color: #333;
+  }
+  .scan-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    margin-bottom: 8px;
+  }
+  .scan-item.success {
+    border-right: 4px solid #28a745;
+  }
+  .scan-item.error {
+    border-right: 4px solid #dc3545;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
 <div class="scanner-container">
   <div class="scanner-header">
-    <h1>📷 تسجيل حضور الطلاب</h1>
+    <h1>⌨️ تسجيل حضور الطلاب</h1>
+    <p class="text-muted">إدخال كود الطالب يدوياً</p>
     <div class="status-indicator" id="statusIndicator">
       <span class="status-dot"></span>
-      <span class="status-text">جاهز للمسح</span>
+      <span class="status-text">جاهز للإدخال</span>
     </div>
   </div>
 
+  <div class="rules-section">
+    <h4>⚠️ قواعد الحضور الصارمة:</h4>
+    <ul>
+      <li><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</li>
+      <li><strong>الشهر الأول:</strong> يجب الدفع أولاً قبل الدخول</li>
+      <li><strong>الشهور التالية:</strong> حصتين سماح قبل الدفع</li>
+    </ul>
+  </div>
+
   <div class="scanner-body">
-    <!-- Barcode Input -->
     <div class="input-section">
-      <label for="barcodeInput">امسح الباركود أو أدخله يدوياً</label>
+      <label for="studentCodeInput">أدخل كود الطالب:</label>
       <input
         type="text"
-        id="barcodeInput"
-        class="barcode-input"
-        placeholder="ضع المؤشر هنا ثم امسح الكارنيه"
+        id="studentCodeInput"
+        class="code-input"
+        placeholder="مثال: 1001"
         autofocus
+        autocomplete="off"
       />
+      <small class="text-muted d-block mt-2 text-center">اضغط Enter بعد إدخال الكود</small>
     </div>
 
-    <!-- Result Display -->
     <div class="result-section" id="resultSection" style="display: none">
       <div class="result-card" id="resultCard">
         <div class="result-icon" id="resultIcon"></div>
@@ -39,27 +166,96 @@
       </div>
     </div>
 
-    <!-- Recent Scans -->
     <div class="recent-scans">
-      <h3>📋 آخر عمليات المسح</h3>
-      <div class="scans-list" id="scansList"></div>
+      <h3>📋 آخر عمليات التسجيل</h3>
+      <div class="scans-list" id="scansList">
+        <p class="text-muted text-center">لا توجد عمليات بعد</p>
+      </div>
     </div>
   </div>
 </div>
-
-<!-- Audio for feedback -->
-<audio id="successSound" src="{% static 'sounds/success.mp3' %}"></audio>
-<audio id="errorSound" src="{% static 'sounds/error.mp3' %}"></audio>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/utils/api.js' %}"></script>
-<script src="{% static 'js/models/Attendance.js' %}"></script>
-<script src="{% static 'js/views/ScannerView.js' %}"></script>
-<script src="{% static 'js/controllers/ScannerController.js' %}"></script>
 <script>
-  // Initialize Scanner
-  const scannerController = new ScannerController();
-  scannerController.init();
+document.addEventListener('DOMContentLoaded', function() {
+    const input = document.getElementById('studentCodeInput');
+    const resultSection = document.getElementById('resultSection');
+    const resultCard = document.getElementById('resultCard');
+    const resultIcon = document.getElementById('resultIcon');
+    const resultMessage = document.getElementById('resultMessage');
+    const resultDetails = document.getElementById('resultDetails');
+    const scansList = document.getElementById('scansList');
+
+    let scansHistory = [];
+
+    input.addEventListener('keypress', async function(e) {
+        if (e.key === 'Enter') {
+            const code = input.value.trim();
+            if (!code) return;
+
+            try {
+                const response = await fetch('{% url "attendance:process_student_code" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({ student_code: code })
+                });
+
+                const data = await response.json();
+                showResult(data, code);
+                input.value = '';
+                input.focus();
+
+            } catch (error) {
+                showResult({
+                    success: false,
+                    message: 'خطأ في الاتصال بالخادم'
+                }, code);
+            }
+        }
+    });
+
+    function showResult(data, code) {
+        resultSection.style.display = 'block';
+        resultCard.className = 'result-card ' + (data.success ? 'success' : 'error');
+        resultIcon.textContent = data.success ? '✅' : '❌';
+        resultMessage.textContent = data.message;
+        resultDetails.textContent = data.success ? `كود: ${code}` : '';
+
+        // Add to history
+        addToHistory(code, data.success, data.message);
+
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            resultSection.style.display = 'none';
+        }, 5000);
+    }
+
+    function addToHistory(code, success, message) {
+        const time = new Date().toLocaleTimeString('ar-EG');
+        scansHistory.unshift({ code, success, message, time });
+
+        if (scansHistory.length > 10) scansHistory.pop();
+
+        renderHistory();
+    }
+
+    function renderHistory() {
+        if (scansHistory.length === 0) {
+            scansList.innerHTML = '<p class="text-muted text-center">لا توجد عمليات بعد</p>';
+            return;
+        }
+
+        scansList.innerHTML = scansHistory.map(scan => `
+            <div class="scan-item ${scan.success ? 'success' : 'error'}">
+                <span><strong>${scan.code}</strong> - ${scan.message}</span>
+                <span class="text-muted">${scan.time}</span>
+            </div>
+        `).join('');
+    }
+});
 </script>
 {% endblock %}
