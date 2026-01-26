@@ -5,6 +5,8 @@ from .models import Student, StudentGroupEnrollment
 class StudentForm(forms.ModelForm):
     """
     Form للطالب (النظام الجديد: student_code بدل barcode)
+    - إذا ترك الكود فارغ، يتم توليده تلقائياً (آخر كود + 1)
+    - يمكن للأدمن إدخال كود مخصص يدوياً
     """
     class Meta:
         model = Student
@@ -13,10 +15,35 @@ class StudentForm(forms.ModelForm):
             'full_name': forms.TextInput(attrs={'class': 'form-control'}),
             'student_code': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': 'مثال: 1001'
+                'placeholder': 'اتركه فارغ للتوليد التلقائي أو أدخل كود مخصص'
             }),
             'parent_phone': forms.TextInput(attrs={'class': 'form-control'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['student_code'].required = False
+
+    def clean_student_code(self):
+        code = self.cleaned_data.get('student_code')
+        if not code or code.strip() == '':
+            code = self.generate_next_code()
+        return code.strip()
+
+    def generate_next_code(self):
+        """توليد الكود التالي (آخر كود رقمي + 1)، يبدأ من 1001"""
+        from django.db.models import Max
+        from django.db.models.functions import Cast
+        from django.db.models import IntegerField
+
+        last_numeric = Student.objects.filter(
+            student_code__regex=r'^\d+$'
+        ).annotate(
+            code_int=Cast('student_code', IntegerField())
+        ).aggregate(max_code=Max('code_int'))
+
+        last_code = last_numeric.get('max_code')
+        return str(last_code + 1) if last_code else '1001'
 
 
 class StudentGroupEnrollmentForm(forms.ModelForm):

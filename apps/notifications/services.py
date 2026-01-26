@@ -118,7 +118,7 @@ class WhatsAppService:
     def send_warning_before_block(self, student_name, parent_phone, amount):
         """
         Send warning before blocking student
-        
+
         Args:
             student_name: Student name
             parent_phone: Parent's phone number
@@ -126,6 +126,45 @@ class WhatsAppService:
         """
         message = self._get_warning_message(student_name, amount)
         return self.send_message(parent_phone, message)
+
+    def send_block_notification(self, student_name, parent_phone, reason='late'):
+        """
+        Send notification when student is blocked
+
+        Args:
+            student_name: Student name
+            parent_phone: Parent's phone number
+            reason: Block reason ('late' or 'payment')
+        """
+        if reason == 'late':
+            message = self._get_late_block_message(student_name)
+        else:
+            message = self._get_payment_block_message(student_name)
+        return self.send_message(parent_phone, message)
+
+    def _get_late_block_message(self, student_name):
+        """Get late block message"""
+        time_str = timezone.now().strftime('%I:%M %p')
+        return f'''⛔ *تم منع الدخول - تأخير*
+
+تم منع ابنكم *{student_name}* من دخول الحصة
+السبب: التأخر أكثر من 10 دقائق عن الموعد المحدد
+الوقت: {time_str}
+
+يُرجى الالتزام بمواعيد الحصص
+
+_نظام الحضور الآلي_'''
+
+    def _get_payment_block_message(self, student_name):
+        """Get payment block message"""
+        return f'''⛔ *تم منع الدخول - مصروفات*
+
+تم منع ابنكم *{student_name}* من دخول الحصة
+السبب: عدم سداد المصروفات المطلوبة
+
+يُرجى مراجعة الإدارة لسداد المصروفات
+
+_نظام الحضور الآلي_'''
     
     def _get_present_message(self, student_name, time):
         """Get present attendance message"""
@@ -235,5 +274,16 @@ class NotificationService:
             return self.whatsapp_service.send_warning_before_block(
                 student_name, parent_phone, amount
             )
-        
+
+        return {'success': False, 'error': 'طريقة الإشعار غير مدعومة'}
+
+    def send_block_notification(self, student_name, parent_phone, reason='late'):
+        """
+        Send block notification with fallback
+        """
+        if self.notification_method == 'whatsapp':
+            return self.whatsapp_service.send_block_notification(
+                student_name, parent_phone, reason
+            )
+
         return {'success': False, 'error': 'طريقة الإشعار غير مدعومة'}
