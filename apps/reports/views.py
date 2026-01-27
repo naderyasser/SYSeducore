@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.utils import timezone
 from django.core.paginator import Paginator
 from apps.students.models import Student
@@ -164,3 +165,45 @@ def notifications_list(request):
     }
 
     return render(request, 'reports/notifications.html', context)
+
+
+@login_required
+def notifications_api(request):
+    """
+    API endpoint for real-time notification updates.
+    Returns new notifications after a given ID.
+    """
+    after_id = request.GET.get('after_id', 0)
+    try:
+        after_id = int(after_id)
+    except ValueError:
+        after_id = 0
+
+    # Get new notifications
+    new_notifications = NotificationLog.objects.filter(
+        id__gt=after_id
+    ).select_related('student').order_by('-sent_at')[:20]
+
+    # Format notifications for JSON
+    notifications_data = []
+    for n in new_notifications:
+        notifications_data.append({
+            'id': n.id,
+            'student_name': n.student_name,
+            'phone_number': n.phone_number,
+            'notification_type': n.notification_type,
+            'message': n.message,
+            'status': n.status,
+            'status_display': n.get_status_display(),
+            'sent_at': n.sent_at.strftime('%Y/%m/%d %H:%M'),
+        })
+
+    # Get updated stats
+    total_sent = NotificationLog.objects.filter(status='sent').count()
+    total_failed = NotificationLog.objects.filter(status='failed').count()
+
+    return JsonResponse({
+        'notifications': notifications_data,
+        'total_sent': total_sent,
+        'total_failed': total_failed,
+    })

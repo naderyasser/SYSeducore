@@ -3,6 +3,89 @@
 {% block title %}سجل الإشعارات{% endblock %}
 {% block page_title %}سجل الإشعارات{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* WhatsApp-like message bubble */
+    .whatsapp-message {
+        background: #dcf8c6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        position: relative;
+        max-width: 100%;
+        font-size: 14px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        direction: rtl;
+        text-align: right;
+    }
+    .whatsapp-message::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: -8px;
+        border-width: 8px;
+        border-style: solid;
+        border-color: #dcf8c6 transparent transparent transparent;
+    }
+    .whatsapp-time {
+        font-size: 11px;
+        color: #667781;
+        text-align: left;
+        margin-top: 4px;
+    }
+    .modal-whatsapp {
+        background: #e5ddd5;
+        padding: 20px;
+        border-radius: 8px;
+    }
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #eee;
+    }
+    .info-row:last-child {
+        border-bottom: none;
+    }
+    .info-label {
+        color: #6c757d;
+        font-size: 13px;
+    }
+    .info-value {
+        font-weight: 500;
+    }
+
+    /* Live indicator */
+    .live-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #16a34a;
+    }
+    .live-dot {
+        width: 8px;
+        height: 8px;
+        background: #16a34a;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    /* Highlight new rows */
+    .new-notification {
+        animation: highlightNew 3s ease-out;
+    }
+    @keyframes highlightNew {
+        0% { background-color: #d4edda; }
+        100% { background-color: transparent; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <!-- Stats Cards -->
 <div class="row g-3 mb-4">
@@ -11,7 +94,7 @@
             <div class="stat-icon green">
                 <i class="bi bi-check-circle"></i>
             </div>
-            <div class="stat-number">{{ total_sent }}</div>
+            <div class="stat-number" id="stat-sent">{{ total_sent }}</div>
             <div class="stat-label">رسائل تم إرسالها</div>
         </div>
     </div>
@@ -20,7 +103,7 @@
             <div class="stat-icon red">
                 <i class="bi bi-x-circle"></i>
             </div>
-            <div class="stat-number">{{ total_failed }}</div>
+            <div class="stat-number" id="stat-failed">{{ total_failed }}</div>
             <div class="stat-label">رسائل فاشلة</div>
         </div>
     </div>
@@ -29,7 +112,7 @@
             <div class="stat-icon blue">
                 <i class="bi bi-whatsapp"></i>
             </div>
-            <div class="stat-number">{{ total_sent|add:total_failed }}</div>
+            <div class="stat-number" id="stat-total">{{ total_sent|add:total_failed }}</div>
             <div class="stat-label">إجمالي الرسائل</div>
         </div>
     </div>
@@ -80,12 +163,18 @@
 <!-- Notifications List -->
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <span>سجل الإشعارات</span>
-        <span class="badge bg-secondary">{{ notifications.paginator.count }} إشعار</span>
+        <div class="d-flex align-items-center gap-3">
+            <span>سجل الإشعارات</span>
+            <span class="live-indicator">
+                <span class="live-dot"></span>
+                تحديث تلقائي
+            </span>
+        </div>
+        <span class="badge bg-secondary" id="notification-count">{{ notifications.paginator.count }} إشعار</span>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
+            <table class="table table-hover mb-0" id="notifications-table">
                 <thead>
                     <tr>
                         <th style="width: 50px;">النوع</th>
@@ -96,44 +185,68 @@
                         <th>الحالة</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody id="notifications-body">
                     {% for notification in notifications %}
-                    <tr>
+                    <tr data-id="{{ notification.id }}">
                         <td>
                             <i class="{{ notification.type_icon }} fs-5" title="{{ notification.get_notification_type_display }}"></i>
                         </td>
                         <td>{{ notification.student_name }}</td>
                         <td dir="ltr" class="text-end">{{ notification.phone_number }}</td>
                         <td>
-                            <button type="button" class="btn btn-sm btn-link p-0" data-bs-toggle="modal" data-bs-target="#msgModal{{ notification.id }}">
+                            <button type="button" class="btn btn-sm btn-link p-0 text-start" data-bs-toggle="modal" data-bs-target="#msgModal{{ notification.id }}">
                                 {{ notification.message|truncatechars:50 }}
                             </button>
 
                             <!-- Message Modal -->
                             <div class="modal fade" id="msgModal{{ notification.id }}" tabindex="-1">
-                                <div class="modal-dialog">
+                                <div class="modal-dialog modal-dialog-centered">
                                     <div class="modal-content">
-                                        <div class="modal-header">
-                                            <h5 class="modal-title">{{ notification.get_notification_type_display }}</h5>
+                                        <div class="modal-header border-0 pb-0">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <i class="{{ notification.type_icon }} fs-4"></i>
+                                                <h5 class="modal-title mb-0">{{ notification.get_notification_type_display }}</h5>
+                                            </div>
                                             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                                         </div>
                                         <div class="modal-body">
-                                            <div class="mb-3">
-                                                <strong>الطالب:</strong> {{ notification.student_name }}
+                                            <!-- Info Section -->
+                                            <div class="bg-light rounded p-3 mb-3">
+                                                <div class="info-row">
+                                                    <span class="info-label">الطالب</span>
+                                                    <span class="info-value">{{ notification.student_name }}</span>
+                                                </div>
+                                                <div class="info-row">
+                                                    <span class="info-label">رقم الهاتف</span>
+                                                    <span class="info-value" dir="ltr">{{ notification.phone_number }}</span>
+                                                </div>
+                                                <div class="info-row">
+                                                    <span class="info-label">الوقت</span>
+                                                    <span class="info-value">{{ notification.sent_at|date:"Y/m/d - h:i A" }}</span>
+                                                </div>
+                                                <div class="info-row">
+                                                    <span class="info-label">الحالة</span>
+                                                    <span class="badge bg-{{ notification.status_badge }}">{{ notification.get_status_display }}</span>
+                                                </div>
                                             </div>
-                                            <div class="mb-3">
-                                                <strong>رقم الهاتف:</strong> {{ notification.phone_number }}
+
+                                            <!-- WhatsApp Message Preview -->
+                                            <label class="form-label text-muted mb-2">
+                                                <i class="bi bi-whatsapp text-success me-1"></i>
+                                                الرسالة المرسلة
+                                            </label>
+                                            <div class="modal-whatsapp">
+                                                <div class="whatsapp-message">{{ notification.message }}</div>
+                                                <div class="whatsapp-time">
+                                                    <i class="bi bi-check2-all text-primary"></i>
+                                                    {{ notification.sent_at|date:"h:i A" }}
+                                                </div>
                                             </div>
-                                            <div class="mb-3">
-                                                <strong>الوقت:</strong> {{ notification.sent_at }}
-                                            </div>
-                                            <div class="mb-3">
-                                                <strong>الرسالة:</strong>
-                                                <pre class="bg-light p-3 rounded mt-2" style="white-space: pre-wrap; direction: rtl;">{{ notification.message }}</pre>
-                                            </div>
+
                                             {% if notification.error_message %}
-                                            <div class="alert alert-danger">
-                                                <strong>خطأ:</strong> {{ notification.error_message }}
+                                            <div class="alert alert-danger mt-3 mb-0">
+                                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                                <strong>سبب الفشل:</strong> {{ notification.error_message }}
                                             </div>
                                             {% endif %}
                                         </div>
@@ -151,7 +264,7 @@
                         </td>
                     </tr>
                     {% empty %}
-                    <tr>
+                    <tr id="empty-row">
                         <td colspan="6" class="text-center text-muted py-5">
                             <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
                             لا توجد إشعارات
@@ -189,4 +302,84 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh notifications every 10 seconds
+let lastNotificationId = {% if notifications %}{{ notifications.0.id|default:0 }}{% else %}0{% endif %};
+
+function refreshNotifications() {
+    fetch('{% url "reports:notifications_api" %}?after_id=' + lastNotificationId)
+        .then(response => response.json())
+        .then(data => {
+            if (data.notifications && data.notifications.length > 0) {
+                // Update stats
+                document.getElementById('stat-sent').textContent = data.total_sent;
+                document.getElementById('stat-failed').textContent = data.total_failed;
+                document.getElementById('stat-total').textContent = data.total_sent + data.total_failed;
+
+                // Add new notifications to table
+                const tbody = document.getElementById('notifications-body');
+                const emptyRow = document.getElementById('empty-row');
+                if (emptyRow) emptyRow.remove();
+
+                data.notifications.forEach(notification => {
+                    const row = createNotificationRow(notification);
+                    tbody.insertBefore(row, tbody.firstChild);
+                    lastNotificationId = Math.max(lastNotificationId, notification.id);
+                });
+
+                // Update count
+                const countBadge = document.getElementById('notification-count');
+                const currentCount = parseInt(countBadge.textContent) || 0;
+                countBadge.textContent = (currentCount + data.notifications.length) + ' إشعار';
+
+                // Play notification sound (optional)
+                // playNotificationSound();
+            }
+        })
+        .catch(error => console.log('Refresh error:', error));
+}
+
+function createNotificationRow(n) {
+    const row = document.createElement('tr');
+    row.className = 'new-notification';
+    row.setAttribute('data-id', n.id);
+
+    const typeIcons = {
+        'attendance': 'bi-check-circle text-success',
+        'late': 'bi-clock text-warning',
+        'absent': 'bi-x-circle text-danger',
+        'payment_reminder': 'bi-cash-coin text-info',
+        'payment_warning': 'bi-exclamation-triangle text-warning',
+        'block_late': 'bi-slash-circle text-danger',
+        'block_payment': 'bi-slash-circle text-danger',
+        'custom': 'bi-chat-dots text-primary'
+    };
+
+    const statusBadges = {
+        'sent': 'success',
+        'failed': 'danger',
+        'pending': 'warning'
+    };
+
+    const icon = typeIcons[n.notification_type] || 'bi-bell';
+    const badge = statusBadges[n.status] || 'secondary';
+
+    row.innerHTML = `
+        <td><i class="bi ${icon} fs-5"></i></td>
+        <td>${n.student_name}</td>
+        <td dir="ltr" class="text-end">${n.phone_number}</td>
+        <td><small class="text-muted">${n.message.substring(0, 50)}...</small></td>
+        <td><small>${n.sent_at}</small></td>
+        <td><span class="badge bg-${badge}">${n.status_display}</span></td>
+    `;
+
+    return row;
+}
+
+// Start auto-refresh (every 10 seconds)
+setInterval(refreshNotifications, 10000);
+</script>
 {% endblock %}
