@@ -385,6 +385,10 @@
                 <i class="bi bi-receipt"></i>
                 تقرير المدفوعات
             </a>
+            <a href="{% url 'reports:notifications' %}" class="{% if 'notifications' in request.resolver_match.url_name %}active{% endif %}">
+                <i class="bi bi-whatsapp text-success"></i>
+                سجل الإشعارات
+            </a>
 
             {% if user.is_authenticated %}
             <div class="menu-header">الحساب</div>

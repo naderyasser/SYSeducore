@@ -8,6 +8,27 @@ from django.conf import settings
 from django.utils import timezone
 
 
+def log_notification(student=None, student_name='', phone_number='', notification_type='custom',
+                     message='', status='sent', error_message=None):
+    """
+    Log notification to database
+    """
+    try:
+        from .models import NotificationLog
+        NotificationLog.objects.create(
+            student=student,
+            student_name=student_name,
+            phone_number=phone_number,
+            notification_type=notification_type,
+            message=message,
+            status=status,
+            error_message=error_message
+        )
+    except Exception as e:
+        # Don't let logging failure affect notification sending
+        print(f"Failed to log notification: {e}")
+
+
 class WhatsAppService:
     """
     WhatsApp Service using UltraMsg API
@@ -18,20 +39,23 @@ class WhatsAppService:
         self.token = getattr(settings, 'ULTRAMSG_TOKEN', '')
         self.base_url = f'https://api.ultramsg.com/{self.instance_id}'
     
-    def send_message(self, to, message):
+    def send_message(self, to, message, student=None, student_name='', notification_type='custom'):
         """
         Send WhatsApp message
-        
+
         Args:
             to: Phone number (with country code, e.g., 201234567890)
             message: Message text
-            
+            student: Student object (optional, for logging)
+            student_name: Student name (for logging)
+            notification_type: Type of notification (for logging)
+
         Returns:
             Dictionary with result
         """
         # Format phone number for Egyptian numbers
         phone = self._format_phone_number(to)
-        
+
         # Prepare API request
         url = f'{self.base_url}/messages/chat'
         headers = {
@@ -42,27 +66,59 @@ class WhatsAppService:
             'to': phone,
             'body': message
         }
-        
+
         try:
             response = requests.post(url, json=data, headers=headers, timeout=10)
             result = response.json()
-            
-            if result.get('status') == 'success':
+
+            # Check if sent successfully (UltraMsg returns 'sent': 'true')
+            if result.get('sent') == 'true' or result.get('status') == 'success':
+                # Log successful notification
+                log_notification(
+                    student=student,
+                    student_name=student_name,
+                    phone_number=phone,
+                    notification_type=notification_type,
+                    message=message,
+                    status='sent'
+                )
                 return {
                     'success': True,
-                    'message_id': result.get('message_id'),
+                    'message_id': result.get('id') or result.get('message_id'),
                     'message': 'تم إرسال الرسالة بنجاح'
                 }
             else:
+                error_msg = result.get('message', 'فشل إرسال الرسالة')
+                # Log failed notification
+                log_notification(
+                    student=student,
+                    student_name=student_name,
+                    phone_number=phone,
+                    notification_type=notification_type,
+                    message=message,
+                    status='failed',
+                    error_message=error_msg
+                )
                 return {
                     'success': False,
-                    'error': result.get('message', 'فشل إرسال الرسالة')
+                    'error': error_msg
                 }
-                
+
         except requests.exceptions.RequestException as e:
+            error_msg = f'خطأ في الاتصال: {str(e)}'
+            # Log failed notification
+            log_notification(
+                student=student,
+                student_name=student_name,
+                phone_number=phone,
+                notification_type=notification_type,
+                message=message,
+                status='failed',
+                error_message=error_msg
+            )
             return {
                 'success': False,
-                'error': f'خطأ في الاتصال: {str(e)}'
+                'error': error_msg
             }
     
     def _format_phone_number(self, phone):
@@ -83,39 +139,54 @@ class WhatsAppService:
         
         return phone
     
-    def send_attendance_notification(self, student_name, parent_phone, status, time):
+    def send_attendance_notification(self, student_name, parent_phone, status, time, student=None):
         """
         Send attendance notification to parent
-        
+
         Args:
             student_name: Student name
             parent_phone: Parent's phone number
             status: Attendance status (present, late, absent)
             time: Attendance time
+            student: Student object (optional, for logging)
         """
         if status == 'present':
             message = self._get_present_message(student_name, time)
+            notification_type = 'attendance'
         elif status == 'late':
             message = self._get_late_message(student_name, time)
+            notification_type = 'late'
         else:
             message = self._get_absent_message(student_name)
-        
-        return self.send_message(parent_phone, message)
+            notification_type = 'absent'
+
+        return self.send_message(
+            parent_phone, message,
+            student=student,
+            student_name=student_name,
+            notification_type=notification_type
+        )
     
-    def send_monthly_reminder(self, student_name, parent_phone, group_name, amount):
+    def send_monthly_reminder(self, student_name, parent_phone, group_name, amount, student=None):
         """
         Send monthly payment reminder
-        
+
         Args:
             student_name: Student name
             parent_phone: Parent's phone number
             group_name: Group name
             amount: Amount due
+            student: Student object (optional, for logging)
         """
         message = self._get_payment_reminder_message(student_name, group_name, amount)
-        return self.send_message(parent_phone, message)
+        return self.send_message(
+            parent_phone, message,
+            student=student,
+            student_name=student_name,
+            notification_type='payment_reminder'
+        )
     
-    def send_warning_before_block(self, student_name, parent_phone, amount):
+    def send_warning_before_block(self, student_name, parent_phone, amount, student=None):
         """
         Send warning before blocking student
 
@@ -123,11 +194,17 @@ class WhatsAppService:
             student_name: Student name
             parent_phone: Parent's phone number
             amount: Amount due
+            student: Student object (optional, for logging)
         """
         message = self._get_warning_message(student_name, amount)
-        return self.send_message(parent_phone, message)
+        return self.send_message(
+            parent_phone, message,
+            student=student,
+            student_name=student_name,
+            notification_type='payment_warning'
+        )
 
-    def send_block_notification(self, student_name, parent_phone, reason='late'):
+    def send_block_notification(self, student_name, parent_phone, reason='late', student=None):
         """
         Send notification when student is blocked
 
@@ -135,12 +212,20 @@ class WhatsAppService:
             student_name: Student name
             parent_phone: Parent's phone number
             reason: Block reason ('late' or 'payment')
+            student: Student object (optional, for logging)
         """
         if reason == 'late':
             message = self._get_late_block_message(student_name)
+            notification_type = 'block_late'
         else:
             message = self._get_payment_block_message(student_name)
-        return self.send_message(parent_phone, message)
+            notification_type = 'block_payment'
+        return self.send_message(
+            parent_phone, message,
+            student=student,
+            student_name=student_name,
+            notification_type=notification_type
+        )
 
     def _get_late_block_message(self, student_name):
         """Get late block message"""
@@ -237,53 +322,53 @@ class NotificationService:
     """
     Main notification service with fallback strategy
     """
-    
+
     def __init__(self):
         self.whatsapp_service = WhatsAppService()
         self.notification_method = getattr(settings, 'NOTIFICATION_METHOD', 'whatsapp')
-    
-    def send_attendance_notification(self, student_name, parent_phone, status, time):
+
+    def send_attendance_notification(self, student_name, parent_phone, status, time, student=None):
         """
         Send attendance notification with fallback
         """
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_attendance_notification(
-                student_name, parent_phone, status, time
+                student_name, parent_phone, status, time, student=student
             )
-        
+
         # Add other notification methods here if needed
-        
+
         return {'success': False, 'error': 'طريقة الإشعار غير مدعومة'}
-    
-    def send_monthly_reminder(self, student_name, parent_phone, group_name, amount):
+
+    def send_monthly_reminder(self, student_name, parent_phone, group_name, amount, student=None):
         """
         Send monthly payment reminder with fallback
         """
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_monthly_reminder(
-                student_name, parent_phone, group_name, amount
+                student_name, parent_phone, group_name, amount, student=student
             )
-        
+
         return {'success': False, 'error': 'طريقة الإشعار غير مدعومة'}
-    
-    def send_warning_before_block(self, student_name, parent_phone, amount):
+
+    def send_warning_before_block(self, student_name, parent_phone, amount, student=None):
         """
         Send warning before blocking with fallback
         """
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_warning_before_block(
-                student_name, parent_phone, amount
+                student_name, parent_phone, amount, student=student
             )
 
         return {'success': False, 'error': 'طريقة الإشعار غير مدعومة'}
 
-    def send_block_notification(self, student_name, parent_phone, reason='late'):
+    def send_block_notification(self, student_name, parent_phone, reason='late', student=None):
         """
         Send block notification with fallback
         """
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_block_notification(
-                student_name, parent_phone, reason
+                student_name, parent_phone, reason, student=student
             )
 
         return {'success': False, 'error': 'طريقة الإشعار غير مدعومة'}

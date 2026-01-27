@@ -74,10 +74,10 @@
     </div>
 </div>
 
-<!-- Attendance Stats -->
+<!-- Attendance & Notifications Stats -->
 <div class="row g-3 mb-4">
-    <div class="col-12">
-        <div class="card">
+    <div class="col-lg-8">
+        <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span>إحصائيات الحضور (آخر 7 أيام)</span>
             </div>
@@ -99,6 +99,30 @@
                         <div class="p-3">
                             <div class="fs-3 fw-bold text-danger">{{ absent_count }}</div>
                             <div class="text-muted">غائب</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-whatsapp me-2"></i>إشعارات الواتساب</span>
+                <a href="{% url 'reports:notifications' %}" class="btn btn-sm btn-outline-success">عرض الكل</a>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="p-3">
+                            <div class="fs-3 fw-bold text-success">{{ today_notifications }}</div>
+                            <div class="text-muted">رسائل اليوم</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="p-3">
+                            <div class="fs-3 fw-bold text-danger">{{ failed_notifications }}</div>
+                            <div class="text-muted">فشل اليوم</div>
                         </div>
                     </div>
                 </div>
@@ -187,6 +211,59 @@
                             {% empty %}
                             <tr>
                                 <td colspan="4" class="text-center text-muted py-4">لا توجد مدفوعات معلقة</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Notifications -->
+<div class="row g-3 mt-2">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-whatsapp text-success me-2"></i>آخر الإشعارات المرسلة</span>
+                <a href="{% url 'reports:notifications' %}" class="btn btn-sm btn-outline-success">عرض سجل الإشعارات</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 50px;">النوع</th>
+                                <th>الطالب</th>
+                                <th>الرسالة</th>
+                                <th>الوقت</th>
+                                <th>الحالة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for notification in recent_notifications %}
+                            <tr>
+                                <td><i class="{{ notification.type_icon }} fs-5"></i></td>
+                                <td>{{ notification.student_name }}</td>
+                                <td>
+                                    <small class="text-muted">{{ notification.message|truncatechars:60 }}</small>
+                                </td>
+                                <td>
+                                    <small>{{ notification.sent_at|date:"d/m H:i" }}</small>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ notification.status_badge }}">
+                                        {{ notification.get_status_display }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
+                                    لا توجد إشعارات مرسلة بعد
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
