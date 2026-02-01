@@ -67,9 +67,15 @@
             <div class="sidebar-menu-title">إدارة البيانات</div>
             <ul class="sidebar-nav">
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'students:list' %}" class="sidebar-nav-link {% if 'students' in request.path %}active{% endif %}">
+                    <a href="{% url 'students:list' %}" class="sidebar-nav-link {% if request.path == '/students/' %}active{% endif %}">
                         <i class="bi bi-people-fill"></i>
                         <span>الطلاب</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'students:print_qr_codes' %}" class="sidebar-nav-link {% if 'qr/print' in request.path %}active{% endif %}">
+                        <i class="bi bi-qr-code"></i>
+                        <span>طباعة كروت QR</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item">

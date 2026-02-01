@@ -91,7 +91,7 @@
                 <div class="card-body">
                     <!-- Scanner Form with HTMX -->
                     <form 
-                        hx-post="{% url 'attendance:api_scan' %}"
+                        hx-post="{% url 'attendance:htmx_api_scan' %}"
                         hx-target="#scan-result"
                         hx-swap="innerHTML"
                         hx-indicator="#scan-indicator"

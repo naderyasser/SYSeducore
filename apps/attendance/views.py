@@ -1,4 +1,4 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
@@ -16,10 +16,9 @@ logger = logging.getLogger(__name__)
 def scanner_page(request):
     """
     صفحة إدخال كود الطالب (النظام الجديد)
+    يحول للصفحة الجديدة التي تسمح باختيار الحصة
     """
-    return render(request, 'attendance/scanner.html', {
-        'page_title': 'تسجيل الحضور - إدخال يدوي'
-    })
+    return redirect('attendance:scanner_select')
 
 
 @login_required

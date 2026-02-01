@@ -2059,3 +2059,1008 @@ Traceback (most recent call last):
   File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 19, in get_template
     raise TemplateDoesNotExist(template_name, chain=chain)
 django.template.exceptions.TemplateDoesNotExist: notifications/history.html
+ERROR 2026-02-01 22:10:35,327 log 3290917 126870417540992 Internal Server Error: /attendance/scanner/select/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/htmx_views.py", line 30, in scanner_select
+    return render(request, 'attendance/scanner_select.html', {
+        'sessions': sessions,
+        'today': today
+    })
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 326, in render
+    if match:
+       ^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 400, in __bool__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,338 log 3290917 126870417540992 Internal Server Error: /attendance/monitor/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/views.py", line 139, in live_monitor_dashboard
+    dashboard_data = LiveMonitorService.get_live_dashboard_data(use_cache=True)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/monitor_service.py", line 56, in get_live_dashboard_data
+    data = cls._generate_dashboard_data()
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/monitor_service.py", line 89, in _generate_dashboard_data
+    active_sessions = cls._get_active_sessions(current_day, current_time)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/monitor_service.py", line 144, in _get_active_sessions
+    for group in groups:
+                 ^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 386, in __iter__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,354 log 3290917 126870417540992 Internal Server Error: /students/create/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/students/views.py", line 55, in student_create
+    return render(request, 'students/form.html', {'form': form, 'groups': groups})
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 199, in render
+    len_values = len(values)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 368, in __len__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,362 log 3290917 126870417540992 Internal Server Error: /teachers/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/teachers/views.py", line 13, in teacher_list
+    return render(request, 'teachers/list.html', {'teachers': teachers})
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 199, in render
+    len_values = len(values)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 368, in __len__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,379 log 3290917 126870417540992 Internal Server Error: /teachers/groups/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/teachers/views.py", line 110, in group_list
+    return render(request, 'teachers/groups/list.html', {'groups': groups})
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 199, in render
+    len_values = len(values)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 368, in __len__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,389 log 3290917 126870417540992 Internal Server Error: /teachers/groups/create/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/_server_cursor.py", line 98, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/teachers/views.py", line 123, in group_create
+    return render(request, 'teachers/groups/form.html', {'form': form})
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1083, in render
+    return render_value_in_context(output, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1060, in render_value_in_context
+    value = str(value)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/utils.py", line 79, in __str__
+    return self.as_widget()
+           ~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/boundfield.py", line 108, in as_widget
+    return widget.render(
+           ~~~~~~~~~~~~~^
+        name=self.html_initial_name if only_initial else self.html_name,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        renderer=self.form.renderer,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/widgets.py", line 329, in render
+    context = self.get_context(name, value, attrs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/widgets.py", line 830, in get_context
+    context = super().get_context(name, value, attrs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/widgets.py", line 781, in get_context
+    context["widget"]["optgroups"] = self.optgroups(
+                                     ~~~~~~~~~~~~~~^
+        name, context["widget"]["value"], attrs
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/widgets.py", line 721, in optgroups
+    for index, (option_value, option_label) in enumerate(self.choices):
+                                               ~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/forms/models.py", line 1424, in __iter__
+    for obj in queryset:
+               ^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 504, in _iterator
+    yield from iterable
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/_server_cursor.py", line 98, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,447 log 3290917 126870417540992 Internal Server Error: /payments/settlements/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/payments/views.py", line 82, in settlement_list
+    return render(request, 'payments/settlement_list.html', {'teachers': teachers})
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 326, in render
+    if match:
+       ^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 400, in __bool__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:10:35,518 log 3290917 126870417540992 Internal Server Error: /reports/attendance/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 892, in _resolve_lookup
+    raise TypeError
+TypeError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/fields/related_descriptors.py", line 243, in __get__
+    rel_obj = self.field.get_cached_value(instance)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/fields/mixins.py", line 37, in get_cached_value
+    return instance._state.fields_cache[self.cache_name]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+KeyError: 'teacher'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UndefinedColumn: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/reports/views.py", line 99, in attendance_report
+    return render(request, 'reports/attendance.html', {
+        'attendances': attendances
+    })
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 243, in render
+    nodelist.append(node.render_annotated(context))
+                    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1077, in render
+    output = self.filter_expression.resolve(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 723, in resolve
+    obj = self.var.resolve(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 856, in resolve
+    value = self._resolve_lookup(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 903, in _resolve_lookup
+    current = getattr(current, bit)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/fields/related_descriptors.py", line 261, in __get__
+    rel_obj = self.get_object(instance)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/fields/related_descriptors.py", line 224, in get_object
+    return qs.get(self.field.get_reverse_related_filter(instance))
+           ~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 631, in get
+    num = len(clone)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 368, in __len__
+    self._fetch_all()
+    ~~~~~~~~~~~~~~~^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 1954, in _fetch_all
+    self._result_cache = list(self._iterable_class(self))
+                         ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/query.py", line 93, in __iter__
+    results = compiler.execute_sql(
+        chunked_fetch=self.chunked_fetch, chunk_size=self.chunk_size
+    )
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        sql, params, many=False, executor=self._execute
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/psycopg/cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+django.db.utils.ProgrammingError: column teachers.qr_code_base64 does not exist
+LINE 1: ...achers"."specialization", "teachers"."hire_date", "teachers"...
+                                                             ^
+ERROR 2026-02-01 22:14:34,720 log 3292435 137752070018944 Internal Server Error: /attendance/scanner/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/views.py", line 20, in scanner_page
+    return render(request, 'attendance/scanner.html', {
+        'page_title': 'تسجيل الحضور - إدخال يدوي'
+    })
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 480, in render
+    url = reverse(view_name, args=args, kwargs=kwargs, current_app=current_app)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/urls/base.py", line 98, in reverse
+    resolved_url = resolver._reverse_with_prefix(view, prefix, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/urls/resolvers.py", line 831, in _reverse_with_prefix
+    raise NoReverseMatch(msg)
+django.urls.exceptions.NoReverseMatch: Reverse for 'api_scan' not found. 'api_scan' is not a valid view function or pattern name.
+ERROR 2026-02-01 22:15:05,604 log 3292696 126637125912448 Internal Server Error: /attendance/scanner/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/views.py", line 20, in scanner_page
+    return render(request, 'attendance/scanner.html', {
+        'page_title': 'تسجيل الحضور - إدخال يدوي'
+    })
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 480, in render
+    url = reverse(view_name, args=args, kwargs=kwargs, current_app=current_app)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/urls/base.py", line 98, in reverse
+    resolved_url = resolver._reverse_with_prefix(view, prefix, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/urls/resolvers.py", line 831, in _reverse_with_prefix
+    raise NoReverseMatch(msg)
+django.urls.exceptions.NoReverseMatch: Reverse for 'api_session_attendance' not found. 'api_session_attendance' is not a valid view function or pattern name.
+ERROR 2026-02-01 22:15:19,867 log 3292874 139370198374272 Internal Server Error: /attendance/scanner/
+Traceback (most recent call last):
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/contrib/auth/decorators.py", line 59, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/apps/attendance/views.py", line 20, in scanner_page
+    return render(request, 'attendance/scanner.html', {
+        'page_title': 'تسجيل الحضور - إدخال يدوي'
+    })
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/shortcuts.py", line 25, in render
+    content = loader.render_to_string(template_name, context, request, using=using)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader.py", line 62, in render_to_string
+    return template.render(context, request)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/backends/django.py", line 107, in render
+    return self.template.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 172, in render
+    return self._render(context)
+           ~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 159, in render
+    return compiled_parent._render(context)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 164, in _render
+    return self.nodelist.render(context)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/loader_tags.py", line 65, in render
+    result = block.nodelist.render(context)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 1018, in render
+    return SafeString("".join([node.render_annotated(context) for node in self]))
+                               ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/base.py", line 979, in render_annotated
+    return self.render(context)
+           ~~~~~~~~~~~^^^^^^^^^
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/template/defaulttags.py", line 480, in render
+    url = reverse(view_name, args=args, kwargs=kwargs, current_app=current_app)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/urls/base.py", line 98, in reverse
+    resolved_url = resolver._reverse_with_prefix(view, prefix, *args, **kwargs)
+  File "/root/.gemini/antigravity/scratch/SYSeducore/venv/lib/python3.13/site-packages/django/urls/resolvers.py", line 831, in _reverse_with_prefix
+    raise NoReverseMatch(msg)
+django.urls.exceptions.NoReverseMatch: Reverse for 'api_session_attendance' not found. 'api_session_attendance' is not a valid view function or pattern name.

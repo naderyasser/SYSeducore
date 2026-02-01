@@ -198,3 +198,27 @@
 [2026-02-01 20:06:59 +0000] [3289394] [INFO] Booting worker with pid: 3289394
 [2026-02-01 20:06:59 +0000] [3289395] [INFO] Booting worker with pid: 3289395
 [2026-02-01 20:06:59 +0000] [3289396] [INFO] Booting worker with pid: 3289396
+[2026-02-01 22:12:13 +0200] [3289394] [INFO] Worker exiting (pid: 3289394)
+[2026-02-01 22:12:13 +0200] [3289395] [INFO] Worker exiting (pid: 3289395)
+[2026-02-01 22:12:13 +0200] [3289396] [INFO] Worker exiting (pid: 3289396)
+[2026-02-01 22:12:13 +0200] [3289392] [INFO] Worker exiting (pid: 3289392)
+[2026-02-01 20:12:13 +0000] [3291757] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 20:12:13 +0000] [3291757] [INFO] Listening at: http://0.0.0.0:3000 (3291757)
+[2026-02-01 20:12:13 +0000] [3291757] [INFO] Using worker: sync
+[2026-02-01 20:12:13 +0000] [3291759] [INFO] Booting worker with pid: 3291759
+[2026-02-01 20:12:13 +0000] [3291761] [INFO] Booting worker with pid: 3291761
+[2026-02-01 20:12:13 +0000] [3291762] [INFO] Booting worker with pid: 3291762
+[2026-02-01 20:12:14 +0000] [3291763] [INFO] Booting worker with pid: 3291763
+[2026-02-01 20:16:16 +0000] [3291757] [INFO] Handling signal: term
+[2026-02-01 22:16:16 +0200] [3291763] [INFO] Worker exiting (pid: 3291763)
+[2026-02-01 22:16:16 +0200] [3291762] [INFO] Worker exiting (pid: 3291762)
+[2026-02-01 22:16:16 +0200] [3291761] [INFO] Worker exiting (pid: 3291761)
+[2026-02-01 22:16:16 +0200] [3291759] [INFO] Worker exiting (pid: 3291759)
+[2026-02-01 20:16:16 +0000] [3291757] [INFO] Shutting down: Master
+[2026-02-01 20:16:17 +0000] [3293377] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 20:16:17 +0000] [3293377] [INFO] Listening at: http://0.0.0.0:3000 (3293377)
+[2026-02-01 20:16:17 +0000] [3293377] [INFO] Using worker: sync
+[2026-02-01 20:16:17 +0000] [3293378] [INFO] Booting worker with pid: 3293378
+[2026-02-01 20:16:17 +0000] [3293380] [INFO] Booting worker with pid: 3293380
+[2026-02-01 20:16:17 +0000] [3293381] [INFO] Booting worker with pid: 3293381
+[2026-02-01 20:16:17 +0000] [3293382] [INFO] Booting worker with pid: 3293382
