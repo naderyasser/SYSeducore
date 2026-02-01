@@ -16,6 +16,10 @@ urlpatterns = [
     path('rooms/create/', views.room_create, name='room_create'),
     path('rooms/<int:room_id>/edit/', views.room_update, name='room_update'),
     path('rooms/<int:room_id>/delete/', views.room_delete, name='room_delete'),
+    path('rooms/schedule/', views.room_schedule_dashboard, name='room_schedule_dashboard'),
+    path('rooms/<int:room_id>/schedule/', views.room_detail_schedule, name='room_detail_schedule'),
+    path('rooms/find-available/', views.find_available_room, name='find_available_room'),
+    path('rooms/utilization/', views.room_utilization_report, name='room_utilization_report'),
 
     # Groups
     path('groups/', views.group_list, name='group_list'),

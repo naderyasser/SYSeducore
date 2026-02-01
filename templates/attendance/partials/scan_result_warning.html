@@ -1,0 +1,19 @@
+{% load static %}
+<div class="alert alert-warning alert-dismissible fade show scanner-result warning scale-in" role="alert">
+    <div class="d-flex align-items-center">
+        <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+        <div class="flex-grow-1">
+            <h5 class="alert-heading mb-1">{{ student_name }}</h5>
+            <p class="mb-1">{{ message }}</p>
+            <small class="text-muted">
+                <i class="bi bi-clock"></i> {{ time }}
+            </small>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+</div>
+
+<script>
+    // Play warning sound (or error sound)
+    playSound('error');
+</script>

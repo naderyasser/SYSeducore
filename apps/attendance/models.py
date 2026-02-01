@@ -35,11 +35,16 @@ class Session(models.Model):
 class Attendance(models.Model):
     """
     Attendance model for managing student attendance records.
+    STRICT MODE: No tolerance for late arrivals.
     """
+    # Status choices with color codes and entry permissions
     STATUS_CHOICES = [
-        ('present', 'حاضر'),
-        ('late', 'متأخر'),
-        ('absent', 'غائب'),
+        ('present', 'حاضر', 'green', True),           # On time or early - ALLOWED
+        ('late_blocked', 'ممنوع - تأخير', 'red', False),  # 1-10 min late - BLOCKED
+        ('very_late', 'ممنوع - تأخير شديد', 'red', False), # 10+ min late - BLOCKED
+        ('no_session', 'لا توجد حصة', 'white', False),     # No session - BLOCKED
+        ('blocked_payment', 'ممنوع - مصروفات', 'yellow', False),  # Payment issue - BLOCKED
+        ('blocked_other', 'ممنوع', 'gray', False),      # Other reason - BLOCKED
     ]
     
     attendance_id = models.AutoField(primary_key=True)
@@ -55,9 +60,42 @@ class Attendance(models.Model):
     )
     
     scan_time = models.DateTimeField(default=timezone.now)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
-    rejection_reason = models.CharField(max_length=255, blank=True)
     
+    # Status with choice structure
+    status = models.CharField(
+        max_length=20,
+        choices=[(choice[0], choice[1]) for choice in STATUS_CHOICES]
+    )
+    
+    # New fields for strict mode
+    color_code = models.CharField(
+        max_length=20,
+        choices=[(choice[2], choice[2]) for choice in STATUS_CHOICES],
+        default='white',
+        verbose_name='كود اللون',
+        help_text='لون عرض الحالة على شاشة الكشك'
+    )
+    
+    allow_entry = models.BooleanField(
+        default=False,
+        verbose_name='السماح بالدخول',
+        help_text='هل يُسمح للطالب بالدخول أم لا'
+    )
+    
+    rejection_reason = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='سبب الرفض'
+    )
+    
+    # Time tracking for audit trail
+    minutes_late = models.IntegerField(
+        default=0,
+        verbose_name='دقائق التأخير',
+        help_text='عدد الدقائق المتأخرة (سالب للوصول المبكر)'
+    )
+    
+    # Supervisor who recorded this attendance
     supervisor = models.ForeignKey(
         'accounts.User',
         on_delete=models.SET_NULL,
@@ -65,12 +103,148 @@ class Attendance(models.Model):
         related_name='supervised_attendances'
     )
     
+    # Notification tracking
+    parent_notified = models.BooleanField(
+        default=False,
+        verbose_name='تم إخطار ولي الأمر'
+    )
+    notification_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='وقت إرسال الإخطار'
+    )
+    notification_type = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='نوع الإخطار'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'attendances'
         unique_together = ['student', 'session']
         ordering = ['-scan_time']
+        indexes = [
+            models.Index(fields=['status', 'allow_entry']),
+            models.Index(fields=['scan_time']),
+            models.Index(fields=['color_code']),
+        ]
     
     def __str__(self):
-        return f"{self.student.full_name} - {self.status}"
+        return f"{self.student.full_name} - {self.get_status_display()}"
+    
+    @property
+    def status_display_arabic(self):
+        """Get Arabic display text for status"""
+        return dict(self.STATUS_CHOICES).get(self.status, self.status)
+    
+    @property
+    def is_allowed(self):
+        """Check if entry is allowed"""
+        return self.allow_entry
+    
+    @property
+    def color_class(self):
+        """Get Bootstrap color class for this status"""
+        color_map = {
+            'green': 'success',
+            'red': 'danger',
+            'yellow': 'warning',
+            'white': 'light',
+            'gray': 'secondary'
+        }
+        return color_map.get(self.color_code, 'secondary')
+    
+    def get_full_status_dict(self):
+        """Get complete status information"""
+        status_dict = dict(self.STATUS_CHOICES)
+        for code, arabic, color, allowed in self.STATUS_CHOICES:
+            if code == self.status:
+                return {
+                    'code': code,
+                    'arabic': arabic,
+                    'color': color,
+                    'allowed': allowed,
+                    'minutes_late': self.minutes_late,
+                    'rejection_reason': self.rejection_reason
+                }
+        return None
+
+
+class BlockedAttempt(models.Model):
+    """
+    Audit trail for all blocked attendance attempts.
+    Keeps record of students who were denied entry.
+    """
+    REASON_CHOICES = [
+        ('late', 'تأخير'),
+        ('very_late', 'تأخير شديد'),
+        ('no_session', 'لا توجد حصة'),
+        ('payment', 'مصروفات'),
+        ('other', 'أخرى'),
+    ]
+    
+    attempt_id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.CASCADE,
+        related_name='blocked_attempts'
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name='blocked_attempts',
+        null=True,
+        blank=True
+    )
+    
+    attempt_time = models.DateTimeField(default=timezone.now, verbose_name='وقت المحاولة')
+    reason = models.CharField(
+        max_length=20,
+        choices=REASON_CHOICES,
+        verbose_name='سبب المنع'
+    )
+    minutes_late = models.IntegerField(
+        default=0,
+        verbose_name='دقائق التأخير'
+    )
+    
+    # Session information (denormalized for quick reference)
+    group_name = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='اسم المجموعة'
+    )
+    scheduled_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='الوقت المجدول'
+    )
+    
+    # Parent notification
+    parent_notified = models.BooleanField(
+        default=False,
+        verbose_name='تم إخطار ولي الأمر'
+    )
+    notification_message = models.TextField(
+        blank=True,
+        verbose_name='رسالة الإخطار'
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'blocked_attempts'
+        ordering = ['-attempt_time']
+        indexes = [
+            models.Index(fields=['student', 'attempt_time']),
+            models.Index(fields=['reason']),
+            models.Index(fields=['attempt_time']),
+        ]
+        verbose_name = 'محاولة دخول ممنوعة'
+        verbose_name_plural = 'محاولات الدخول الممنوعة'
+    
+    def __str__(self):
+        return f"{self.student.full_name} - {self.get_reason_display()} - {self.attempt_time.strftime('%Y-%m-%d %H:%M')}"

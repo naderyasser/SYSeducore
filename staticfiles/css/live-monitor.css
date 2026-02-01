@@ -1,0 +1,615 @@
+/**
+ * Live Monitor CSS
+ * تنسيقات CSS للشاشة الحية لمراقبة الحضور
+ * 
+ * TV-optimized display with RTL support
+ */
+
+/* ==================== Global Styles ==================== */
+:root {
+    --header-height: 80px;
+    --sidebar-width: 300px;
+    --card-gap: 20px;
+
+    /* Status colors */
+    --status-active: #28a745;
+    --status-warning: #ffc107;
+    --status-danger: #dc3545;
+    --status-empty: #6c757d;
+
+    /* Background colors */
+    --bg-dark: #1a1a2e;
+    --bg-darker: #16213e;
+    --bg-card: #0f3460;
+    --bg-card-hover: #1a4a7a;
+}
+
+body.monitor-mode {
+    background-color: var(--bg-dark);
+    color: #ffffff;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    min-height: 100vh;
+}
+
+/* ==================== Header ==================== */
+.monitor-header {
+    background: linear-gradient(135deg, var(--bg-darker) 0%, var(--bg-card) 100%);
+    height: var(--header-height);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    padding: 10px 0;
+}
+
+.monitor-header h1 {
+    color: #ffffff;
+    font-size: 24px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.summary-stats {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+}
+
+.stat-item {
+    text-align: center;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    transition: transform 0.3s ease;
+}
+
+.stat-item:hover {
+    transform: scale(1.05);
+}
+
+.stat-item i {
+    font-size: 20px;
+    margin-left: 8px;
+    color: #4fc3f7;
+}
+
+.stat-item span {
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.monitor-controls {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.monitor-controls .btn {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #ffffff;
+    transition: all 0.3s ease;
+}
+
+.monitor-controls .btn:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+    transform: scale(1.1);
+}
+
+/* ==================== Main Content ==================== */
+.monitor-main {
+    padding: 20px;
+    min-height: calc(100vh - var(--header-height));
+}
+
+/* ==================== Alerts Sidebar ==================== */
+.alerts-sidebar {
+    background: var(--bg-darker);
+    border-radius: 15px;
+    padding: 15px;
+    height: calc(100vh - var(--header-height) - 40px);
+    position: sticky;
+    top: calc(var(--header-height) + 20px);
+    overflow-y: auto;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+}
+
+.alerts-title {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.alerts-container {
+    max-height: calc(100% - 50px);
+    overflow-y: auto;
+}
+
+.no-alerts {
+    text-align: center;
+    padding: 30px 10px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.no-alerts i {
+    font-size: 48px;
+    margin-bottom: 10px;
+}
+
+.alert-item {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    display: flex;
+    gap: 10px;
+    transition: transform 0.2s ease;
+}
+
+.alert-item:hover {
+    transform: translateX(-5px);
+}
+
+.alert-item.alert-danger {
+    border-right: 4px solid var(--status-danger);
+}
+
+.alert-item.alert-warning {
+    border-right: 4px solid var(--status-warning);
+}
+
+.alert-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+}
+
+.alert-content {
+    flex: 1;
+}
+
+.alert-message {
+    margin: 0 0 5px 0;
+    font-size: 14px;
+    color: #ffffff;
+}
+
+.alert-time {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+/* ==================== Rooms Grid ==================== */
+.rooms-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--card-gap);
+}
+
+.loading-state {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 50px;
+}
+
+.loading-state .spinner-border {
+    width: 50px;
+    height: 50px;
+}
+
+/* ==================== Room Card ==================== */
+.room-card {
+    background: var(--bg-card);
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+}
+
+.room-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 5px;
+    height: 100%;
+    background: var(--status-empty);
+    transition: background 0.3s ease;
+}
+
+.room-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 12px rgba(0, 0, 0, 0.4);
+}
+
+.room-card.status-active::before {
+    background: var(--status-active);
+}
+
+.room-card.status-warning::before {
+    background: var(--status-warning);
+}
+
+.room-card.status-danger::before {
+    background: var(--status-danger);
+}
+
+.room-card.status-empty::before {
+    background: var(--status-empty);
+}
+
+.room-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.room-name {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: bold;
+    margin: 0;
+}
+
+.room-name i {
+    color: #4fc3f7;
+    margin-left: 8px;
+}
+
+.room-capacity {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+}
+
+/* ==================== Session Info ==================== */
+.room-session-info {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.session-group,
+.session-teacher,
+.session-time {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #ffffff;
+    font-size: 16px;
+}
+
+.session-group i,
+.session-teacher i,
+.session-time i {
+    color: #4fc3f7;
+    width: 20px;
+}
+
+/* ==================== Attendance Stats ==================== */
+.attendance-stats {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    padding: 15px;
+    margin-top: 10px;
+}
+
+.attendance-main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.attendance-count {
+    font-size: 36px;
+    font-weight: bold;
+    color: #4fc3f7;
+}
+
+.attendance-total {
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.attendance-icon {
+    font-size: 32px;
+}
+
+.attendance-breakdown {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+.stat-item.present i {
+    color: var(--status-active);
+}
+
+.stat-item.late i {
+    color: var(--status-warning);
+}
+
+.stat-item.blocked i {
+    color: var(--status-danger);
+}
+
+.stat-item.not-arrived i {
+    color: var(--status-empty);
+}
+
+/* ==================== Room Status Badge ==================== */
+.room-status-badge {
+    display: inline-block;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
+    text-align: center;
+    margin-top: 10px;
+}
+
+.room-status-badge.status-active {
+    background: var(--status-active);
+    color: #ffffff;
+}
+
+.room-status-badge.status-warning {
+    background: var(--status-warning);
+    color: #000000;
+}
+
+.room-status-badge.status-danger {
+    background: var(--status-danger);
+    color: #ffffff;
+}
+
+.room-status-badge.status-empty {
+    background: var(--status-empty);
+    color: #ffffff;
+}
+
+/* ==================== Empty Room ==================== */
+.room-empty {
+    text-align: center;
+    padding: 30px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.room-empty i {
+    font-size: 48px;
+    margin-bottom: 10px;
+}
+
+/* ==================== Modal Styles ==================== */
+.modal-content {
+    background: var(--bg-darker);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.modal-footer {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.room-detail-info {
+    margin-bottom: 20px;
+}
+
+.students-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.table {
+    color: #ffffff;
+}
+
+.table th {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.table td {
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+/* ==================== Animations ==================== */
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+}
+
+.room-card.status-active .attendance-count {
+    animation: pulse 2s infinite;
+}
+
+/* ==================== Scrollbar ==================== */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ==================== Responsive Design ==================== */
+@media (max-width: 1200px) {
+    .rooms-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .alerts-sidebar {
+        position: relative;
+        top: 0;
+        height: auto;
+        max-height: 300px;
+        margin-bottom: 20px;
+    }
+}
+
+@media (max-width: 768px) {
+    .monitor-header {
+        height: auto;
+    }
+
+    .summary-stats {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .stat-item {
+        flex: 1 1 45%;
+        padding: 8px 12px;
+    }
+
+    .stat-item span {
+        font-size: 14px;
+    }
+
+    .rooms-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+
+    .room-card {
+        padding: 15px;
+    }
+
+    .attendance-breakdown {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==================== Print Styles ==================== */
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+
+    .monitor-header,
+    .alerts-sidebar,
+    .monitor-controls {
+        display: none;
+    }
+
+    .rooms-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .room-card {
+        page-break-inside: avoid;
+        border: 1px solid #ccc;
+        box-shadow: none;
+    }
+}
+
+/* ==================== Kiosk Mode ==================== */
+.kiosk-mode {
+    cursor: none;
+}
+
+.kiosk-mode:hover {
+    cursor: default;
+}
+
+/* ==================== Fullscreen Mode ==================== */
+:fullscreen {
+    overflow: hidden;
+}
+
+:-webkit-full-screen {
+    overflow: hidden;
+}
+
+:-moz-full-screen {
+    overflow: hidden;
+}
+
+/* ==================== RTL Support ==================== */
+[dir="rtl"] .room-card::before {
+    right: auto;
+    left: 0;
+}
+
+[dir="rtl"] .alert-item {
+    border-right: none;
+    border-left: 4px solid;
+}
+
+[dir="rtl"] .alert-item:hover {
+    transform: translateX(5px);
+}
+
+[dir="rtl"] .session-group i,
+[dir="rtl"] .session-teacher i,
+[dir="rtl"] .session-time i {
+    margin-left: 0;
+    margin-right: 8px;
+}
+
+/* ==================== TV Optimizations ==================== */
+@media (min-width: 1920px) {
+    .rooms-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .room-card {
+        padding: 25px;
+    }
+
+    .room-name {
+        font-size: 24px;
+    }
+
+    .attendance-count {
+        font-size: 42px;
+    }
+}

@@ -1,0 +1,97 @@
+<!-- Navigation Bar -->
+<nav class="navbar navbar-expand-lg navbar-dark bg-primary sticky-top">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="{% url 'reports:dashboard' %}">
+            <i class="bi bi-mortarboard-fill"></i>
+            نظام إدارة المراكز التعليمية
+        </a>
+        
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto">
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'reports:dashboard' %}">
+                        <i class="bi bi-speedometer2"></i> لوحة التحكم
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'attendance:scanner_select' %}">
+                        <i class="bi bi-qr-code-scan"></i> تسجيل الحضور
+                    </a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-people-fill"></i> الطلاب
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'students:list' %}">قائمة الطلاب</a></li>
+                        <li><a class="dropdown-item" href="{% url 'students:create' %}">إضافة طالب</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-workspace"></i> المدرسين
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'teachers:list' %}">قائمة المدرسين</a></li>
+                        <li><a class="dropdown-item" href="{% url 'teachers:group_list' %}">المجموعات</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-cash-coin"></i> المدفوعات
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'payments:list' %}">سجل المدفوعات</a></li>
+                        <li><a class="dropdown-item" href="{% url 'payments:create' %}">تسجيل دفع</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'payments:settlement_list' %}">حساب المستحقات</a></li>
+                    </ul>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-file-earmark-bar-graph"></i> التقارير
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'reports:attendance' %}">تقرير الحضور</a></li>
+                        <li><a class="dropdown-item" href="{% url 'reports:payments' %}">تقرير المدفوعات</a></li>
+                    </ul>
+                </li>
+            </ul>
+            
+            <ul class="navbar-nav">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-person-circle"></i>
+                        {% if user.is_authenticated %}
+                            {{ user.get_full_name|default:user.username }}
+                        {% else %}
+                            زائر
+                        {% endif %}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-start">
+                        {% if user.is_authenticated %}
+                            <li><span class="dropdown-item-text">
+                                <small class="text-muted">{{ user.get_role_display }}</small>
+                            </span></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="{% url 'accounts:logout' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item">
+                                        <i class="bi bi-box-arrow-right"></i> تسجيل الخروج
+                                    </button>
+                                </form>
+                            </li>
+                        {% else %}
+                            <li><a class="dropdown-item" href="{% url 'accounts:login' %}">تسجيل الدخول</a></li>
+                        {% endif %}
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>

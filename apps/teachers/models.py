@@ -54,6 +54,7 @@ class Teacher(models.Model):
 class Group(models.Model):
     """
     Group model for managing student groups.
+    نموذج المجموعات الدراسية مع نظام متقدم لحجز القاعات
     """
     DAYS_CHOICES = [
         ('Saturday', 'السبت'),
@@ -63,6 +64,15 @@ class Group(models.Model):
         ('Wednesday', 'الأربعاء'),
         ('Thursday', 'الخميس'),
         ('Friday', 'الجمعة'),
+    ]
+    
+    # مدد الجلسات المتاحة (بالدقائق)
+    DURATION_CHOICES = [
+        (60, 'ساعة واحدة'),
+        (90, 'ساعة ونصف'),
+        (120, 'ساعتان'),
+        (150, 'ساعة ونصف ونصف'),
+        (180, '3 ساعات'),
     ]
     
     group_id = models.AutoField(primary_key=True)
@@ -87,7 +97,15 @@ class Group(models.Model):
         choices=DAYS_CHOICES,
         verbose_name="يوم الحصة"
     )
-    schedule_time = models.TimeField(verbose_name="وقت الحصة")
+    schedule_time = models.TimeField(verbose_name="وقت بدء الحصة")
+    
+    # مدة الجلسة بالدقائق (مطلوب لحساب التعارضات الزمنية)
+    session_duration = models.PositiveIntegerField(
+        choices=DURATION_CHOICES,
+        default=120,
+        verbose_name="مدة الحصة (دقيقة)",
+        help_text="مدة الحصة بالدقائق، تُستخدم للكشف عن التعارضات الزمنية"
+    )
     
     standard_fee = models.DecimalField(
         max_digits=10,
@@ -103,40 +121,65 @@ class Group(models.Model):
     
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'groups'
         verbose_name = 'مجموعة'
         verbose_name_plural = 'المجموعات'
-        constraints = [
-            models.UniqueConstraint(
-                fields=['room', 'schedule_day', 'schedule_time'],
-                name='unique_room_schedule',
-                violation_error_message='يوجد تعارض: القاعة محجوزة في نفس اليوم والوقت'
-            )
+        ordering = ['schedule_day', 'schedule_time']
+        indexes = [
+            models.Index(fields=['room', 'schedule_day', 'schedule_time']),
+            models.Index(fields=['schedule_day', 'schedule_time']),
+            models.Index(fields=['is_active']),
         ]
+
+    def get_end_time(self):
+        """
+        حساب وقت انتهاء الحصة
+        Returns: datetime.time object
+        """
+        from datetime import datetime, timedelta
+        
+        if not self.schedule_time:
+            return None
+            
+        # تحويل الوقت إلى datetime للإضافة
+        start_datetime = datetime.combine(datetime.today(), self.schedule_time)
+        end_datetime = start_datetime + timedelta(minutes=self.session_duration)
+        return end_datetime.time()
 
     def clean(self):
         """
-        التحقق من عدم وجود تعارض في جدول القاعات
-        منع إنشاء مجموعتين في نفس القاعة + نفس اليوم + نفس الوقت
+        التحقق المتقدم من عدم وجود تعارض في جدول القاعات
+        - يكتشف التعارضات في نفس الوقت تماماً
+        - يكتشف التعارضات الزمنية المتداخلة (مع فاصل 15 دقيقة)
         """
         super().clean()
 
-        if self.room and self.schedule_day and self.schedule_time:
-            # البحث عن مجموعات أخرى في نفس القاعة + نفس اليوم + نفس الوقت
-            conflicting_groups = Group.objects.filter(
-                room=self.room,
-                schedule_day=self.schedule_day,
-                schedule_time=self.schedule_time,
-                is_active=True
-            ).exclude(pk=self.pk)
+        if not self.room:
+            return
+            
+        if not self.schedule_day or not self.schedule_time:
+            return
 
-            if conflicting_groups.exists():
-                conflict = conflicting_groups.first()
-                raise ValidationError({
-                    'room': f'تعارض في الجدول: القاعة "{self.room.name}" محجوزة لمجموعة "{conflict.group_name}" في نفس اليوم والوقت'
-                })
+        # استيراد خدمة جدولة القاعات
+        from .services import RoomScheduleService
+        
+        # استخدام الخدمة للكشف عن التعارضات
+        conflict = RoomScheduleService.check_room_conflict(
+            room=self.room,
+            day=self.schedule_day,
+            start_time=self.schedule_time,
+            duration=self.session_duration,
+            exclude_group_id=self.pk
+        )
+        
+        if conflict:
+            raise ValidationError({
+                'room': conflict['message_ar'],
+                'schedule_time': conflict['message_ar']
+            })
 
     def save(self, *args, skip_validation=False, **kwargs):
         """
@@ -151,3 +194,12 @@ class Group(models.Model):
 
     def __str__(self):
         return f"{self.group_name} - {self.teacher.full_name}"
+    
+    def get_time_range_display(self):
+        """
+        عرض نطاق الوقت (البداية - النهاية)
+        """
+        end_time = self.get_end_time()
+        if end_time:
+            return f"{self.schedule_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')}"
+        return self.schedule_time.strftime('%H:%M')

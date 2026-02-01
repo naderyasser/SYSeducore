@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <!-- Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="bi bi-bell text-primary"></i>
+                        {{ page_title }}
+                    </h2>
+                    <p class="text-muted mb-0">الطالب: {{ student.full_name }}</p>
+                </div>
+                <a href="{% url 'students:detail' student.student_id %}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-right"></i> عودة
+                </a>
+            </div>
+
+            <!-- Info Alert -->
+            <div class="alert alert-info d-flex align-items-start" role="alert">
+                <i class="bi bi-info-circle fs-4 me-3 flex-shrink-0"></i>
+                <div>
+                    <strong>تنبيه هام:</strong>
+                    <ul class="mb-0 mt-2">
+                        <li>يمكنك تعطيل بعض الإشعارات حسب رغبتك</li>
+                        <li>إشعارات المنع (تأخير/مالي) إلزامية ولا يمكن تعطيلها</li>
+                        <li>يمكنك تفعيل/تعطيل الإشعارات في أي وقت</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Preferences Form -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">اختر الإشعارات التي تريد استلامها</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" class="needs-validation" novalidate>
+                        {% csrf_token %}
+
+                        <!-- Optional Notifications -->
+                        <h6 class="text-primary mb-3">
+                            <i class="bi bi-toggle-on"></i> إشعارات اختيارية
+                        </h6>
+
+                        <!-- Attendance Success -->
+                        <div class="form-check form-switch mb-3 p-3 bg-light rounded">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="attendance_success_enabled" 
+                                   name="attendance_success_enabled"
+                                   {% if preferences.attendance_success_enabled %}checked{% endif %}>
+                            <label class="form-check-label d-block" for="attendance_success_enabled">
+                                <strong>🟢 إشعار الحضور الناجح</strong>
+                                <small class="d-block text-muted">
+                                    إشعار عند وصول الطالب وتسجيل الحضور بنجاح
+                                </small>
+                            </label>
+                        </div>
+
+                        <!-- Payment Reminder -->
+                        <div class="form-check form-switch mb-3 p-3 bg-light rounded">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="payment_reminder_enabled" 
+                                   name="payment_reminder_enabled"
+                                   {% if preferences.payment_reminder_enabled %}checked{% endif %}>
+                            <label class="form-check-label d-block" for="payment_reminder_enabled">
+                                <strong>📢 تذكير بالدفع</strong>
+                                <small class="d-block text-muted">
+                                    تذكير يومي عند وجود حصص غير مدفوعة (الساعة 6 مساءً)
+                                </small>
+                            </label>
+                        </div>
+
+                        <!-- Payment Confirmation -->
+                        <div class="form-check form-switch mb-3 p-3 bg-light rounded">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="payment_confirmation_enabled" 
+                                   name="payment_confirmation_enabled"
+                                   {% if preferences.payment_confirmation_enabled %}checked{% endif %}>
+                            <label class="form-check-label d-block" for="payment_confirmation_enabled">
+                                <strong>🙏 تأكيد استلام الدفع</strong>
+                                <small class="d-block text-muted">
+                                    إشعار عند تسجيل أي دفع للطالب
+                                </small>
+                            </label>
+                        </div>
+
+                        <hr class="my-4">
+
+                        <!-- Mandatory Notifications -->
+                        <h6 class="text-danger mb-3">
+                            <i class="bi bi-lock-fill"></i> إشعارات إلزامية (لا يمكن تعطيلها)
+                        </h6>
+
+                        <!-- Late Block -->
+                        <div class="form-check mb-3 p-3 bg-danger bg-opacity-10 rounded">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="late_block_enabled" 
+                                   disabled checked>
+                            <label class="form-check-label d-block text-muted" for="late_block_enabled">
+                                <strong>🔴 إشعار منع التأخير</strong>
+                                <small class="d-block">
+                                    إشعار عند منع الطالب من الدخول بسبب التأخير
+                                </small>
+                                <span class="badge bg-danger">إلزامي</span>
+                            </label>
+                        </div>
+
+                        <!-- Financial Block -->
+                        <div class="form-check mb-3 p-3 bg-warning bg-opacity-10 rounded">
+                            <input class="form-check-input" type="checkbox" 
+                                   id="financial_block_enabled" 
+                                   disabled checked>
+                            <label class="form-check-label d-block text-muted" for="financial_block_enabled">
+                                <strong>🟡 إشعار المنع المالي</strong>
+                                <small class="d-block">
+                                    إشعار عند منع الطالب من الدخول لأسباب مالية
+                                </small>
+                                <span class="badge bg-warning">إلزامي</span>
+                            </label>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <div class="d-grid gap-2 mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="bi bi-check-circle"></i> حفظ التغييرات
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Rate Limit Info -->
+            <div class="card mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">
+                        <i class="bi bi-speedometer2"></i> حالة الحد الأقصى للرسائل
+                    </h6>
+                    <p class="card-text">
+                        الحد الأقصى: <strong>5 رسائل</strong> في الساعة الواحدة
+                        <br>
+                        الرسائل المرسولة في آخر ساعة: 
+                        <strong>{{ preferences.messages_last_hour }}</strong>/5
+                        {% if preferences.last_message_time %}
+                        <br>
+                        آخر رسالة: {{ preferences.last_message_time|date:"H:i" }}
+                        {% endif %}
+                    </p>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar 
+                            {% if preferences.messages_last_hour >= 4 %}bg-danger
+                            {% elif preferences.messages_last_hour >= 2 %}bg-warning
+                            {% else %}bg-success{% endif %}" 
+                             role="progressbar" 
+                             style="width: {{ preferences.messages_last_hour|multiply:20 }}%"
+                             aria-valuenow="{{ preferences.messages_last_hour }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="5">
+                            {{ preferences.messages_last_hour }}/5
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form validation
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        var validation = Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
+</script>
+{% endblock %}

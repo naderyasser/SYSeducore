@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block title %}اختر الحصة - {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3">
+                <i class="bi bi-qr-code-scan"></i>
+                اختر الحصة لتسجيل الحضور
+            </h1>
+            <p class="text-muted">اختر المجموعة التي تريد تسجيل الحضور لها</p>
+        </div>
+    </div>
+    
+    <!-- Today's Sessions -->
+    <div class="row">
+        {% if sessions %}
+            {% for session in sessions %}
+                <div class="col-md-6 col-lg-4 mb-4">
+                    <div class="card h-100 hover-shadow transition-all">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <h5 class="card-title mb-1">{{ session.group.group_name }}</h5>
+                                    <p class="text-muted mb-0">
+                                        <i class="bi bi-person"></i>
+                                        {{ session.group.teacher.full_name }}
+                                    </p>
+                                </div>
+                                <span class="badge bg-primary fs-6">
+                                    {{ session.group.schedule_time|time:"H:i" }}
+                                </span>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <small class="text-muted">
+                                    <i class="bi bi-geo-alt"></i>
+                                    {% if session.group.room %}
+                                        {{ session.group.room.name }}
+                                    {% else %}
+                                        غير محدد
+                                    {% endif %}
+                                </small>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar"></i>
+                                    {{ session.session_date|date:"Y-m-d" }}
+                                </small>
+                                <a href="{% url 'attendance:scanner_page' session.session_id %}" 
+                                   class="btn btn-primary">
+                                    <i class="bi bi-qr-code-scan"></i>
+                                    بدء المسح
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-12">
+                <div class="text-center py-5">
+                    <i class="bi bi-calendar-x fs-1 text-muted d-block mb-3"></i>
+                    <h4>لا توجد حصص مجدولة لليوم</h4>
+                    <p class="text-muted">لم يتم العثور على حصص نشطة لليوم {{ today|date:"Y-m-d" }}</p>
+                    <a href="{% url 'teachers:group_list' %}" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-circle"></i>
+                        إضافة حصة جديدة
+                    </a>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    
+</div>
+{% endblock %}

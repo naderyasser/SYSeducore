@@ -1,412 +1,604 @@
 """
-Tests for Notification Service and Tasks
+Unit Tests for WhatsApp Notification System
+Tests all notification scenarios with mocking
 """
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
-from datetime import datetime, timedelta, time
-from unittest.mock import patch, MagicMock
-from apps.teachers.models import Teacher, Group, Room
-from apps.students.models import Student, StudentGroupEnrollment
-from apps.attendance.models import Session, Attendance
-from apps.accounts.models import User
-from apps.notifications.services import WhatsAppService, NotificationService
-from apps.notifications.models import NotificationLog
+from unittest.mock import patch, Mock
+from datetime import datetime, timedelta
+import json
+
+from .models import (
+    NotificationTemplate,
+    NotificationPreference,
+    NotificationLog,
+    NotificationCost
+)
+from .services import (
+    TemplateService,
+    WhatsAppService,
+    NotificationService,
+    NotificationCost as NotificationCostService
+)
+from .tasks import (
+    send_attendance_success_task,
+    send_late_block_task,
+    send_financial_block_new_task,
+    send_financial_block_debt_task,
+    send_payment_reminder_task,
+    send_payment_confirmation_task,
+)
 
 
-class NotificationTimingTest(TestCase):
-    """Test notification timing - should send after 10 minutes"""
-
+class NotificationTemplateTest(TestCase):
+    """Test notification template model and rendering"""
+    
     def setUp(self):
-        """Set up test data"""
-        # Create supervisor
-        self.supervisor = User.objects.create_user(
-            username='supervisor',
-            password='testpass123',
-            role='supervisor'
+        self.template = NotificationTemplate.objects.create(
+            template_type='attendance_success',
+            template_name='حضور ناجح',
+            content_arabic='وصل الطالب/ة {student_name} إلى الحصة\nالمادة: {group_name}',
+            available_variables=['student_name', 'group_name'],
+            is_active=True
         )
+    
+    def test_template_rendering(self):
+        """Test template renders with context variables"""
+        context = {
+            'student_name': 'أحمد محمد',
+            'group_name': 'الرياضيات'
+        }
+        
+        rendered = self.template.render(context)
+        
+        self.assertIn('أحمد محمد', rendered)
+        self.assertIn('الرياضيات', rendered)
+    
+    def test_template_version_increment(self):
+        """Test version increments on update"""
+        old_version = self.template.version
+        self.template.content_arabic = 'Updated content'
+        self.template.save()
+        
+        self.assertEqual(self.template.version, old_version + 1)
+    
+    def test_template_missing_variable(self):
+        """Test template handles missing variables gracefully"""
+        context = {
+            'student_name': 'أحمد محمد'
+            # Missing group_name
+        }
+        
+        rendered = self.template.render(context)
+        
+        # Should return template with placeholder
+        self.assertIn('أحمد محمد', rendered)
 
-        # Create teacher
-        self.teacher = Teacher.objects.create(
-            full_name='Test Teacher',
-            phone='01234567890',
-            email='teacher@test.com',
-            specialization='Math',
-            hire_date=timezone.now().date()
-        )
 
-        # Create room
-        self.room = Room.objects.create(
-            name='Test Room',
-            capacity=30
-        )
-
-        # Create group with session at 10:00 AM
-        self.group = Group.objects.create(
-            group_name='Test Group',
-            teacher=self.teacher,
-            room=self.room,
-            schedule_day='Saturday',
-            schedule_time=time(10, 0),
-            standard_fee=300.00,
-            center_percentage=30.00
-        )
-
-        # Create student
+class NotificationPreferenceTest(TestCase):
+    """Test notification preference model"""
+    
+    def setUp(self):
+        from apps.students.models import Student
+        
         self.student = Student.objects.create(
-            student_code='TEST001',
-            full_name='Test Student',
-            parent_phone='01234567891'
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='0123456789'
         )
-
-        # Enroll student in group
-        self.enrollment = StudentGroupEnrollment.objects.create(
+        
+        self.preference = NotificationPreference.objects.create(
             student=self.student,
-            group=self.group,
-            financial_status='normal'
+            attendance_success_enabled=True,
+            payment_reminder_enabled=False
         )
-
-        # Create session
-        self.session = Session.objects.create(
-            group=self.group,
-            session_date=timezone.now().date(),
-            teacher_attended=True
+    
+    def test_can_send_notification_optional(self):
+        """Test optional notifications respect preferences"""
+        # Attendance success is enabled
+        self.assertTrue(
+            self.preference.can_send_notification('attendance_success')
         )
+        
+        # Payment reminder is disabled
+        self.assertFalse(
+            self.preference.can_send_notification('payment_reminder')
+        )
+    
+    def test_can_send_notification_mandatory(self):
+        """Test mandatory notifications cannot be disabled"""
+        # Late block is always allowed
+        self.assertTrue(
+            self.preference.can_send_notification('late_block')
+        )
+        
+        # Financial block is always allowed
+        self.assertTrue(
+            self.preference.can_send_notification('financial_block')
+        )
+    
+    def test_rate_limit_check(self):
+        """Test rate limiting (5 messages per hour)"""
+        # Initially under limit
+        self.assertTrue(self.preference.check_rate_limit())
+        
+        # Set to limit
+        self.preference.messages_last_hour = 5
+        self.preference.save()
+        
+        # Now over limit
+        self.assertFalse(self.preference.check_rate_limit())
+    
+    def test_rate_limit_reset(self):
+        """Test rate limit resets after an hour"""
+        self.preference.messages_last_hour = 5
+        self.preference.last_message_time = timezone.now() - timedelta(hours=2)
+        self.preference.save()
+        
+        # Should be reset and allowed
+        self.assertTrue(self.preference.check_rate_limit())
 
+
+class WhatsAppServiceTest(TestCase):
+    """Test WhatsApp service with mocked API"""
+    
+    def setUp(self):
+        from apps.students.models import Student
+        
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='0123456789'
+        )
+        
+        self.service = WhatsAppService()
+    
+    @override_settings(ULTRAMSG_INSTANCE_ID='test123', ULTRAMSG_TOKEN='token123')
     @patch('apps.notifications.services.requests.post')
-    def test_notification_sent_successfully(self, mock_post):
-        """Test that WhatsApp notifications can be sent"""
-        # Mock successful WhatsApp API response
-        mock_response = MagicMock()
+    def test_send_message_success(self, mock_post):
+        """Test successful message sending"""
+        mock_response = Mock()
         mock_response.json.return_value = {
             'sent': 'true',
-            'id': '123456',
-            'message': 'ok'
+            'id': 'msg123'
         }
         mock_post.return_value = mock_response
-
-        # Send notification
-        ws = WhatsAppService()
-        result = ws.send_message(
-            to=self.student.parent_phone,
+        
+        result = self.service.send_message(
+            to='0123456789',
             message='Test message',
             student=self.student,
-            student_name=self.student.full_name,
-            notification_type='custom'
+            student_name='أحمد محمد',
+            notification_type='test'
         )
-
-        # Check result
+        
         self.assertTrue(result['success'])
-        self.assertEqual(result['message_id'], '123456')
-
-        # Check notification was logged
-        log = NotificationLog.objects.filter(student=self.student).first()
+        self.assertEqual(result['message_id'], 'msg123')
+        
+        # Check log was created
+        log = NotificationLog.objects.filter(
+            student=self.student,
+            notification_type='test'
+        ).first()
+        
         self.assertIsNotNone(log)
         self.assertEqual(log.status, 'sent')
-
+    
+    @override_settings(ULTRAMSG_INSTANCE_ID='test123', ULTRAMSG_TOKEN='token123')
     @patch('apps.notifications.services.requests.post')
-    def test_notification_failure_logged(self, mock_post):
-        """Test that failed notifications are logged"""
-        # Mock failed WhatsApp API response
-        mock_response = MagicMock()
+    def test_send_message_failure(self, mock_post):
+        """Test message sending failure"""
+        mock_response = Mock()
         mock_response.json.return_value = {
             'sent': 'false',
             'message': 'Invalid phone number'
         }
         mock_post.return_value = mock_response
-
-        # Send notification
-        ws = WhatsAppService()
-        result = ws.send_message(
-            to='invalid',
+        
+        result = self.service.send_message(
+            to='0000000000',
             message='Test message',
             student=self.student,
-            student_name=self.student.full_name,
-            notification_type='custom'
+            notification_type='test'
         )
-
-        # Check result
+        
         self.assertFalse(result['success'])
-
-        # Check notification was logged as failed
-        log = NotificationLog.objects.filter(student=self.student).first()
-        self.assertIsNotNone(log)
-        self.assertEqual(log.status, 'failed')
-
-    @patch('apps.notifications.services.requests.post')
-    def test_attendance_notification(self, mock_post):
-        """Test attendance notification messages"""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'sent': 'true',
-            'id': '123456'
-        }
-        mock_post.return_value = mock_response
-
-        ws = WhatsAppService()
-
-        # Test present message
-        result = ws.send_attendance_notification(
-            student_name=self.student.full_name,
-            parent_phone=self.student.parent_phone,
-            status='present',
-            time=timezone.now(),
-            student=self.student
-        )
-        self.assertTrue(result['success'])
-
-        # Check log has correct notification type
-        log = NotificationLog.objects.filter(notification_type='attendance').first()
-        self.assertIsNotNone(log)
-
-    @patch('apps.notifications.services.requests.post')
-    def test_block_notification(self, mock_post):
-        """Test block notification messages"""
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'sent': 'true',
-            'id': '123456'
-        }
-        mock_post.return_value = mock_response
-
-        ws = WhatsAppService()
-
-        # Test late block message
-        result = ws.send_block_notification(
-            student_name=self.student.full_name,
-            parent_phone=self.student.parent_phone,
-            reason='late',
-            student=self.student
-        )
-        self.assertTrue(result['success'])
-
-        # Check log has correct notification type
-        log = NotificationLog.objects.filter(notification_type='block_late').first()
-        self.assertIsNotNone(log)
-
-    def test_phone_number_formatting(self):
-        """Test phone number formatting for Egyptian numbers"""
-        ws = WhatsAppService()
-
-        # Test various formats
-        self.assertEqual(ws._format_phone_number('01012345678'), '201012345678')
-        self.assertEqual(ws._format_phone_number('1012345678'), '201012345678')
-        self.assertEqual(ws._format_phone_number('201012345678'), '201012345678')
-        self.assertEqual(ws._format_phone_number('+201012345678'), '201012345678')
-
-
-class NotificationLogModelTest(TestCase):
-    """Test NotificationLog model"""
-
-    def setUp(self):
-        """Set up test data"""
-        self.student = Student.objects.create(
-            student_code='LOG001',
-            full_name='Log Test Student',
-            parent_phone='01234567890'
-        )
-
-    def test_notification_log_creation(self):
-        """Test creating a notification log entry"""
-        log = NotificationLog.objects.create(
-            student=self.student,
-            student_name=self.student.full_name,
-            phone_number='201234567890',
-            notification_type='attendance',
-            message='Test message',
-            status='sent'
-        )
-
-        self.assertEqual(log.student, self.student)
-        self.assertEqual(log.notification_type, 'attendance')
-        self.assertEqual(log.status, 'sent')
-
-    def test_status_badge(self):
-        """Test status badge property"""
-        log = NotificationLog(status='sent')
-        self.assertEqual(log.status_badge, 'success')
-
-        log.status = 'failed'
-        self.assertEqual(log.status_badge, 'danger')
-
-        log.status = 'pending'
-        self.assertEqual(log.status_badge, 'warning')
-
-    def test_type_icon(self):
-        """Test type icon property"""
-        log = NotificationLog(notification_type='attendance')
-        self.assertIn('check-circle', log.type_icon)
-
-        log.notification_type = 'late'
-        self.assertIn('clock', log.type_icon)
-
-        log.notification_type = 'block_late'
-        self.assertIn('slash-circle', log.type_icon)
-
-
-class WhatsAppServiceTest(TestCase):
-    """Test WhatsApp service methods"""
-
-    def setUp(self):
-        """Set up WhatsApp service"""
-        self.service = WhatsAppService()
-
-    def test_format_phone_number_with_zero(self):
-        """Test phone number formatting starting with 0"""
-        phone = self.service._format_phone_number('01234567890')
-        self.assertEqual(phone, '201234567890')
-
-    def test_format_phone_number_without_country_code(self):
-        """Test phone number formatting without country code"""
-        phone = self.service._format_phone_number('1234567890')
-        self.assertEqual(phone, '201234567890')
-
-    def test_format_phone_number_with_country_code(self):
-        """Test phone number formatting with country code"""
-        phone = self.service._format_phone_number('201234567890')
-        self.assertEqual(phone, '201234567890')
-
-    def test_present_message_format(self):
-        """Test present message format"""
-        scan_time = timezone.now()
-        message = self.service._get_present_message('Test Student', scan_time)
-
-        self.assertIn('Test Student', message)
-        self.assertIn('تم تسجيل الحضور', message)
-        self.assertIn('حاضر', message)
-
-    def test_late_message_format(self):
-        """Test late message format"""
-        scan_time = timezone.now()
-        message = self.service._get_late_message('Test Student', scan_time)
-
-        self.assertIn('Test Student', message)
-        self.assertIn('متأخر', message)
-
-    def test_absent_message_format(self):
-        """Test absent message format"""
-        message = self.service._get_absent_message('Test Student')
-
-        self.assertIn('Test Student', message)
-        self.assertIn('تغيب', message)
-        self.assertIn('غياب', message)
-
-    def test_payment_reminder_message_format(self):
-        """Test payment reminder message format"""
-        message = self.service._get_payment_reminder_message(
-            'Test Student',
-            'Math Group',
-            300
-        )
-
-        self.assertIn('Test Student', message)
-        self.assertIn('Math Group', message)
-        self.assertIn('300', message)
-        self.assertIn('المصروفات', message)
-
-    def test_warning_message_format(self):
-        """Test warning before blocking message format"""
-        message = self.service._get_warning_message('Test Student', 300)
-
-        self.assertIn('Test Student', message)
-        self.assertIn('300', message)
-        self.assertIn('2 حصص', message)
-        self.assertIn('منع', message)
-
-    @patch('apps.notifications.services.requests.post')
-    def test_send_message_success(self, mock_post):
-        """Test successful message sending"""
-        # Mock successful API response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'sent': 'true',
-            'id': '123456'
-        }
-        mock_post.return_value = mock_response
-
-        result = self.service.send_message('01234567890', 'Test message')
-
-        self.assertTrue(result['success'])
-        self.assertEqual(result['message_id'], '123456')
-
-    @patch('apps.notifications.services.requests.post')
-    def test_send_message_failure(self, mock_post):
-        """Test failed message sending"""
-        # Mock failed API response
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            'sent': 'false',
-            'message': 'Invalid token'
-        }
-        mock_post.return_value = mock_response
-
-        result = self.service.send_message('01234567890', 'Test message')
-
-        self.assertFalse(result['success'])
-        self.assertIn('error', result)
+        self.assertIn('Invalid phone number', result['error'])
+    
+    def test_format_phone_number(self):
+        """Test phone number formatting for Egypt"""
+        # Test with 0 prefix
+        phone1 = self.service._format_phone_number('0123456789')
+        self.assertEqual(phone1, '20123456789')
+        
+        # Test without prefix
+        phone2 = self.service._format_phone_number('123456789')
+        self.assertEqual(phone2, '20123456789')
+        
+        # Test with country code
+        phone3 = self.service._format_phone_number('20123456789')
+        self.assertEqual(phone3, '20123456789')
 
 
 class NotificationServiceTest(TestCase):
-    """Test main notification service"""
-
+    """Test notification service methods"""
+    
     def setUp(self):
-        """Set up notification service"""
+        from apps.students.models import Student
+        from apps.teachers.models import Group
+        
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='0123456789'
+        )
+        
+        self.group = Group.objects.create(
+            group_name='الرياضيات - المستوى الأول',
+            schedule_time='10:00',
+            schedule_day='Monday'
+        )
+        
         self.service = NotificationService()
-
-    @patch.object(WhatsAppService, 'send_attendance_notification')
-    def test_send_attendance_notification_whatsapp(self, mock_send):
-        """Test sending attendance notification via WhatsApp"""
-        mock_send.return_value = {'success': True}
-
-        result = self.service.send_attendance_notification(
-            'Test Student',
-            '01234567890',
-            'present',
-            timezone.now()
+    
+    @patch('apps.notifications.services.WhatsAppService.send_message')
+    def test_send_attendance_success(self, mock_send):
+        """Test attendance success notification"""
+        mock_send.return_value = {'success': True, 'message_id': 'msg123'}
+        
+        scan_time = timezone.now()
+        result = self.service.send_attendance_success(
+            self.student,
+            self.group,
+            scan_time
         )
-
+        
         self.assertTrue(result['success'])
         mock_send.assert_called_once()
-
-    @patch.object(WhatsAppService, 'send_monthly_reminder')
-    def test_send_monthly_reminder_whatsapp(self, mock_send):
-        """Test sending monthly reminder via WhatsApp"""
+        
+        # Check message content
+        call_args = mock_send.call_args
+        message = call_args[1]['message']
+        self.assertIn('أحمد محمد', message)
+        self.assertIn('الرياضيات', message)
+    
+    @patch('apps.notifications.services.WhatsAppService.send_message')
+    def test_send_late_block(self, mock_send):
+        """Test late block notification"""
         mock_send.return_value = {'success': True}
-
-        result = self.service.send_monthly_reminder(
-            'Test Student',
-            '01234567890',
-            'Math Group',
-            300
+        
+        result = self.service.send_late_block(
+            self.student,
+            self.group,
+            minutes_late=5,
+            scheduled_time='10:00',
+            scan_time='10:05'
         )
-
+        
         self.assertTrue(result['success'])
-        mock_send.assert_called_once()
-
-    @patch.object(WhatsAppService, 'send_warning_before_block')
-    def test_send_warning_before_block_whatsapp(self, mock_send):
-        """Test sending warning via WhatsApp"""
+        
+        # Check message content
+        call_args = mock_send.call_args
+        message = call_args[1]['message']
+        self.assertIn('منع', message)
+        self.assertIn('5', message)
+    
+    @patch('apps.notifications.services.WhatsAppService.send_message')
+    def test_send_financial_block_new(self, mock_send):
+        """Test financial block notification for new student"""
         mock_send.return_value = {'success': True}
-
-        result = self.service.send_warning_before_block(
-            'Test Student',
-            '01234567890',
-            300
+        
+        result = self.service.send_financial_block_new_student(
+            self.student,
+            self.group
         )
-
+        
         self.assertTrue(result['success'])
-        mock_send.assert_called_once()
-
-    @patch.object(WhatsAppService, 'send_block_notification')
-    def test_send_block_notification_whatsapp(self, mock_send):
-        """Test sending block notification via WhatsApp"""
+        
+        # Check message content
+        call_args = mock_send.call_args
+        message = call_args[1]['message']
+        self.assertIn('لم يتم تسجيل الدفع', message)
+    
+    @patch('apps.notifications.services.WhatsAppService.send_message')
+    def test_send_payment_confirmation(self, mock_send):
+        """Test payment confirmation notification"""
         mock_send.return_value = {'success': True}
-
-        result = self.service.send_block_notification(
-            'Test Student',
-            '01234567890',
-            reason='late'
+        
+        payment_date = timezone.now()
+        result = self.service.send_payment_confirmation(
+            self.student,
+            amount=500,
+            receipt_number='PAY-20240115-123',
+            payment_date=payment_date
         )
-
+        
         self.assertTrue(result['success'])
-        mock_send.assert_called_once()
+        
+        # Check message content
+        call_args = mock_send.call_args
+        message = call_args[1]['message']
+        self.assertIn('500', message)
+        self.assertIn('شكراً', message)
+
+
+class NotificationCostTest(TestCase):
+    """Test notification cost tracking"""
+    
+    def test_record_message(self):
+        """Test recording message cost"""
+        cost = NotificationCost.record_message(0.05)
+        
+        self.assertEqual(cost.total_messages, 1)
+        self.assertEqual(float(cost.total_cost), 0.05)
+    
+    def test_monthly_report(self):
+        """Test monthly cost report"""
+        now = timezone.now()
+        
+        # Record some messages
+        for _ in range(10):
+            NotificationCost.record_message(0.05)
+        
+        report = NotificationCostService.get_monthly_report(
+            now.year,
+            now.month
+        )
+        
+        self.assertEqual(report['total_messages'], 10)
+        self.assertEqual(report['total_cost'], 0.5)
+
+
+class CeleryTasksTest(TestCase):
+    """Test Celery tasks for async notifications"""
+    
+    def setUp(self):
+        from apps.students.models import Student
+        from apps.teachers.models import Group
+        
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='0123456789'
+        )
+        
+        self.group = Group.objects.create(
+            group_name='الرياضيات',
+            schedule_time='10:00',
+            schedule_day='Monday'
+        )
+    
+    @patch('apps.notifications.tasks.NotificationService')
+    def test_attendance_success_task(self, mock_service):
+        """Test attendance success Celery task"""
+        mock_notification_service = Mock()
+        mock_service.return_value = mock_notification_service
+        mock_notification_service.send_attendance_success.return_value = {
+            'success': True
+        }
+        
+        scan_time = timezone.now()
+        result = send_attendance_success_task(
+            student_id=self.student.student_id,
+            group_id=self.group.group_id,
+            scan_time_str=scan_time.isoformat()
+        )
+        
+        self.assertTrue(result['success'])
+        mock_notification_service.send_attendance_success.assert_called_once()
+    
+    @patch('apps.notifications.tasks.NotificationService')
+    def test_late_block_task(self, mock_service):
+        """Test late block Celery task"""
+        mock_notification_service = Mock()
+        mock_service.return_value = mock_notification_service
+        mock_notification_service.send_late_block.return_value = {
+            'success': True
+        }
+        
+        result = send_late_block_task(
+            student_id=self.student.student_id,
+            group_id=self.group.group_id,
+            minutes_late=5,
+            scheduled_time='10:00',
+            scan_time='10:05'
+        )
+        
+        self.assertTrue(result['success'])
+    
+    @patch('apps.notifications.tasks.NotificationService')
+    def test_payment_confirmation_task(self, mock_service):
+        """Test payment confirmation Celery task"""
+        mock_notification_service = Mock()
+        mock_service.return_value = mock_notification_service
+        mock_notification_service.send_payment_confirmation.return_value = {
+            'success': True
+        }
+        
+        payment_date = timezone.now()
+        result = send_payment_confirmation_task(
+            student_id=self.student.student_id,
+            amount=500,
+            receipt_number='PAY-123',
+            payment_date_str=payment_date.isoformat()
+        )
+        
+        self.assertTrue(result['success'])
+
+
+class NotificationLogTest(TestCase):
+    """Test notification log model"""
+    
+    def setUp(self):
+        from apps.students.models import Student
+        
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='0123456789'
+        )
+    
+    def test_can_retry(self):
+        """Test retry logic"""
+        log = NotificationLog.objects.create(
+            student=self.student,
+            student_name='أحمد محمد',
+            phone_number='20123456789',
+            notification_type='test',
+            message='Test message',
+            status='failed',
+            retry_count=0,
+            max_retries=3
+        )
+        
+        self.assertTrue(log.can_retry())
+        
+        # After max retries
+        log.retry_count = 3
+        log.save()
+        self.assertFalse(log.can_retry())
+    
+    def test_schedule_retry(self):
+        """Test scheduling retry with exponential backoff"""
+        log = NotificationLog.objects.create(
+            student=self.student,
+            student_name='أحمد محمد',
+            phone_number='20123456789',
+            notification_type='test',
+            message='Test message',
+            status='failed',
+            retry_count=0,
+            max_retries=3
+        )
+        
+        log.schedule_retry()
+        
+        self.assertEqual(log.retry_count, 1)
+        self.assertEqual(log.status, 'retrying')
+        self.assertIsNotNone(log.next_retry_at)
+    
+    def test_mark_delivered(self):
+        """Test marking notification as delivered"""
+        log = NotificationLog.objects.create(
+            student=self.student,
+            student_name='أحمد محمد',
+            phone_number='20123456789',
+            notification_type='test',
+            message='Test message',
+            status='sent'
+        )
+        
+        api_response = {'delivered': 'true', 'timestamp': '2024-01-15T10:00:00Z'}
+        log.mark_delivered(api_response)
+        
+        self.assertEqual(log.status, 'delivered')
+        self.assertIsNotNone(log.delivered_at)
+        self.assertEqual(log.api_response, api_response)
+    
+    def test_mark_failed(self):
+        """Test marking notification as failed"""
+        log = NotificationLog.objects.create(
+            student=self.student,
+            student_name='أحمد محمد',
+            phone_number='20123456789',
+            notification_type='test',
+            message='Test message',
+            status='pending'
+        )
+        
+        log.mark_failed('Connection timeout', 'TIMEOUT_ERROR')
+        
+        self.assertEqual(log.status, 'failed')
+        self.assertEqual(log.error_message, 'Connection timeout')
+        self.assertEqual(log.error_code, 'TIMEOUT_ERROR')
+
+
+class IntegrationTest(TestCase):
+    """Integration tests for notification scenarios"""
+    
+    def setUp(self):
+        from apps.students.models import Student, StudentGroupEnrollment
+        from apps.teachers.models import Group
+        
+        self.student = Student.objects.create(
+            student_code='1001',
+            full_name='أحمد محمد',
+            parent_phone='0123456789'
+        )
+        
+        self.group = Group.objects.create(
+            group_name='الرياضيات',
+            schedule_time='10:00',
+            schedule_day='Monday'
+        )
+        
+        self.enrollment = StudentGroupEnrollment.objects.create(
+            student=self.student,
+            group=self.group,
+            is_new_student=False,
+            credit_balance=2
+        )
+    
+    @patch('apps.notifications.tasks.send_attendance_success_task.delay')
+    def test_attendance_success_flow(self, mock_task):
+        """Test complete attendance success flow"""
+        from apps.attendance.services import AttendanceService
+        
+        mock_task.return_value = Mock(id='task123')
+        
+        # Mock current time to be on time
+        with patch('apps.attendance.services.timezone.now') as mock_now:
+            mock_now.return_value = datetime(
+                2024, 1, 15, 10, 0, 0,
+                tzinfo=timezone.utc
+            )
+            
+            result = AttendanceService.process_scan('1001', None)
+            
+            self.assertEqual(result['status'], 'present')
+            self.assertTrue(result['allow_entry'])
+            
+            # Check notification was triggered
+            mock_task.assert_called_once()
+    
+    @patch('apps.notifications.tasks.send_late_block_task.delay')
+    def test_late_block_flow(self, mock_task):
+        """Test complete late block flow"""
+        from apps.attendance.services import AttendanceService
+        
+        mock_task.return_value = Mock(id='task123')
+        
+        # Mock current time to be late
+        with patch('apps.attendance.services.timezone.now') as mock_now:
+            mock_now.return_value = datetime(
+                2024, 1, 15, 10, 15, 0,
+                tzinfo=timezone.utc
+            )
+            
+            result = AttendanceService.process_scan('1001', None)
+            
+            self.assertEqual(result['status'], 'late_blocked')
+            self.assertFalse(result['allow_entry'])
+            
+            # Check notification was triggered
+            mock_task.assert_called_once()
+    
+    @patch('apps.notifications.tasks.send_payment_confirmation_task.delay')
+    def test_payment_confirmation_flow(self, mock_task):
+        """Test complete payment confirmation flow"""
+        from apps.payments.services import CreditService
+        
+        mock_task.return_value = Mock(id='task123')
+        
+        result = CreditService.record_payment_and_update_credit(
+            student=self.student,
+            group=self.group,
+            amount=500,
+            sessions_count=5
+        )
+        
+        self.assertTrue(result['success'])
+        
+        # Check notification was triggered
+        mock_task.assert_called_once()

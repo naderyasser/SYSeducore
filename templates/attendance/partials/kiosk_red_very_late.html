@@ -1,0 +1,27 @@
+{% load static %}
+<!-- Red Screen - Very Late Blocked (10+ minutes) -->
+<div class="status-screen red slide-in shake-animation">
+    <i class="bi bi-exclamation-triangle-fill status-icon"></i>
+    <h1 class="status-title">⛔ ممنوع الدخول - تأخير شديد</h1>
+    <h2 class="student-name">{{ student_name }}</h2>
+    <p class="status-message">{{ message }}</p>
+    <div class="minutes-late-badge">
+        تأخير شديد: {{ minutes_late }} دقيقة
+    </div>
+    <p class="time-display mt-3">
+        <i class="bi bi-clock-history"></i> {{ time }}
+    </p>
+    <hr style="border-color: rgba(255,255,255,0.3); margin: 1.5rem 0;">
+    <p class="mb-0">
+        <i class="bi bi-whatsapp"></i>
+        تم إرسال إخطار عاجل لولي الأمر
+    </p>
+    <p class="auto-clean mt-3">
+        <i class="bi bi-hourglass-split"></i>
+        سيتم الإخفاء تلقائياً بعد 5 ثوانٍ
+    </p>
+</div>
+
+<script>
+    playKioskSound('error');
+</script>

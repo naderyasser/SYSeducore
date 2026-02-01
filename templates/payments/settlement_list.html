@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}حساب المستحقات - {% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row">
+        <div class="col-12">
+            <h1 class="h3 mb-4">
+                <i class="bi bi-calculator"></i>
+                حساب المستحقات - المدرسين
+            </h1>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">اختر مدرس لحساب المستحقات</h5>
+                </div>
+                <div class="card-body">
+                    {% if teachers %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>الكود</th>
+                                    <th>الاسم</th>
+                                    <th>الهاتف</th>
+                                    <th>الحالة</th>
+                                    <th>إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for teacher in teachers %}
+                                <tr>
+                                    <td>{{ teacher.teacher_code }}</td>
+                                    <td>{{ teacher.full_name }}</td>
+                                    <td>{{ teacher.phone|default:"-" }}</td>
+                                    <td>
+                                        {% if teacher.is_active %}
+                                        <span class="badge bg-success">نشط</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">غير نشط</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'payments:settlement' teacher.teacher_id %}"
+                                           class="btn btn-primary btn-sm">
+                                            <i class="bi bi-calculator"></i>
+                                            حساب المستحقات
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        لا يوجد مدرسين مسجلين.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

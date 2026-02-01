@@ -1,50 +1,32 @@
-# Sound Files
+# Sound Effects for Attendance System
 
-This directory contains sound files for the attendance system.
+This directory contains audio feedback sounds for the QR code attendance kiosk.
 
-## Required Files:
+## Files
 
-### success.mp3
+- `success.mp3` - Played when a student successfully scans in (green screen)
+- `error.mp3` - Played when attendance is blocked (red/yellow/white screens)
 
-- **Purpose**: Played when a student successfully scans their barcode
-- **Format**: MP3 audio file
-- **Duration**: Short (1-2 seconds)
-- **Suggestion**: A pleasant "ding" or "beep" sound
+## Usage
 
-### error.mp3
+The sounds are automatically played by the kiosk scanner when:
+1. A QR code is successfully scanned and processed
+2. Manual entry is submitted
+3. The server returns a result
 
-- **Purpose**: Played when a barcode scan fails or is rejected
-- **Format**: MP3 audio file
-- **Duration**: Short (1-2 seconds)
-- **Suggestion**: An "error" or "warning" sound
+## Audio Properties
 
-## How to Add Sound Files:
+- Format: MP3
+- Volume: 50% (adjustable in JavaScript)
+- Duration: ~0.5 seconds
+- Purpose: Quick audio feedback for kiosk operators
 
-1. Obtain or create the sound files
-2. Place them in this directory (`static/sounds/`)
-3. Ensure they are named exactly `success.mp3` and `error.mp3`
+## Browser Compatibility
 
-## Free Sound Resources:
+The sounds use the Web Audio API and should work in all modern browsers:
+- Chrome/Edge 88+
+- Firefox 85+
+- Safari 14+
+- Mobile browsers (iOS Safari, Chrome Mobile)
 
-You can find free sound effects at:
-
-- Freesound.org (https://freesound.org/)
-- Zapsplat (https://www.zapsplat.com/)
-- Pixabay Audio (https://pixabay.com/music/sound-effects/)
-
-## Usage:
-
-The sound files are used in the JavaScript code:
-
-```javascript
-const successSound = new Audio("/static/sounds/success.mp3");
-const errorSound = new Audio("/static/sounds/error.mp3");
-
-// Play success sound
-successSound.play();
-
-// Play error sound
-errorSound.play();
-```
-
-Make sure to add these files before deploying the application.
+Note: Browsers may block auto-play until user interaction occurs. The kiosk scanner handles this by playing sounds only after user interaction (camera permission or manual input).

@@ -1,0 +1,50 @@
+{% load static %}
+<!-- Yellow Screen - Payment Blocked (Credit System) -->
+<div class="status-screen yellow slide-in shake-animation">
+    <i class="bi bi-cash-x status-icon"></i>
+    <h1 class="status-title">⛔ ممنوع الدخول - مصروفات</h1>
+    <h2 class="student-name">{{ student_name }}</h2>
+    <p class="status-message">{{ message }}</p>
+    
+    {% if group_name %}
+    <p class="group-name">
+        <i class="bi bi-people"></i> {{ group_name }}
+    </p>
+    {% endif %}
+    
+    {% if credit_info %}
+    <div class="credit-info-box mt-3 p-3" style="background: rgba(255,255,255,0.3); border-radius: 8px;">
+        <div class="row text-center">
+            <div class="col-4">
+                <small>الحصص المحضور</small>
+                <div class="h4 mb-0">{{ credit_info.sessions_attended }}</div>
+            </div>
+            <div class="col-4">
+                <small>الحصص المدفوعة</small>
+                <div class="h4 mb-0">{{ credit_info.sessions_paid_for }}</div>
+            </div>
+            <div class="col-4">
+                <small>الديون</small>
+                <div class="h4 mb-0 text-danger">{{ credit_info.debt }}</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <p class="time-display">
+        <i class="bi bi-clock"></i> {{ time }}
+    </p>
+    <hr style="border-color: rgba(0,0,0,0.1); margin: 1.5rem 0;">
+    <p class="mb-0">
+        <i class="bi bi-info-circle"></i>
+        يرجى التوجه للإدارة لتسجيل المصروفات
+    </p>
+    <p class="auto-clean mt-3">
+        <i class="bi bi-hourglass-split"></i>
+        سيتم الإخفاء تلقائياً بعد 5 ثوانٍ
+    </p>
+</div>
+
+<script>
+    playKioskSound('warning');
+</script>

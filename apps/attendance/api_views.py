@@ -122,3 +122,135 @@ def student_history(request, student_id):
             'success': False,
             'error': 'Student not found'
         }, status=404)
+
+
+@login_required
+@require_http_methods(["GET"])
+def live_dashboard_status(request):
+    """
+    API endpoint for live dashboard status
+    نقطة نهاية API لحالة الشاشة الحية
+    """
+    from .monitor_service import LiveMonitorService
+    
+    try:
+        data = LiveMonitorService.get_live_dashboard_data(use_cache=True)
+        return JsonResponse({
+            'success': True,
+            'data': data
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def live_room_detail(request, room_id):
+    """
+    API endpoint for detailed room attendance
+    نقطة نهاية API لتفاصيل حضور القاعة
+    """
+    from .monitor_service import LiveMonitorService
+    
+    try:
+        data = LiveMonitorService.get_room_detail(room_id)
+        
+        if data is None:
+            return JsonResponse({
+                'success': False,
+                'error': 'Room not found'
+            }, status=404)
+        
+        return JsonResponse({
+            'success': True,
+            'data': data
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def live_monitor_settings(request):
+    """
+    API endpoint for monitor settings
+    نقطة نهاية API لإعدادات الشاشة
+    """
+    from .monitor_service import LiveMonitorService
+    
+    try:
+        settings = LiveMonitorService.get_monitor_settings()
+        return JsonResponse({
+            'success': True,
+            'settings': settings
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def today_sessions_api(request):
+    """
+    API endpoint for getting today's sessions as JSON
+    """
+    from django.utils import timezone
+    from .models import Session
+    
+    today = timezone.now().date()
+    weekday = today.weekday()  # 0=Monday, 6=Sunday
+    
+    sessions = Session.objects.filter(
+        day_of_week=weekday,
+        is_active=True
+    ).select_related('group', 'group__teacher', 'room').order_by('start_time')
+    
+    sessions_data = []
+    for session in sessions:
+        # Check if session is currently active
+        from datetime import datetime, time
+        now = datetime.now().time()
+        is_active = session.start_time <= now <= session.end_time
+        
+        sessions_data.append({
+            'id': session.session_id,
+            'group_name': session.group.group_name if session.group else 'N/A',
+            'teacher_name': session.group.teacher.full_name if session.group and session.group.teacher else 'N/A',
+            'room_name': session.room.room_name if session.room else 'N/A',
+            'time': f"{session.start_time.strftime('%H:%M')} - {session.end_time.strftime('%H:%M')}",
+            'day': today.strftime('%Y-%m-%d'),
+            'status': 'active' if is_active else 'scheduled',
+        })
+    
+    return JsonResponse({'sessions': sessions_data})
+
+
+@login_required
+@require_http_methods(["GET"])
+def live_printable_report(request):
+    """
+    API endpoint for printable status report
+    نقطة نهاية API لتقرير الحالة القابل للطباعة
+    """
+    from .monitor_service import LiveMonitorService
+    
+    try:
+        data = LiveMonitorService.get_printable_report()
+        return JsonResponse({
+            'success': True,
+            'data': data
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

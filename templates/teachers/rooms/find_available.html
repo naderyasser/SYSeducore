@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+
+{% block title %}البحث عن قاعة متاحة - نظام التعليم{% endblock %}
+
+{% block content %}
+<div class="container-fluid" dir="rtl">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-search"></i>
+                    البحث عن قاعة متاحة
+                </h1>
+                <a href="{% url 'teachers:room_schedule_dashboard' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i>
+                    العودة للجدول
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Form -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-filter"></i>
+                        معايير البحث
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="get">
+                        <div class="row g-3">
+                            <div class="col-md-3">
+                                <label class="form-label">اليوم <span class="text-danger">*</span></label>
+                                <select name="day" class="form-select" required>
+                                    <option value="">اختر اليوم</option>
+                                    {% for value, label in days %}
+                                    <option value="{{ value }}" {% if selected_day == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label">وقت البدء <span class="text-danger">*</span></label>
+                                <input type="time" name="time" class="form-control" value="{{ selected_time }}" required>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">المدة (دقيقة)</label>
+                                <select name="duration" class="form-select">
+                                    {% for value, label in durations %}
+                                    <option value="{{ value }}" {% if duration == value %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label">السعة الدنيا</label>
+                                <input type="number" name="min_capacity" class="form-control" value="{{ min_capacity }}" placeholder="اختياري">
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-search"></i>
+                                    بحث
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    {% if available_rooms is not None %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-list"></i>
+                        نتائج البحث
+                        {% if selected_day and selected_time %}
+                        <small class="text-white">
+                            - {{ selected_day }} {{ selected_time }} ({{ duration }} دقيقة)
+                        </small>
+                        {% endif %}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if available_rooms %}
+                    <div class="row">
+                        {% for room_info in available_rooms %}
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <div class="card room-card {% if room_info.is_available %}border-success{% else %}border-secondary{% endif %}">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h5 class="card-title">
+                                                {% if room_info.is_available %}
+                                                <i class="fas fa-check-circle text-success"></i>
+                                                {% else %}
+                                                <i class="fas fa-lock text-secondary"></i>
+                                                {% endif %}
+                                                {{ room_info.room.name }}
+                                            </h5>
+                                            <p class="card-text">
+                                                <strong>السعة:</strong> {{ room_info.capacity }} طالب<br>
+                                                <strong>الحالة:</strong> 
+                                                {% if room_info.is_available %}
+                                                <span class="badge bg-success">متاحة</span>
+                                                {% else %}
+                                                <span class="badge bg-secondary">محجوزة</span>
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                        {% if room_info.is_available %}
+                                        <a href="{% url 'teachers:group_create' %}?room={{ room_info.room.room_id }}" 
+                                           class="btn btn-sm btn-success">
+                                            <i class="fas fa-plus"></i>
+                                            حجز
+                                        </a>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    {% if room_info.conflicting_groups %}
+                                    <hr>
+                                    <h6>المجموعات المحجوزة:</h6>
+                                    <ul class="list-unstyled mb-0">
+                                        {% for group in room_info.conflicting_groups %}
+                                        <li class="mb-1">
+                                            <small>
+                                                <i class="fas fa-users"></i>
+                                                {{ group.group_name }}<br>
+                                                <span class="text-muted">
+                                                    {{ group.time }} ({{ group.duration }} دقيقة)
+                                                </span>
+                                            </small>
+                                        </li>
+                                        {% endfor %}
+                                    </ul>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    
+                    <!-- Summary -->
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle"></i>
+                                <strong>ملخص:</strong>
+                                {% with available_count=available_rooms|length %}
+                                {% with free_count=available_rooms|select_attr:"is_available"|list|length %}
+                                عدد القاعات الكلي: {{ available_count }} | 
+                                القاعات المتاحة: {{ free_count }} | 
+                                القاعات المحجوزة: {{ available_count|add:free_count }}
+                                {% endwith %}
+                                {% endwith %}
+                            </div>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        لا توجد قاعات متاحة في الوقت المحدد.
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+.room-card {
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.room-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.room-card.border-success {
+    border-width: 2px;
+}
+
+.room-card.border-secondary {
+    opacity: 0.8;
+}
+</style>
+{% endblock %}

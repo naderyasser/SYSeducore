@@ -1,0 +1,24 @@
+{% load static %}
+<!-- White Screen - No Session -->
+<div class="status-screen white slide-in">
+    <i class="bi bi-calendar-x status-icon" style="color: #6c757d;"></i>
+    <h1 class="status-title" style="color: #6c757d;">لا توجد حصة</h1>
+    <h2 class="student-name">{{ student_name|default:"الطالب" }}</h2>
+    <p class="status-message">{{ message }}</p>
+    <p class="time-display">
+        <i class="bi bi-clock"></i> {{ time }}
+    </p>
+    <hr style="border-color: #dee2e6; margin: 1.5rem 0;">
+    <p class="mb-0" style="color: #6c757d;">
+        <i class="bi bi-info-circle"></i>
+        يرجى التأكد من جدول الحصص
+    </p>
+    <p class="auto-clean mt-3">
+        <i class="bi bi-hourglass-split"></i>
+        سيتم الإخفاء تلقائياً بعد 5 ثوانٍ
+    </p>
+</div>
+
+<script>
+    playKioskSound('error');
+</script>

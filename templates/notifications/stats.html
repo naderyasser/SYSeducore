@@ -1,0 +1,330 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page_title }} - {{ block.super }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.stat-card {
+    transition: transform 0.2s;
+}
+.stat-card:hover {
+    transform: translateY(-5px);
+}
+.stat-icon {
+    width: 60px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    font-size: 24px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="bi bi-bar-chart-fill text-primary"></i>
+            {{ page_title }}
+        </h2>
+        <div>
+            <a href="{% url 'notifications:cost_report' %}" class="btn btn-outline-primary">
+                <i class="bi bi-cash"></i> تقرير التكاليف
+            </a>
+            <a href="{% url 'notifications:history' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-list-ul"></i> سجل الإشعارات
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row g-4 mb-4">
+        <!-- Total Sent -->
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-success bg-opacity-10 text-success me-3">
+                            <i class="bi bi-check-circle-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-muted mb-1">إجمالي المرسلة</h6>
+                            <h3 class="mb-0">{{ stats.total_sent }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Failed -->
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-danger bg-opacity-10 text-danger me-3">
+                            <i class="bi bi-x-circle-fill"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-muted mb-1">فشل الإرسال</h6>
+                            <h3 class="mb-0">{{ stats.total_failed }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cost This Month -->
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3">
+                            <i class="bi bi-cash-stack"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-muted mb-1">التكلفة هذا الشهر</h6>
+                            <h3 class="mb-0">{{ stats.cost.total_cost }} ج.م</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Rate -->
+        <div class="col-md-3">
+            <div class="card stat-card shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="stat-icon bg-info bg-opacity-10 text-info me-3">
+                            <i class="bi bi-percent"></i>
+                        </div>
+                        <div>
+                            <h6 class="text-muted mb-1">معدل النجاح</h6>
+                            <h3 class="mb-0">
+                                {% widthratio stats.total_sent|add:stats.total_failed 100 stats.total_sent %}%
+                            </h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- By Type Chart -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-pie-chart"></i> الإشعارات حسب النوع
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>النوع</th>
+                                <th>العدد</th>
+                                <th>النسبة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for type_code, type_data in stats.by_type.items %}
+                            <tr>
+                                <td>{{ type_data.name }}</td>
+                                <td><strong>{{ type_data.count }}</strong></td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        {% if stats.total_sent > 0 %}
+                                        {% widthratio type_data.count stats.total_sent 100 as percentage %}
+                                        <div class="progress-bar bg-primary" 
+                                             role="progressbar" 
+                                             style="width: {{ percentage }}%">
+                                            {{ percentage }}%
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">لا توجد بيانات</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- By Status -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bar-chart"></i> الإشعارات حسب الحالة
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>الحالة</th>
+                                <th>العدد</th>
+                                <th>النسبة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for status_code, status_data in stats.by_status.items %}
+                            <tr>
+                                <td>
+                                    {% if status_code == 'sent' %}
+                                    <span class="badge bg-info">{{ status_data.name }}</span>
+                                    {% elif status_code == 'delivered' %}
+                                    <span class="badge bg-success">{{ status_data.name }}</span>
+                                    {% elif status_code == 'failed' %}
+                                    <span class="badge bg-danger">{{ status_data.name }}</span>
+                                    {% elif status_code == 'pending' %}
+                                    <span class="badge bg-warning">{{ status_data.name }}</span>
+                                    {% elif status_code == 'retrying' %}
+                                    <span class="badge bg-secondary">{{ status_data.name }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><strong>{{ status_data.count }}</strong></td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        {% with total=stats.total_sent|add:stats.total_failed %}
+                                        {% if total > 0 %}
+                                        {% widthratio status_data.count total 100 as percentage %}
+                                        <div class="progress-bar 
+                                            {% if status_code == 'failed' %}bg-danger
+                                            {% elif status_code == 'delivered' %}bg-success
+                                            {% elif status_code == 'sent' %}bg-info
+                                            {% else %}bg-secondary{% endif %}" 
+                                             role="progressbar" 
+                                             style="width: {{ percentage }}%">
+                                            {{ percentage }}%
+                                        </div>
+                                        {% endif %}
+                                        {% endwith %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">لا توجد بيانات</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Failed -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-exclamation-triangle text-danger"></i> آخر الإشعارات الفاشلة
+                    </h5>
+                    <small class="text-muted">آخر 7 أيام</small>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>النوع</th>
+                                    <th>الخطأ</th>
+                                    <th>الوقت</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in recent_failed %}
+                                <tr>
+                                    <td>{{ log.student_name }}</td>
+                                    <td>{{ log.get_notification_type_display }}</td>
+                                    <td><small class="text-muted">{{ log.error_message|truncatewords:5 }}</small></td>
+                                    <td><small>{{ log.sent_at|date:"H:i" }}</small></td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted py-3">
+                                        <i class="bi bi-check-circle text-success fs-4"></i>
+                                        <p class="mb-0 mt-2">لا توجد إشعارات فاشلة</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rate Limit Warnings -->
+        <div class="col-lg-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-speedometer2 text-warning"></i> تحذيرات الحد الأقصى
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>الرسائل/ساعة</th>
+                                    <th>آخر رسالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for pref in rate_limit_warnings %}
+                                <tr>
+                                    <td>{{ pref.student.full_name }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="progress flex-grow-1" style="height: 20px;">
+                                                <div class="progress-bar 
+                                                    {% if pref.messages_last_hour >= 5 %}bg-danger
+                                                    {% elif pref.messages_last_hour >= 3 %}bg-warning
+                                                    {% else %}bg-success{% endif %}" 
+                                                     role="progressbar" 
+                                                     style="width: {{ pref.messages_last_hour|multiply:20 }}%">
+                                                    {{ pref.messages_last_hour }}/5
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if pref.last_message_time %}
+                                        <small>{{ pref.last_message_time|timesince }}</small>
+                                        {% else %}
+                                        <small class="text-muted">-</small>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center text-muted py-3">
+                                        <i class="bi bi-check-circle text-success fs-4"></i>
+                                        <p class="mb-0 mt-2">لا توجد تحذيرات</p>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

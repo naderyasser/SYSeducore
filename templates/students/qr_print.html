@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Codes - {{ date }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            direction: rtl;
+        }
+        
+        .qr-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            page-break-inside: avoid;
+        }
+        
+        .qr-card {
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            page-break-inside: avoid;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 350px;
+        }
+        
+        .qr-card-header {
+            margin-bottom: 15px;
+        }
+        
+        .school-logo {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 10px;
+        }
+        
+        .school-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .card-title {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .qr-code-container {
+            margin: 20px 0;
+            padding: 10px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        
+        .qr-code {
+            width: 200px;
+            height: 200px;
+            display: block;
+        }
+        
+        .student-info {
+            margin-top: 15px;
+            width: 100%;
+        }
+        
+        .student-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .student-code {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0066cc;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 2px;
+        }
+        
+        .cut-line {
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px dashed #999;
+        }
+        
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="qr-grid">
+        {% for student in students %}
+        <div class="qr-card">
+            <div class="qr-card-header">
+                <!-- School Logo (placeholder) -->
+                <div style="font-size: 40px; margin-bottom: 10px;">🎓</div>
+                <div class="school-name">المؤسسة التعليمية</div>
+                <div class="card-title">بطاقة حضور الطالب</div>
+            </div>
+            
+            <div class="qr-code-container">
+                {% if student.qr_code_base64 %}
+                    <img src="{{ student.qr_code_base64 }}" class="qr-code" alt="QR Code">
+                {% else %}
+                    <div style="width: 200px; height: 200px; display: flex; align-items: center; justify-content: center; background: #f0f0f0;">
+                        <span style="color: #999;">QR غير متوفر</span>
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="student-info">
+                <div class="student-name">{{ student.full_name }}</div>
+                <div class="student-code">{{ student.student_code }}</div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="footer">
+        تاريخ الطباعة: {{ date }} | عدد البطاقات: {{ students|length }}
+    </div>
+</body>
+</html>

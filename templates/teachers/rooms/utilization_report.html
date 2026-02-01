@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+
+{% block title %}إحصائيات استخدام القاعات - نظام التعليم{% endblock %}
+
+{% block content %}
+<div class="container-fluid" dir="rtl">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-chart-bar"></i>
+                    إحصائيات استخدام القاعات
+                </h1>
+                <div class="btn-group">
+                    <a href="{% url 'teachers:room_schedule_dashboard' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        العودة للجدول
+                    </a>
+                    <button onclick="window.print()" class="btn btn-primary">
+                        <i class="fas fa-print"></i>
+                        طباعة التقرير
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Form -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">الشهر</label>
+                            <select name="month" class="form-select">
+                                <option value="">جميع الشهور</option>
+                                {% for m in months %}
+                                <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>
+                                    {% if m == 1 %}يناير{% elif m == 2 %}فبراير{% elif m == 3 %}مارس{% elif m == 4 %}أبريل{% elif m == 5 %}مايو{% elif m == 6 %}يونيو{% elif m == 7 %}يوليو{% elif m == 8 %}أغسطس{% elif m == 9 %}سبتمبر{% elif m == 10 %}أكتوبر{% elif m == 11 %}نوفمبر{% else %}ديسمبر{% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">السنة</label>
+                            <select name="year" class="form-select">
+                                <option value="">جميع السنوات</option>
+                                {% for y in years %}
+                                <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-filter"></i>
+                                تصفية
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h6 class="card-title">متوسط الاستخدام</h6>
+                    <h2 class="mb-0">{{ avg_utilization }}%</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h6 class="card-title">أعلى قاعات استخداماً</h6>
+                    {% if rooms_with_utilization %}
+                    <h4 class="mb-0">{{ rooms_with_utilization.0.room.name }}</h4>
+                    <small>{{ rooms_with_utilization.0.utilization.utilization_percentage }}%</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <h6 class="card-title">ساعات الذروة</h6>
+                    {% if global_peak_hours %}
+                    <h4 class="mb-0">
+                        {% for hour in global_peak_hours %}
+                        {{ hour }}:00{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </h4>
+                    {% else %}
+                    <h4 class="mb-0">-</h4>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detailed Utilization Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-table"></i>
+                        تفاصيل استخدام القاعات
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>القاعة</th>
+                                    <th>نسبة الاستخدام</th>
+                                    <th>عدد المجموعات</th>
+                                    <th>الساعات المستخدمة</th>
+                                    <th>الساعات المتاحة</th>
+                                    <th>ساعات الذروة</th>
+                                    <th>الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in rooms_with_utilization %}
+                                <tr>
+                                    <td><strong>{{ item.room.name }}</strong></td>
+                                    <td>
+                                        <div class="progress">
+                                            {% with util=item.utilization.utilization_percentage %}
+                                            <div class="progress-bar {% if util >= 80 %}bg-success{% elif util >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                                 style="width: {{ util }}%">
+                                                {{ util }}%
+                                            </div>
+                                            {% endwith %}
+                                        </div>
+                                    </td>
+                                    <td>{{ item.utilization.session_count }}</td>
+                                    <td>{{ item.utilization.used_hours }}</td>
+                                    <td>{{ item.utilization.available_hours }}</td>
+                                    <td>
+                                        {% for hour in item.utilization.peak_hours %}
+                                        <span class="badge bg-info">{{ hour }}</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {% if item.utilization.underutilized %}
+                                        <span class="badge bg-warning">غير مستغلة</span>
+                                        {% else %}
+                                        <span class="badge bg-success">مستغلة جيداً</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hourly Distribution Chart -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-line"></i>
+                        التوزيع الساعي للاستخدام
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div id="hourlyChart" style="height: 300px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+// Aggregate hourly data from all rooms
+const hourlyData = {
+    labels: [],
+    datasets: [{
+        label: 'عدد الحصص',
+        data: [],
+        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+        borderColor: 'rgba(54, 162, 235, 1)',
+        borderWidth: 1
+    }]
+};
+
+{% for item in rooms_with_utilization %}
+{% for hour, count in item.utilization.hour_distribution.items %}
+// Find or create hour entry
+let hourIndex = hourlyData.labels.indexOf('{{ hour }}:00');
+if (hourIndex === -1) {
+    hourlyData.labels.push('{{ hour }}:00');
+    hourlyData.datasets[0].data.push({{ count }});
+} else {
+    hourlyData.datasets[0].data[hourIndex] += {{ count }};
+}
+{% endfor %}
+{% endfor %}
+
+// Create chart
+const ctx = document.getElementById('hourlyChart').getContext('2d');
+new Chart(ctx, {
+    type: 'bar',
+    data: hourlyData,
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                display: false
+            },
+            title: {
+                display: true,
+                text: 'عدد الحصص لكل ساعة'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'عدد الحصص'
+                }
+            },
+            x: {
+                title: {
+                    display: true,
+                    text: 'الوقت'
+                }
+            }
+        }
+    }
+});
+</script>
+
+<style>
+@media print {
+    .btn-group {
+        display: none;
+    }
+    
+    .card {
+        page-break-inside: avoid;
+    }
+}
+</style>
+{% endblock %}

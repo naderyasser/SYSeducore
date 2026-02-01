@@ -1,0 +1,24 @@
+[Unit]
+Description=SYSeducore Celery Worker
+After=network.target redis.target
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/root/.gemini/antigravity/scratch/SYSeducore
+Environment="PATH=/root/.gemini/antigravity/scratch/SYSeducore/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=config.settings"
+
+ExecStart=/root/.gemini/antigravity/scratch/SYSeducore/venv/bin/celery \
+    -A config worker \
+    --loglevel=info \
+    --concurrency=2 \
+    --pidfile=/tmp/celery_worker.pid \
+    --logfile=/root/.gemini/antigravity/scratch/SYSeducore/logs/celery_worker.log
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

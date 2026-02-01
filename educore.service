@@ -1,0 +1,45 @@
+[Unit]
+Description=SYSeducore Django Application
+After=network.target redis.target postgresql.service
+
+[Service]
+Type=notify
+User=root
+Group=root
+WorkingDirectory=/root/.gemini/antigravity/scratch/SYSeducore
+Environment="PATH=/root/.gemini/antigravity/scratch/SYSeducore/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=config.settings"
+
+# Gunicorn Configuration
+ExecStart=/root/.gemini/antigravity/scratch/SYSeducore/venv/bin/gunicorn \
+    --bind 0.0.0.0:3000 \
+    --workers 4 \
+    --worker-class sync \
+    --timeout 120 \
+    --max-requests 1000 \
+    --max-requests-jitter 50 \
+    --access-logfile /root/.gemini/antigravity/scratch/SYSeducore/logs/access.log \
+    --error-logfile /root/.gemini/antigravity/scratch/SYSeducore/logs/error.log \
+    --pid /tmp/gunicorn_educore.pid \
+    config.wsgi:application
+
+# Graceful reload
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# Restart policy
+Restart=always
+RestartSec=3
+
+# Security
+PrivateTmp=true
+NoNewPrivileges=true
+
+# Resource Limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target

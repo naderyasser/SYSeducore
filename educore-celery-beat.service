@@ -1,0 +1,24 @@
+[Unit]
+Description=SYSeducore Celery Beat Scheduler
+After=network.target redis.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/.gemini/antigravity/scratch/SYSeducore
+Environment="PATH=/root/.gemini/antigravity/scratch/SYSeducore/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=config.settings"
+
+ExecStart=/root/.gemini/antigravity/scratch/SYSeducore/venv/bin/celery \
+    -A config beat \
+    --loglevel=info \
+    --scheduler django_celery_beat.schedulers:DatabaseScheduler \
+    --pidfile=/tmp/celery_beat.pid \
+    --logfile=/root/.gemini/antigravity/scratch/SYSeducore/logs/celery_beat.log
+
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

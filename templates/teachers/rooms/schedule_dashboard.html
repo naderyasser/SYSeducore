@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block title %}جدول القاعات - نظام التعليم{% endblock %}
+
+{% block content %}
+<div class="container-fluid" dir="rtl">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-calendar-alt"></i>
+                    جدول القاعات الأسبوعي
+                </h1>
+                <div class="btn-group">
+                    <a href="{% url 'teachers:find_available_room' %}" class="btn btn-primary">
+                        <i class="fas fa-search"></i>
+                        البحث عن قاعة متاحة
+                    </a>
+                    <a href="{% url 'teachers:room_utilization_report' %}" class="btn btn-info">
+                        <i class="fas fa-chart-bar"></i>
+                        إحصائيات الاستخدام
+                    </a>
+                    <button onclick="window.print()" class="btn btn-secondary">
+                        <i class="fas fa-print"></i>
+                        طباعة
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">اليوم</label>
+                            <select name="day" class="form-select">
+                                <option value="">جميع الأيام</option>
+                                {% for value, label in days %}
+                                <option value="{{ value }}" {% if selected_day == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">الوقت</label>
+                            <input type="time" name="time" class="form-control" value="{{ selected_time }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">من الساعة</label>
+                            <select name="start_hour" class="form-select">
+                                {% for h in "8"|make_range:21 %}
+                                <option value="{{ h }}" {% if start_hour == h %}selected{% endif %}>{{ h }}:00</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">إلى الساعة</label>
+                            <select name="end_hour" class="form-select">
+                                {% for h in "8"|make_range:21 %}
+                                <option value="{{ h }}" {% if end_hour == h %}selected{% endif %}>{{ h }}:00</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="fas fa-filter"></i>
+                                تصفية
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weekly Schedule Grid -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-th"></i>
+                        الشبكة الأسبوعية للقاعات
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered schedule-grid" id="scheduleGrid">
+                            <thead>
+                                <tr>
+                                    <th class="schedule-grid-header">القاعة / اليوم</th>
+                                    {% for day in grid_data.days %}
+                                    <th class="schedule-grid-header">{{ day }}</th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for room in grid_data.rooms %}
+                                <tr>
+                                    <td class="schedule-grid-header">
+                                        <strong>{{ room.name }}</strong><br>
+                                        <small>السعة: {{ room.capacity }}</small>
+                                    </td>
+                                    {% for day in grid_data.days %}
+                                    <td class="schedule-grid-cell-container" data-room="{{ room.name }}" data-day="{{ day }}">
+                                        {% for slot in grid_data.time_slots %}
+                                        {% with cell=grid_data.schedule|get_item:room.name|get_item:day|get_item:slot %}
+                                        <div class="schedule-slot {% if cell.available %}available{% else %}occupied{% endif %}" 
+                                             data-time="{{ slot }}" 
+                                             title="{% if not cell.available %}{{ cell.group.name }} - {{ cell.group.teacher }}{% endif %}">
+                                            {% if not cell.available %}
+                                            <div class="session-info">
+                                                <strong>{{ slot }}</strong><br>
+                                                {{ cell.group.name }}
+                                            </div>
+                                            {% endif %}
+                                        </div>
+                                        {% endwith %}
+                                        {% endfor %}
+                                    </td>
+                                    {% endfor %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Utilization Summary -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-pie"></i>
+                        ملخص استخدام القاعات
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for item in rooms_with_utilization %}
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <div class="card room-utilization-card">
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ item.room.name }}</h6>
+                                    <div class="progress mb-2">
+                                        {% with util=item.utilization.utilization_percentage %}
+                                        <div class="progress-bar {% if util >= 80 %}bg-success{% elif util >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                             style="width: {{ util }}%">
+                                            {{ util }}%
+                                        </div>
+                                        {% endwith %}
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ item.utilization.session_count }} مجموعة | 
+                                        {{ item.utilization.used_hours }} ساعة مستخدمة
+                                    </small>
+                                    {% if item.utilization.underutilized %}
+                                    <span class="badge bg-warning">غير مستغلة بشكل جيد</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.schedule-grid {
+    font-size: 11px;
+}
+
+.schedule-grid-header {
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    font-weight: bold;
+    min-width: 120px;
+}
+
+.schedule-grid-cell-container {
+    padding: 2px;
+    vertical-align: top;
+}
+
+.schedule-slot {
+    min-height: 35px;
+    padding: 3px;
+    margin-bottom: 2px;
+    border-radius: 3px;
+    font-size: 9px;
+}
+
+.schedule-slot.available {
+    background-color: #d4edda;
+}
+
+.schedule-slot.occupied {
+    background-color: #f8d7da;
+}
+
+.session-info {
+    background-color: #007bff;
+    color: white;
+    padding: 3px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+.session-info:hover {
+    background-color: #0056b3;
+}
+
+.room-utilization-card {
+    border: 1px solid #dee2e6;
+}
+
+.room-utilization-card .card-body {
+    padding: 10px;
+}
+
+@media print {
+    .btn-group, .card {
+        page-break-inside: avoid;
+    }
+}
+</style>
+
+<script>
+// Add hover effects for schedule slots
+document.addEventListener('DOMContentLoaded', function() {
+    const slots = document.querySelectorAll('.session-info');
+    
+    slots.forEach(function(slot) {
+        slot.addEventListener('mouseenter', function() {
+            this.style.transform = 'scale(1.05)';
+            this.style.transition = 'transform 0.2s';
+        });
+        
+        slot.addEventListener('mouseleave', function() {
+            this.style.transform = 'scale(1)';
+        });
+    });
+});
+</script>
+{% endblock %}

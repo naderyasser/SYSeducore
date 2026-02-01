@@ -4,6 +4,9 @@ Uses SQLite for faster testing without PostgreSQL.
 """
 from .settings import *
 
+# Add testserver to ALLOWED_HOSTS for testing
+ALLOWED_HOSTS = list(ALLOWED_HOSTS) + ['testserver', 'localhost', '127.0.0.1']
+
 # Use SQLite for tests
 DATABASES = {
     'default': {

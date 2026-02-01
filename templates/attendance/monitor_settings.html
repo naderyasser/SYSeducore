@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}إعدادات الشاشة الحية - نظام الحضور{% endblock %}
+
+{% block content %}
+<div class="container-fluid" dir="rtl">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-cog"></i>
+                    إعدادات الشاشة الحية
+                </h1>
+                <div class="btn-group">
+                    <a href="{% url 'attendance:live_monitor' %}" class="btn btn-primary">
+                        <i class="fas fa-tv"></i>
+                        عرض الشاشة الحية
+                    </a>
+                    <a href="{% url 'attendance:scanner_select' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        العودة للماسح الضوئي
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-sliders-h"></i>
+                        إعدادات العرض
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <!-- Refresh Interval -->
+                        <div class="mb-4">
+                            <label class="form-label">
+                                <i class="fas fa-sync-alt"></i>
+                                فترة التحديث (ثانية)
+                            </label>
+                            <input type="range" class="form-range" name="refresh_interval" 
+                                   min="1" max="60" value="{{ settings.refresh_interval }}"
+                                   oninput="document.getElementById('refresh-value').textContent = this.value + ' ثانية'">
+                            <div class="text-center">
+                                <span id="refresh-value" class="badge bg-primary">{{ settings.refresh_interval }} ثانية</span>
+                            </div>
+                            <small class="form-text text-muted">
+                                الفاصل الزمني بين كل تحديث للبيانات. القيم الأقل تعطي تحديثات أسرع لكن تزيد الحمل على الخادم.
+                            </small>
+                        </div>
+
+                        <!-- Auto Refresh -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="auto_refresh" id="auto_refresh"
+                                       {% if settings.auto_refresh %}checked{% endif %}>
+                                <label class="form-check-label" for="auto_refresh">
+                                    <i class="fas fa-sync"></i>
+                                    التحديث التلقائي
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                تفعيل التحديث التلقائي للبيانات دون تدخل المستخدم
+                            </small>
+                        </div>
+
+                        <!-- Show Alerts -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="show_alerts" id="show_alerts"
+                                       {% if settings.show_alerts %}checked{% endif %}>
+                                <label class="form-check-label" for="show_alerts">
+                                    <i class="fas fa-bell"></i>
+                                    إظهار التنبيهات
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                عرض شريط التنبيهات الجانبي للمشاكل الحالية
+                            </small>
+                        </div>
+
+                        <!-- Enable Sound -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="enable_sound" id="enable_sound"
+                                       {% if settings.enable_sound %}checked{% endif %}>
+                                <label class="form-check-label" for="enable_sound">
+                                    <i class="fas fa-volume-up"></i>
+                                    تشغيل الأصوات
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                تشغيل صوت تنبيه عند حدوث مشاكل
+                            </small>
+                        </div>
+
+                        <!-- Fullscreen Mode -->
+                        <div class="mb-4">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       name="fullscreen_mode" id="fullscreen_mode"
+                                       {% if settings.fullscreen_mode %}checked{% endif %}>
+                                <label class="form-check-label" for="fullscreen_mode">
+                                    <i class="fas fa-expand"></i>
+                                    وضع ملء الشاشة التلقائي
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                فتح الشاشة الحية في وضع ملء الشاشة تلقائياً
+                            </small>
+                        </div>
+
+                        <hr>
+
+                        <!-- Alert Thresholds -->
+                        <h6 class="mb-3">حدود التنبيهات</h6>
+
+                        <div class="mb-4">
+                            <label class="form-label">
+                                <i class="fas fa-user-slash"></i>
+                                حد الحضور المنخفض (%)
+                            </label>
+                            <input type="range" class="form-range" name="alert_threshold_low_attendance" 
+                                   min="10" max="90" value="{{ settings.alert_threshold_low_attendance }}"
+                                   oninput="document.getElementById('attendance-value').textContent = this.value + '%'">
+                            <div class="text-center">
+                                <span id="attendance-value" class="badge bg-warning">{{ settings.alert_threshold_low_attendance }}%</span>
+                            </div>
+                            <small class="form-text text-muted">
+                                عند انخفاض الحضور عن هذه النسبة، سيتم إظهار تنبيه
+                            </small>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">
+                                <i class="fas fa-ban"></i>
+                                حد الطلاب المحظورين
+                            </label>
+                            <input type="range" class="form-range" name="alert_threshold_high_blocked" 
+                                   min="1" max="10" value="{{ settings.alert_threshold_high_blocked }}"
+                                   oninput="document.getElementById('blocked-value').textContent = this.value + ' طالب'">
+                            <div class="text-center">
+                                <span id="blocked-value" class="badge bg-danger">{{ settings.alert_threshold_high_blocked }} طالب</span>
+                            </div>
+                            <small class="form-text text-muted">
+                                عند تجاوز عدد الطلاب المحظورين هذا العدد، سيتم إظهار تنبيه
+                            </small>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-save"></i>
+                                حفظ الإعدادات
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Info Sidebar -->
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle"></i>
+                        معلومات
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p>الشاشة الحية تعرض حالة الحضور في جميع القاعات بشكل لحظي.</p>
+                    <ul>
+                        <li>تتحقق تلقائياً من الحضور كل {{ settings.refresh_interval }} ثواني</li>
+                        <li>تعرض تنبيهات فورية للمشاكل</li>
+                        <li>تعمل بشكل ممتاز على شاشات التلفزيون الكبيرة</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header bg-success text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-lightbulb"></i>
+                        نصائح الاستخدام
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li>استخدم متصفح Chrome أو Firefox للأداء الأمثل</li>
+                        <li>فعّل وضع ملء الشاشة (F11) للعرض على التلفزيون</li>
+                        <li>اضبط فترة التحديث حسب احتياجاتك</li>
+                        <li>استخدم إعدادات الكشك (Kiosk Mode) لمنع التلاعب</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header bg-warning text-dark">
+                    <h6 class="mb-0">
+                        <i class="fas fa-keyboard"></i>
+                        اختصارات لوحة المفاتيح
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm mb-0">
+                        <tr>
+                            <td><kbd>F11</kbd></td>
+                            <td>ملء الشاشة</td>
+                        </tr>
+                        <tr>
+                            <td><kbd>F5</kbd></td>
+                            <td>تحديث الصفحة</td>
+                        </tr>
+                        <tr>
+                            <td><kbd>Esc</kbd></td>
+                            <td>الخروج من ملء الشاشة</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.form-range::-webkit-slider-thumb {
+    background: #0d6efd;
+}
+
+.form-range::-moz-range-thumb {
+    background: #0d6efd;
+}
+
+kbd {
+    padding: 4px 8px;
+    background: #eee;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: monospace;
+}
+</style>
+{% endblock %}

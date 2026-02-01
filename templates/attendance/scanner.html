@@ -1,414 +1,367 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}تسجيل الحضور{% endblock %}
-
-{% block extra_css %}
-<style>
-    .attendance-container {
-        max-width: 700px;
-        margin: 0 auto;
-    }
-
-    .code-entry-card {
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-        border-radius: 16px;
-        padding: 2rem;
-        color: white;
-        text-align: center;
-        margin-bottom: 1.5rem;
-    }
-
-    .code-entry-card h2 {
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-
-    .code-entry-card p {
-        opacity: 0.9;
-        margin-bottom: 1.5rem;
-    }
-
-    .code-input-wrapper {
-        position: relative;
-        max-width: 300px;
-        margin: 0 auto;
-    }
-
-    .code-input {
-        width: 100%;
-        padding: 1.25rem;
-        font-size: 2rem;
-        font-weight: 700;
-        text-align: center;
-        border: none;
-        border-radius: 12px;
-        letter-spacing: 8px;
-        background: white;
-        color: #1e293b;
-    }
-
-    .code-input:focus {
-        outline: none;
-        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.3);
-    }
-
-    .code-input::placeholder {
-        color: #94a3b8;
-        font-size: 1rem;
-        letter-spacing: normal;
-    }
-
-    .input-hint {
-        margin-top: 1rem;
-        font-size: 0.875rem;
-        opacity: 0.8;
-    }
-
-    .input-hint i {
-        margin-left: 0.25rem;
-    }
-
-    .rules-card {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        border: none;
-        border-radius: 12px;
-    }
-
-    .rules-card .card-body {
-        padding: 1.25rem;
-    }
-
-    .rules-card h5 {
-        color: #92400e;
-        font-weight: 600;
-        margin-bottom: 1rem;
-    }
-
-    .rules-card h5 i {
-        margin-left: 0.5rem;
-    }
-
-    .rule-item {
-        display: flex;
-        align-items: flex-start;
-        margin-bottom: 0.75rem;
-        color: #78350f;
-    }
-
-    .rule-item:last-child {
-        margin-bottom: 0;
-    }
-
-    .rule-item i {
-        margin-left: 0.75rem;
-        margin-top: 0.25rem;
-        flex-shrink: 0;
-    }
-
-    .rule-item strong {
-        color: #92400e;
-    }
-
-    .result-card {
-        border-radius: 12px;
-        padding: 1.5rem;
-        text-align: center;
-        animation: slideDown 0.3s ease-out;
-        margin-bottom: 1.5rem;
-    }
-
-    @keyframes slideDown {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-
-    .result-card.success {
-        background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
-        border: 2px solid #10b981;
-    }
-
-    .result-card.error {
-        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
-        border: 2px solid #ef4444;
-    }
-
-    .result-icon {
-        font-size: 3rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .result-message {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: #1e293b;
-    }
-
-    .result-details {
-        font-size: 0.875rem;
-        color: #64748b;
-        margin-top: 0.5rem;
-    }
-
-    .history-card .card-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .history-card .card-header h5 {
-        margin: 0;
-        font-weight: 600;
-    }
-
-    .history-card .card-header h5 i {
-        margin-left: 0.5rem;
-        color: var(--primary-color);
-    }
-
-    .history-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.875rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 0.5rem;
-        transition: background 0.2s ease;
-    }
-
-    .history-item:last-child {
-        margin-bottom: 0;
-    }
-
-    .history-item.success {
-        background: #f0fdf4;
-        border-right: 3px solid #10b981;
-    }
-
-    .history-item.error {
-        background: #fef2f2;
-        border-right: 3px solid #ef4444;
-    }
-
-    .history-item-code {
-        font-weight: 600;
-        font-size: 1.125rem;
-        color: #1e293b;
-    }
-
-    .history-item-message {
-        color: #64748b;
-        font-size: 0.875rem;
-    }
-
-    .history-item-time {
-        color: #94a3b8;
-        font-size: 0.75rem;
-    }
-
-    .empty-history {
-        text-align: center;
-        padding: 2rem;
-        color: #94a3b8;
-    }
-
-    .empty-history i {
-        font-size: 2.5rem;
-        margin-bottom: 0.75rem;
-        display: block;
-    }
-
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.375rem 0.75rem;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 20px;
-        font-size: 0.875rem;
-    }
-
-    .status-badge .dot {
-        width: 8px;
-        height: 8px;
-        background: #4ade80;
-        border-radius: 50%;
-        margin-left: 0.5rem;
-        animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.5; }
-    }
-</style>
-{% endblock %}
+{% block title %}تسجيل الحضور - {% endblock %}
 
 {% block content %}
-<div class="attendance-container">
-    <!-- Code Entry Section -->
-    <div class="code-entry-card">
-        <h2><i class="bi bi-person-check"></i> تسجيل حضور الطلاب</h2>
-        <p>أدخل كود الطالب المميز (الرقم الذي يعطيه الأدمن لكل طالب)</p>
-
-        <div class="code-input-wrapper">
-            <input
-                type="text"
-                id="studentCodeInput"
-                class="code-input"
-                placeholder="مثال: 1001"
-                autofocus
-                autocomplete="off"
-                inputmode="numeric"
-            >
-        </div>
-
-        <div class="input-hint">
-            <i class="bi bi-keyboard"></i>
-            اضغط Enter بعد إدخال الكود
-        </div>
-
-        <div class="status-badge mt-3">
-            <span class="dot"></span>
-            جاهز للإدخال
-        </div>
-    </div>
-
-    <!-- Result Section -->
-    <div id="resultSection" style="display: none;">
-        <div class="result-card" id="resultCard">
-            <div class="result-icon" id="resultIcon"></div>
-            <div class="result-message" id="resultMessage"></div>
-            <div class="result-details" id="resultDetails"></div>
-        </div>
-    </div>
-
-    <!-- Rules Section -->
-    <div class="card rules-card mb-4">
-        <div class="card-body">
-            <h5><i class="bi bi-exclamation-triangle"></i> قواعد الحضور</h5>
-            <div class="rule-item">
-                <i class="bi bi-clock"></i>
-                <span><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</span>
-            </div>
-            <div class="rule-item">
-                <i class="bi bi-cash-coin"></i>
-                <span><strong>الشهر الأول:</strong> يجب الدفع أولاً قبل الدخول</span>
-            </div>
-            <div class="rule-item">
-                <i class="bi bi-calendar-check"></i>
-                <span><strong>الشهور التالية:</strong> حصتين سماح قبل الدفع</span>
+<div class="container-fluid py-4"
+     x-data="scannerData()"
+     x-init="init()"
+     data-session-info="{{ group_name }} - {{ session_date|date:'Y-m-d' }}"
+     data-session-id="{{ session_id }}"
+     data-total-students="{{ total_students }}">
+    
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="bi bi-qr-code-scan"></i>
+                        تسجيل الحضور
+                    </h1>
+                    <p class="text-muted mb-0" x-text="sessionInfo"></p>
+                </div>
+                <div class="no-print">
+                    <button class="btn btn-outline-secondary" @click="window.print()">
+                        <i class="bi bi-printer"></i> طباعة
+                    </button>
+                </div>
             </div>
         </div>
     </div>
-
-    <!-- History Section -->
-    <div class="card history-card">
-        <div class="card-header">
-            <h5><i class="bi bi-clock-history"></i> آخر عمليات التسجيل</h5>
+    
+    <!-- Session Info Card -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <div class="stat-icon">
+                        <i class="bi bi-people-fill"></i>
+                    </div>
+                    <div class="stat-value" x-text="stats.total">0</div>
+                    <div class="stat-label">إجمالي الطلاب</div>
+                </div>
+            </div>
         </div>
-        <div class="card-body" id="scansList">
-            <div class="empty-history">
-                <i class="bi bi-inbox"></i>
-                <p>لا توجد عمليات تسجيل بعد</p>
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-icon">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <div class="stat-value text-success" x-text="stats.present">0</div>
+                    <div class="stat-label">حضور</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-icon">
+                        <i class="bi bi-clock-fill"></i>
+                    </div>
+                    <div class="stat-value text-warning" x-text="stats.late">0</div>
+                    <div class="stat-label">تأخير</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <div class="stat-icon">
+                        <i class="bi bi-x-circle-fill"></i>
+                    </div>
+                    <div class="stat-value text-danger" x-text="stats.absent">0</div>
+                    <div class="stat-label">غياب</div>
+                </div>
             </div>
         </div>
     </div>
+    
+    <!-- Scanner Section -->
+    <div class="row mb-4">
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-upc-scan"></i>
+                        مسح الباركود
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Scanner Form with HTMX -->
+                    <form 
+                        hx-post="{% url 'attendance:api_scan' %}"
+                        hx-target="#scan-result"
+                        hx-swap="innerHTML"
+                        hx-indicator="#scan-indicator"
+                        @submit.prevent="isProcessing = true"
+                        x-ref="scanForm">
+                        
+                        {% csrf_token %}
+                        <input type="hidden" name="session_id" value="{{ session_id }}">
+                        
+                        <div class="mb-3">
+                            <label for="barcode-input" class="form-label">
+                                كود الطالب / الباركود
+                            </label>
+                            <div class="input-group input-group-lg">
+                                <span class="input-group-text">
+                                    <i class="bi bi-upc"></i>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    class="form-control scanner-input" 
+                                    id="barcode-input"
+                                    name="barcode"
+                                    x-model="barcode"
+                                    x-ref="barcodeInput"
+                                    autocomplete="off"
+                                    placeholder="امسح الباركود أو أدخل الكود..."
+                                    required
+                                    autofocus>
+                                <button 
+                                    type="submit" 
+                                    class="btn btn-primary"
+                                    :disabled="isProcessing || !barcode">
+                                    <span class="htmx-indicator" id="scan-indicator">
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    </span>
+                                    <span x-show="!isProcessing">مسح</span>
+                                    <span x-show="isProcessing" x-cloak>جاري المعالجة...</span>
+                                </button>
+                            </div>
+                            <div class="form-text">
+                                استخدم قارئ الباركود أو أدخل كود الطالب واضغط Enter
+                            </div>
+                        </div>
+                    </form>
+                    
+                    <!-- Scan Result Display -->
+                    <div id="scan-result" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Scans -->
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history"></i>
+                        عمليات المسح الأخيرة
+                    </h5>
+                    <span class="badge bg-secondary" x-text="recentScans.length + ' / ' + maxRecentScans"></span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                        <template x-for="scan in recentScans" :key="scan.id">
+                            <div class="list-group-item recent-scans-item">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1" x-text="scan.student_name"></h6>
+                                        <small class="text-muted" x-text="scan.time"></small>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge" 
+                                              :class="getStatusBadgeClass(scan.status)"
+                                              x-text="getStatusText(scan.status)">
+                                        </span>
+                                    </div>
+                                </div>
+                                <div x-show="scan.message" class="mt-2">
+                                    <small class="text-muted" x-text="scan.message"></small>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="recentScans.length === 0" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            لا توجد عمليات مسح بعد
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Attendance List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-list-check"></i>
+                        قائمة الحضور
+                    </h5>
+                    <div>
+                        <input 
+                            type="search" 
+                            class="form-control form-control-sm" 
+                            placeholder="بحث عن طالب..."
+                            x-model="searchQuery"
+                            style="width: 250px;">
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>كود الطالب</th>
+                                    <th>اسم الطالب</th>
+                                    <th>الحالة المالية</th>
+                                    <th>وقت المسح</th>
+                                    <th>الحالة</th>
+                                    <th class="no-print">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attendance-list"
+                                   hx-get="{% url 'attendance:api_session_attendance' session_id %}"
+                                   hx-trigger="load, every 5s"
+                                   hx-swap="innerHTML">
+                                <!-- Loaded via HTMX -->
+                                <tr>
+                                    <td colspan="7" class="text-center py-4">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">جاري التحميل...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
 </div>
+
+<!-- HTMX Response Template (for partial updates) -->
+<template id="scan-result-success">
+    <div class="alert alert-success alert-dismissible fade show scanner-result success" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-check-circle-fill fs-4 me-3"></i>
+            <div>
+                <h5 class="alert-heading mb-1">${student_name}</h5>
+                <p class="mb-1">${message}</p>
+                <small class="text-muted">${time}</small>
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+</template>
+
+<template id="scan-result-error">
+    <div class="alert alert-danger alert-dismissible fade show scanner-result error" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-x-circle-fill fs-4 me-3"></i>
+            <div>
+                <h5 class="alert-heading mb-1">خطأ</h5>
+                <p class="mb-0">${message}</p>
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+</template>
+
+<template id="scan-result-warning">
+    <div class="alert alert-warning alert-dismissible fade show scanner-result warning" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-exclamation-triangle-fill fs-4 me-3"></i>
+            <div>
+                <h5 class="alert-heading mb-1">${student_name}</h5>
+                <p class="mb-1">${message}</p>
+                <small class="text-muted">${time}</small>
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+        </div>
+    </div>
+</template>
+
 {% endblock %}
 
-{% block extra_js %}
+{% block page_scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const input = document.getElementById('studentCodeInput');
-    const resultSection = document.getElementById('resultSection');
-    const resultCard = document.getElementById('resultCard');
-    const resultIcon = document.getElementById('resultIcon');
-    const resultMessage = document.getElementById('resultMessage');
-    const resultDetails = document.getElementById('resultDetails');
-    const scansList = document.getElementById('scansList');
-
-    let scansHistory = [];
-
-    input.addEventListener('keypress', async function(e) {
-        if (e.key === 'Enter') {
-            const code = input.value.trim();
-            if (!code) return;
-
-            try {
-                const response = await fetch('{% url "attendance:process_student_code" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    body: JSON.stringify({ student_code: code })
-                });
-
-                const data = await response.json();
-                showResult(data, code);
-                input.value = '';
-                input.focus();
-
-            } catch (error) {
-                showResult({
-                    success: false,
-                    message: 'خطأ في الاتصال بالخادم'
-                }, code);
-            }
+// Scanner-specific Alpine.js data extension
+function scannerData() {
+    return {
+        ...scannerData(), // Inherit base scanner data
+        
+        // Session info - will be set from data attributes
+        sessionInfo: '',
+        sessionId: null,
+        
+        // Statistics
+        stats: {
+            total: 0,
+            present: 0,
+            late: 0,
+            absent: 0
+        },
+        
+        // Search
+        searchQuery: '',
+        
+        // Update stats from HTMX response
+        updateStats(newStats) {
+            this.stats = { ...this.stats, ...newStats };
+        },
+        
+        // Clear result after delay
+        clearResultDelay: 3000,
+        
+        init() {
+            // Get data from DOM
+            const container = document.querySelector('[x-data]');
+            this.sessionInfo = container.dataset.sessionInfo || '';
+            this.sessionId = parseInt(container.dataset.sessionId) || null;
+            this.stats.total = parseInt(container.dataset.totalStudents) || 0;
+            
+            // Call parent init
+            this.$nextTick(() => {
+                this.$refs.barcodeInput?.focus();
+            });
+            
+            // Listen for HTMX events
+            document.body.addEventListener('htmx:afterRequest', (event) => {
+                const xhr = event.detail.xhr;
+                if (event.detail.target.id === 'scan-result') {
+                    this.isProcessing = false;
+                    
+                    try {
+                        const response = JSON.parse(xhr.responseText);
+                        
+                        // Add to recent scans
+                        if (response.success) {
+                            this.addRecentScan({
+                                id: Date.now(),
+                                student_name: response.student_name,
+                                status: response.status,
+                                time: new Date().toLocaleTimeString('ar-EG'),
+                                message: response.message
+                            });
+                            
+                            // Play sound
+                            playSound(response.status === 'blocked' ? 'error' : 'success');
+                            
+                            // Clear input
+                            this.clearInput();
+                            
+                            // Update stats
+                            if (response.stats) {
+                                this.updateStats(response.stats);
+                            }
+                        }
+                    } catch (e) {
+                        // Not JSON response
+                        this.isProcessing = false;
+                    }
+                }
+            });
         }
-    });
-
-    function showResult(data, code) {
-        resultSection.style.display = 'block';
-        resultCard.className = 'result-card ' + (data.success ? 'success' : 'error');
-        resultIcon.innerHTML = data.success
-            ? '<i class="bi bi-check-circle-fill text-success"></i>'
-            : '<i class="bi bi-x-circle-fill text-danger"></i>';
-        resultMessage.textContent = data.message;
-        resultDetails.textContent = data.success ? `كود الطالب: ${code}` : '';
-
-        addToHistory(code, data.success, data.message);
-
-        setTimeout(() => {
-            resultSection.style.display = 'none';
-        }, 5000);
-    }
-
-    function addToHistory(code, success, message) {
-        const time = new Date().toLocaleTimeString('ar-EG');
-        scansHistory.unshift({ code, success, message, time });
-
-        if (scansHistory.length > 10) scansHistory.pop();
-
-        renderHistory();
-    }
-
-    function renderHistory() {
-        if (scansHistory.length === 0) {
-            scansList.innerHTML = `
-                <div class="empty-history">
-                    <i class="bi bi-inbox"></i>
-                    <p>لا توجد عمليات تسجيل بعد</p>
-                </div>
-            `;
-            return;
-        }
-
-        scansList.innerHTML = scansHistory.map(scan => `
-            <div class="history-item ${scan.success ? 'success' : 'error'}">
-                <div>
-                    <div class="history-item-code">${scan.code}</div>
-                    <div class="history-item-message">${scan.message}</div>
-                </div>
-                <div class="history-item-time">${scan.time}</div>
-            </div>
-        `).join('');
-    }
-});
+    };
+}
 </script>
 {% endblock %}

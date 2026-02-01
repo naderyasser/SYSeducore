@@ -1,276 +1,273 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}لوحة التحكم{% endblock %}
-{% block page_title %}لوحة التحكم{% endblock %}
+{% block title %}لوحة التحكم - {% endblock %}
 
 {% block content %}
-<!-- Stats Cards -->
-<div class="row g-3 mb-4">
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon blue">
-                <i class="bi bi-people-fill"></i>
-            </div>
-            <div class="stat-number">{{ total_students }}</div>
-            <div class="stat-label">إجمالي الطلاب</div>
+<div class="container-fluid py-4" x-data="dashboardData()">
+    
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h3">
+                <i class="bi bi-speedometer2"></i>
+                لوحة التحكم
+            </h1>
         </div>
     </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon green">
-                <i class="bi bi-person-badge"></i>
-            </div>
-            <div class="stat-number">{{ total_teachers }}</div>
-            <div class="stat-label">المدرسين</div>
-        </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon yellow">
-                <i class="bi bi-collection"></i>
-            </div>
-            <div class="stat-number">{{ total_groups }}</div>
-            <div class="stat-label">المجموعات</div>
-        </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon blue">
-                <i class="bi bi-calendar-check"></i>
-            </div>
-            <div class="stat-number">{{ today_attendances }}</div>
-            <div class="stat-label">حضور اليوم</div>
-        </div>
-    </div>
-</div>
-
-<!-- Financial Summary -->
-<div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-label mb-2">المستحق هذا الشهر</div>
-                    <div class="stat-number">{{ month_total_due|floatformat:0 }} ج.م</div>
+    
+    <!-- Quick Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+                    <div class="stat-value" x-text="stats.total_students">-</div>
+                    <div class="stat-label">إجمالي الطلاب</div>
                 </div>
-                <div class="stat-icon yellow">
-                    <i class="bi bi-cash-stack"></i>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+                    <div class="stat-value text-success" x-text="stats.today_present">-</div>
+                    <div class="stat-label">حضور اليوم</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-cash-coin"></i></div>
+                    <div class="stat-value text-warning" x-text="stats.pending_payments">-</div>
+                    <div class="stat-label">مدفوعات معلقة</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card primary">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-calendar-check"></i></div>
+                    <div class="stat-value text-primary" x-text="stats.active_groups">-</div>
+                    <div class="stat-label">مجموعات نشطة</div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-label mb-2">المحصل هذا الشهر</div>
-                    <div class="stat-number text-success">{{ month_total_paid|floatformat:0 }} ج.م</div>
+    
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-lightning-fill"></i>
+                        إجراءات سريعة
+                    </h5>
                 </div>
-                <div class="stat-icon green">
-                    <i class="bi bi-wallet2"></i>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Attendance & Notifications Stats -->
-<div class="row g-3 mb-4">
-    <div class="col-lg-8">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>إحصائيات الحضور (آخر 7 أيام)</span>
-            </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-4">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-success">{{ present_count }}</div>
-                            <div class="text-muted">حاضر</div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3 col-6">
+                            <a href="{% url 'attendance:scanner_select' %}" class="btn btn-primary w-100">
+                                <i class="bi bi-qr-code-scan d-block mb-2" style="font-size: 2rem;"></i>
+                                تسجيل الحضور
+                            </a>
                         </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-warning">{{ late_count }}</div>
-                            <div class="text-muted">متأخر</div>
+                        <div class="col-md-3 col-6">
+                            <a href="{% url 'students:create' %}" class="btn btn-success w-100">
+                                <i class="bi bi-person-plus d-block mb-2" style="font-size: 2rem;"></i>
+                                إضافة طالب
+                            </a>
                         </div>
-                    </div>
-                    <div class="col-4">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-danger">{{ absent_count }}</div>
-                            <div class="text-muted">غائب</div>
+                        <div class="col-md-3 col-6">
+                            <a href="{% url 'payments:create' %}" class="btn btn-warning w-100">
+                                <i class="bi bi-cash d-block mb-2" style="font-size: 2rem;"></i>
+                                تسجيل دفع
+                            </a>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <a href="{% url 'reports:attendance' %}" class="btn btn-info w-100">
+                                <i class="bi bi-file-earmark-bar-graph d-block mb-2" style="font-size: 2rem;"></i>
+                                التقارير
+                            </a>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    <div class="col-lg-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-whatsapp me-2"></i>إشعارات الواتساب</span>
-                <a href="{% url 'reports:notifications' %}" class="btn btn-sm btn-outline-success">عرض الكل</a>
+    
+    <!-- Today's Sessions -->
+    <div class="row mb-4">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-calendar-day"></i>
+                        حصص اليوم
+                    </h5>
+                    <span class="badge bg-primary" x-text="sessions.length"></span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>المجموعة</th>
+                                    <th>المدرس</th>
+                                    <th>الوقت</th>
+                                    <th>الحالة</th>
+                                    <th>إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="session in sessions" :key="session.id">
+                                    <tr>
+                                        <td x-text="session.group_name"></td>
+                                        <td x-text="session.teacher_name"></td>
+                                        <td>
+                                            <span x-text="session.time"></span>
+                                            <small class="text-muted d-block" x-text="session.day"></small>
+                                        </td>
+                                        <td>
+                                            <span class="badge" 
+                                                  :class="session.status === 'active' ? 'bg-success' : 'bg-secondary'"
+                                                  x-text="session.status === 'active' ? 'نشط' : 'منتهي'">
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <a :href="`/attendance/scanner/${session.id}/`" 
+                                               class="btn btn-sm btn-primary">
+                                                <i class="bi bi-qr-code-scan"></i>
+                                            </a>
+                                        </td>
+                                    </tr>
+                                </template>
+                                <tr x-show="sessions.length === 0">
+                                    <td colspan="5" class="text-center py-4 text-muted">
+                                        لا توجد حصص مجدولة لليوم
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
-            <div class="card-body">
-                <div class="row text-center">
-                    <div class="col-6">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-success">{{ today_notifications }}</div>
-                            <div class="text-muted">رسائل اليوم</div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="col-lg-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-clock-history"></i>
+                        النشاط الأخير
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                        <template x-for="activity in recentActivity" :key="activity.id">
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1" x-text="activity.title"></h6>
+                                        <small class="text-muted" x-text="activity.description"></small>
+                                    </div>
+                                    <small class="text-muted" x-text="activity.time"></small>
+                                </div>
+                            </div>
+                        </template>
+                        <div x-show="recentActivity.length === 0" class="text-center py-4 text-muted">
+                            لا يوجد نشاط حديث
                         </div>
                     </div>
-                    <div class="col-6">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-danger">{{ failed_notifications }}</div>
-                            <div class="text-muted">فشل اليوم</div>
-                        </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Payment Alerts -->
+    <div class="row" x-show="paymentAlerts.length > 0">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        تنبيهات المدفوعات
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <template x-for="alert in paymentAlerts" :key="alert.id">
+                            <div class="col-md-4 mb-3">
+                                <div class="alert alert-warning mb-0">
+                                    <h6 class="alert-heading" x-text="alert.student_name"></h6>
+                                    <p class="mb-1" x-text="alert.message"></p>
+                                    <a :href="`/payments/student/${alert.student_id}/`" class="btn btn-sm btn-warning">
+                                        عرض التفاصيل
+                                    </a>
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+    
 </div>
+{% endblock %}
 
-<div class="row g-3">
-    <!-- Recent Attendance -->
-    <div class="col-lg-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>آخر تسجيلات الحضور</span>
-                <a href="{% url 'reports:attendance' %}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>الطالب</th>
-                                <th>المجموعة</th>
-                                <th>الحالة</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for att in recent_attendances %}
-                            <tr>
-                                <td>{{ att.student.full_name }}</td>
-                                <td>{{ att.session.group.group_name }}</td>
-                                <td>
-                                    {% if att.status == 'present' %}
-                                    <span class="badge bg-success">حاضر</span>
-                                    {% elif att.status == 'late' %}
-                                    <span class="badge bg-warning">متأخر</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">غائب</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted py-4">لا توجد تسجيلات</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Pending Payments -->
-    <div class="col-lg-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>المدفوعات المعلقة</span>
-                <a href="{% url 'payments:list' %}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>الطالب</th>
-                                <th>المجموعة</th>
-                                <th>المبلغ</th>
-                                <th>الحالة</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for payment in pending_payments %}
-                            <tr>
-                                <td>{{ payment.student.full_name }}</td>
-                                <td>{{ payment.group.group_name }}</td>
-                                <td>{{ payment.amount_due|floatformat:0 }} ج.م</td>
-                                <td>
-                                    {% if payment.status == 'unpaid' %}
-                                    <span class="badge bg-danger">غير مدفوع</span>
-                                    {% else %}
-                                    <span class="badge bg-warning">جزئي</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center text-muted py-4">لا توجد مدفوعات معلقة</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Recent Notifications -->
-<div class="row g-3 mt-2">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-whatsapp text-success me-2"></i>آخر الإشعارات المرسلة</span>
-                <a href="{% url 'reports:notifications' %}" class="btn btn-sm btn-outline-success">عرض سجل الإشعارات</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th style="width: 50px;">النوع</th>
-                                <th>الطالب</th>
-                                <th>الرسالة</th>
-                                <th>الوقت</th>
-                                <th>الحالة</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for notification in recent_notifications %}
-                            <tr>
-                                <td><i class="{{ notification.type_icon }} fs-5"></i></td>
-                                <td>{{ notification.student_name }}</td>
-                                <td>
-                                    <small class="text-muted">{{ notification.message|truncatechars:60 }}</small>
-                                </td>
-                                <td>
-                                    <small>{{ notification.sent_at|date:"d/m H:i" }}</small>
-                                </td>
-                                <td>
-                                    <span class="badge bg-{{ notification.status_badge }}">
-                                        {{ notification.get_status_display }}
-                                    </span>
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="5" class="text-center text-muted py-4">
-                                    <i class="bi bi-chat-dots fs-1 d-block mb-2"></i>
-                                    لا توجد إشعارات مرسلة بعد
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+{% block page_scripts %}
+<script>
+function dashboardData() {
+    return {
+        stats: {
+            total_students: 0,
+            today_present: 0,
+            pending_payments: 0,
+            active_groups: 0
+        },
+        sessions: [],
+        recentActivity: [],
+        paymentAlerts: [],
+        
+        init() {
+            this.loadStats();
+            this.loadSessions();
+            this.loadRecentActivity();
+        },
+        
+        async loadStats() {
+            try {
+                const response = await fetch('/api/reports/stats/');
+                const data = await response.json();
+                this.stats = data.stats || this.stats;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        },
+        
+        async loadSessions() {
+            try {
+                const response = await fetch('/api/attendance/sessions/today/');
+                const data = await response.json();
+                this.sessions = data.sessions || [];
+            } catch (error) {
+                console.error('Error loading sessions:', error);
+            }
+        },
+        
+        async loadRecentActivity() {
+            try {
+                const response = await fetch('/api/reports/activity/recent/');
+                const data = await response.json();
+                this.recentActivity = data.activities || [];
+            } catch (error) {
+                console.error('Error loading activity:', error);
+            }
+        }
+    };
+}
+</script>
 {% endblock %}

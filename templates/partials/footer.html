@@ -1,0 +1,22 @@
+<!-- Footer -->
+<footer class="bg-dark text-light py-3 mt-auto">
+    <div class="container-fluid">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <small class="text-muted">
+                    © {% now "Y" %} نظام إدارة المراكز التعليمية - الإصدار 2.0
+                </small>
+            </div>
+            <div class="col-md-6 text-md-start">
+                <small class="text-muted">
+                    <span x-show="isOnline" class="text-success">
+                        <i class="bi bi-wifi"></i> متصل
+                    </span>
+                    <span x-show="!isOnline" class="text-danger" x-cloak>
+                        <i class="bi bi-wifi-off"></i> غير متصل
+                    </span>
+                </small>
+            </div>
+        </div>
+    </div>
+</footer>

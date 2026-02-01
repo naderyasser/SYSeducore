@@ -1,0 +1,809 @@
+{% extends "base.html" %}
+
+{% block title %}كشك الحضور - {% endblock %}
+
+{% block extra_css %}
+<style>
+/* Kiosk Mode - Full Screen Display */
+.kiosk-container {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+    background: #1a1a1a;
+}
+
+/* Scanner Viewfinder */
+.scanner-viewfinder {
+    position: relative;
+    width: 100%;
+    max-width: 600px;
+    aspect-ratio: 1;
+    background: #000;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+
+#camera-preview {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+#qr-canvas {
+    display: none;
+}
+
+/* Scan Overlay */
+.scan-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+/* Scanning Line Animation */
+.scan-line {
+    position: absolute;
+    left: 10%;
+    right: 10%;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #00ff00, transparent);
+    animation: scanMove 2s linear infinite;
+    box-shadow: 0 0 10px #00ff00;
+}
+
+@keyframes scanMove {
+    0%, 100% { top: 10%; }
+    50% { top: 90%; }
+}
+
+/* Corner Brackets */
+.corner {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border: 4px solid #00ff00;
+}
+
+.corner-tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
+.corner-tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
+.corner-bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
+.corner-br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
+
+/* Session Info */
+.session-info {
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+    padding: 1rem 2rem;
+    border-radius: 1rem;
+    margin-bottom: 1.5rem;
+    text-align: center;
+    color: white;
+}
+
+.session-info h5 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: #00ff00;
+}
+
+.session-info p {
+    margin: 0.25rem 0 0 0;
+    color: rgba(255,255,255,0.7);
+}
+
+/* Status Screens */
+.status-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    z-index: 1000;
+    transition: all 0.3s ease;
+}
+
+/* Green Screen - Present */
+.status-screen.green {
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+    color: white;
+}
+
+/* Red Screen - Blocked */
+.status-screen.red {
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+}
+
+/* Yellow Screen - Payment Issue */
+.status-screen.yellow {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    color: #000;
+}
+
+/* White Screen - No Session */
+.status-screen.white {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    color: #000;
+}
+
+/* Gray Screen - Other */
+.status-screen.gray {
+    background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+    color: white;
+}
+
+/* Large Icons */
+.status-icon {
+    font-size: 8rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Status Title */
+.status-title {
+    font-size: 3rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+}
+
+/* Status Message */
+.status-message {
+    font-size: 1.75rem;
+    margin-bottom: 1rem;
+}
+
+/* Student Name */
+.student-name {
+    font-size: 2.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+/* Time Display */
+.time-display {
+    font-size: 1.5rem;
+    opacity: 0.9;
+}
+
+/* Minutes Late Badge */
+.minutes-late-badge {
+    display: inline-block;
+    padding: 0.5rem 1.5rem;
+    border-radius: 2rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 1rem;
+    background: rgba(255,255,255,0.2);
+}
+
+/* Manual Entry Section */
+.manual-entry {
+    width: 100%;
+    max-width: 600px;
+    margin-top: 1.5rem;
+    padding: 1.5rem;
+    background: rgba(255,255,255,0.1);
+    backdrop-filter: blur(10px);
+    border-radius: 1rem;
+}
+
+.manual-entry-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: white;
+    cursor: pointer;
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    transition: background 0.3s;
+}
+
+.manual-entry-toggle:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.manual-entry-form {
+    display: none;
+    margin-top: 1rem;
+}
+
+.manual-entry-form.show {
+    display: block;
+}
+
+.manual-input {
+    width: 100%;
+    font-size: 2rem;
+    text-align: center;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.1);
+    color: white;
+    letter-spacing: 3px;
+    font-family: 'Courier New', monospace;
+}
+
+.manual-input::placeholder {
+    color: rgba(255,255,255,0.5);
+}
+
+.manual-input:focus {
+    outline: none;
+    border-color: #00ff00;
+    background: rgba(255,255,255,0.15);
+}
+
+/* Numeric Keypad */
+.numeric-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.keypad-btn {
+    padding: 1rem;
+    font-size: 1.5rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 0.5rem;
+    background: rgba(255,255,255,0.2);
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.keypad-btn:hover {
+    background: rgba(255,255,255,0.3);
+    transform: scale(1.05);
+}
+
+.keypad-btn:active {
+    transform: scale(0.95);
+}
+
+.keypad-btn.clear {
+    background: rgba(220, 53, 69, 0.7);
+}
+
+.keypad-btn.submit {
+    background: rgba(40, 167, 69, 0.7);
+}
+
+/* Camera Toggle */
+.camera-toggle {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background: rgba(255,255,255,0.2);
+    backdrop-filter: blur(10px);
+    border: none;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    color: white;
+    font-size: 1.5rem;
+    transition: all 0.3s;
+}
+
+.camera-toggle:hover {
+    background: rgba(255,255,255,0.3);
+    transform: scale(1.1);
+}
+
+/* Camera Error */
+.camera-error {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: white;
+    padding: 2rem;
+}
+
+.camera-error i {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+/* Animations */
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.pulse-animation {
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-20px); }
+    75% { transform: translateX(20px); }
+}
+
+.shake-animation {
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+/* Auto-clear indicator */
+.auto-clear {
+    font-size: 1rem;
+    margin-top: 1rem;
+    opacity: 0.7;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .status-icon { font-size: 5rem; }
+    .status-title { font-size: 2rem; }
+    .status-message { font-size: 1.25rem; }
+    .student-name { font-size: 1.75rem; }
+    .manual-input { font-size: 1.5rem; }
+    .keypad-btn { padding: 0.75rem; font-size: 1.25rem; }
+}
+
+/* Loading Indicator */
+.loading-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    text-align: center;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid rgba(255,255,255,0.3);
+    border-top-color: #00ff00;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="kiosk-container"
+     x-data="kioskScannerData()"
+     x-init="init()"
+     data-session-id="{{ session_id }}"
+     data-scan-url="{% url 'attendance:htmx_api_scan' %}"
+     data-csrf-token="{{ csrf_token }}">
+    
+    <!-- Session Info -->
+    <div class="session-info">
+        <h5 x-text="sessionInfo"></h5>
+        <p x-text="sessionDate"></p>
+    </div>
+    
+    <!-- Scanner Viewfinder -->
+    <div class="scanner-viewfinder">
+        <video id="camera-preview" autoplay playsinline></video>
+        <canvas id="qr-canvas"></canvas>
+        
+        <!-- Scan Overlay -->
+        <div class="scan-overlay" x-show="cameraActive && !scanning">
+            <div class="corner corner-tl"></div>
+            <div class="corner corner-tr"></div>
+            <div class="corner corner-bl"></div>
+            <div class="corner corner-br"></div>
+            <div class="scan-line"></div>
+        </div>
+        
+        <!-- Loading Indicator -->
+        <div class="loading-indicator" x-show="scanning">
+            <div class="spinner"></div>
+            <p style="margin-top: 1rem;">جاري المعالجة...</p>
+        </div>
+        
+        <!-- Camera Error -->
+        <div class="camera-error" x-show="cameraError">
+            <i class="bi bi-camera-video-off"></i>
+            <p x-text="cameraError"></p>
+            <button class="btn btn-light mt-3" @click="startCamera()">
+                <i class="bi bi-arrow-clockwise"></i> إعادة المحاولة
+            </button>
+        </div>
+        
+        <!-- Camera Toggle -->
+        <button class="camera-toggle" @click="toggleCamera()" x-show="!cameraError">
+            <i class="bi" :class="cameraActive ? 'bi-camera-video' : 'bi-camera-video-off'"></i>
+        </button>
+    </div>
+    
+    <!-- Manual Entry Section -->
+    <div class="manual-entry">
+        <div class="manual-entry-toggle" @click="toggleManualEntry()">
+            <i class="bi bi-keyboard"></i>
+            <span>إدخال يدوي</span>
+            <i class="bi" :class="showManualEntry ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+        </div>
+        
+        <div class="manual-entry-form" :class="{ 'show': showManualEntry }">
+            <form @submit.prevent="submitManualEntry">
+                <input type="text" 
+                       name="barcode" 
+                       class="manual-input"
+                       x-model="manualCode"
+                       x-ref="manualInput"
+                       autocomplete="off"
+                       placeholder="أدخل كود الطالب..."
+                       maxlength="10">
+                
+                <div class="numeric-keypad">
+                    <button type="button" class="keypad-btn" @click="pressKey('1')">1</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('2')">2</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('3')">3</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('4')">4</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('5')">5</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('6')">6</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('7')">7</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('8')">8</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('9')">9</button>
+                    <button type="button" class="keypad-btn clear" @click="clearManual()">C</button>
+                    <button type="button" class="keypad-btn" @click="pressKey('0')">0</button>
+                    <button type="button" class="keypad-btn submit" @click="submitManualEntry()">
+                        <i class="bi bi-check-lg"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Status Display Area -->
+    <div id="status-display"></div>
+    
+</div>
+{% endblock %}
+
+{% block page_scripts %}
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script>
+function kioskScannerData() {
+    return {
+        sessionInfo: '{{ group_name }}',
+        sessionDate: '{{ session_date|date:"Y-m-d" }}',
+        autoClearTimer: null,
+        
+        // Get config from data attributes
+        get config() {
+            const container = document.querySelector('.kiosk-container');
+            return {
+                sessionId: parseInt(container.dataset.sessionId),
+                scanUrl: container.dataset.scanUrl,
+                csrfToken: container.dataset.csrfToken
+            };
+        },
+        
+        // Camera state
+        cameraActive: false,
+        cameraError: null,
+        videoElement: null,
+        canvasElement: null,
+        canvasContext: null,
+        scanning: false,
+        lastScanTime: 0,
+        scanCooldown: 1000, // 1 second cooldown between scans
+        
+        // Manual entry state
+        showManualEntry: false,
+        manualCode: '',
+        
+        async init() {
+            // Initialize camera elements
+            this.videoElement = document.getElementById('camera-preview');
+            this.canvasElement = document.getElementById('qr-canvas');
+            this.canvasContext = this.canvasElement.getContext('2d');
+            
+            // Start camera
+            await this.startCamera();
+            
+            // Listen for HTMX events
+            document.body.addEventListener('htmx:afterSwap', (event) => {
+                if (event.detail.target.id === 'status-display') {
+                    this.onScanComplete();
+                }
+            });
+            
+            // Listen for visibility change (pause scanning when tab hidden)
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    this.stopScanning();
+                } else if (this.cameraActive) {
+                    this.startScanning();
+                }
+            });
+        },
+        
+        async startCamera() {
+            try {
+                this.cameraError = null;
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { 
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                this.videoElement.srcObject = stream;
+                this.cameraActive = true;
+                
+                // Start scanning loop
+                this.videoElement.addEventListener('loadedmetadata', () => {
+                    this.canvasElement.width = this.videoElement.videoWidth;
+                    this.canvasElement.height = this.videoElement.videoHeight;
+                    this.startScanning();
+                });
+                
+            } catch (error) {
+                console.error('Camera error:', error);
+                this.cameraActive = false;
+                if (error.name === 'NotAllowedError') {
+                    this.cameraError = 'يرجى السماح بالوصول إلى الكاميرا للمسح';
+                } else if (error.name === 'NotFoundError') {
+                    this.cameraError = 'لم يتم العثور على كاميرا. استخدم الإدخال اليدوي';
+                } else {
+                    this.cameraError = 'خطأ في الكاميرا: ' + error.message;
+                }
+            }
+        },
+        
+        stopCamera() {
+            if (this.videoElement && this.videoElement.srcObject) {
+                const tracks = this.videoElement.srcObject.getTracks();
+                tracks.forEach(track => track.stop());
+                this.videoElement.srcObject = null;
+            }
+            this.cameraActive = false;
+            this.stopScanning();
+        },
+        
+        toggleCamera() {
+            if (this.cameraActive) {
+                this.stopCamera();
+            } else {
+                this.startCamera();
+            }
+        },
+        
+        startScanning() {
+            if (!this.cameraActive || this.scanning) return;
+            this.scanQRCode();
+        },
+        
+        stopScanning() {
+            this.scanning = false;
+        },
+        
+        scanQRCode() {
+            if (!this.cameraActive) return;
+            
+            requestAnimationFrame(() => this.scanQRCode());
+            
+            // Cooldown check
+            const now = Date.now();
+            if (now - this.lastScanTime < this.scanCooldown) return;
+            
+            // Draw video frame to canvas
+            if (this.videoElement.readyState === this.videoElement.HAVE_ENOUGH_DATA) {
+                this.canvasContext.drawImage(
+                    this.videoElement, 
+                    0, 0, 
+                    this.canvasElement.width, 
+                    this.canvasElement.height
+                );
+                
+                // Get image data
+                const imageData = this.canvasContext.getImageData(
+                    0, 0, 
+                    this.canvasElement.width, 
+                    this.canvasElement.height
+                );
+                
+                // Try to find QR code
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+                
+                if (code) {
+                    this.lastScanTime = now;
+                    this.processScan(code.data);
+                }
+            }
+        },
+        
+        async processScan(code) {
+            // Validate code format (should be numeric student code)
+            if (!/^\d{4,10}$/.test(code)) {
+                console.log('Invalid QR code format:', code);
+                return;
+            }
+            
+            this.scanning = true;
+            
+            try {
+                // Send scan to server
+                const response = await fetch(this.config.scanUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.config.csrfToken
+                    },
+                    body: JSON.stringify({
+                        barcode: code,
+                        session_id: this.config.sessionId,
+                        kiosk_mode: true
+                    })
+                });
+                
+                if (response.ok) {
+                    const html = await response.text();
+                    document.getElementById('status-display').innerHTML = html;
+                    this.playSound('success');
+                } else {
+                    const html = await response.text();
+                    document.getElementById('status-display').innerHTML = html;
+                    this.playSound('error');
+                }
+            } catch (error) {
+                console.error('Scan error:', error);
+                this.showStatusScreen('gray', 'خطأ', 'فشل الاتصال بالخادم');
+            } finally {
+                this.scanning = false;
+            }
+        },
+        
+        toggleManualEntry() {
+            this.showManualEntry = !this.showManualEntry;
+            if (this.showManualEntry) {
+                this.$nextTick(() => {
+                    this.$refs.manualInput?.focus();
+                });
+            }
+        },
+        
+        pressKey(key) {
+            if (this.manualCode.length < 10) {
+                this.manualCode += key;
+            }
+        },
+        
+        clearManual() {
+            this.manualCode = '';
+        },
+        
+        async submitManualEntry() {
+            if (!this.manualCode || this.manualCode.length < 4) {
+                return;
+            }
+            
+            this.scanning = true;
+            
+            try {
+                const response = await fetch(this.config.scanUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': this.config.csrfToken
+                    },
+                    body: JSON.stringify({
+                        barcode: this.manualCode,
+                        session_id: this.config.sessionId,
+                        kiosk_mode: true
+                    })
+                });
+                
+                const html = await response.text();
+                document.getElementById('status-display').innerHTML = html;
+                this.manualCode = '';
+                
+                if (response.ok) {
+                    this.playSound('success');
+                } else {
+                    this.playSound('error');
+                }
+            } catch (error) {
+                console.error('Manual entry error:', error);
+                this.showStatusScreen('gray', 'خطأ', 'فشل الاتصال بالخادم');
+            } finally {
+                this.scanning = false;
+            }
+        },
+        
+        showStatusScreen(color, title, message) {
+            const templates = {
+                'green': 'attendance/partials/kiosk_green.html',
+                'red': 'attendance/partials/kiosk_red_late.html',
+                'yellow': 'attendance/partials/kiosk_yellow.html',
+                'white': 'attendance/partials/kiosk_white.html',
+                'gray': 'attendance/partials/kiosk_gray.html'
+            };
+            
+            // Simple fallback - in production use HTMX
+            document.getElementById('status-display').innerHTML = `
+                <div class="status-screen ${color} slide-in">
+                    <h1 class="status-title">${title}</h1>
+                    <p class="status-message">${message}</p>
+                </div>
+            `;
+        },
+        
+        onScanComplete() {
+            // Auto-clear after 3 seconds
+            this.autoClearTimer = setTimeout(() => {
+                this.clearDisplay();
+            }, 3000);
+        },
+        
+        clearDisplay() {
+            document.getElementById('status-display').innerHTML = '';
+        },
+        
+        playSound(type) {
+            const sounds = {
+                'success': '/static/sounds/success.mp3',
+                'error': '/static/sounds/error.mp3',
+                'warning': '/static/sounds/error.mp3'
+            };
+            
+            const audio = new Audio(sounds[type] || sounds['error']);
+            audio.volume = 0.5;
+            audio.play().catch(e => console.log('Audio play failed:', e));
+        }
+    };
+}
+
+// Global sound function for HTMX responses
+function playKioskSound(type) {
+    const sounds = {
+        'success': '/static/sounds/success.mp3',
+        'error': '/static/sounds/error.mp3',
+        'warning': '/static/sounds/error.mp3'
+    };
+    
+    const audio = new Audio(sounds[type] || sounds['error']);
+    audio.volume = 0.5;
+    audio.play().catch(e => console.log('Audio play failed:', e));
+}
+</script>
+{% endblock %}

@@ -1,0 +1,210 @@
+{% extends "base.html" %}
+
+{% block title %}جدول قاعة {{ room.name }} - نظام التعليم{% endblock %}
+
+{% block content %}
+<div class="container-fluid" dir="rtl">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1>
+                    <i class="fas fa-door-open"></i>
+                    جدول قاعة {{ room.name }}
+                </h1>
+                <div class="btn-group">
+                    <a href="{% url 'teachers:room_schedule_dashboard' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i>
+                        العودة للجدول العام
+                    </a>
+                    <a href="{% url 'teachers:room_update' room.room_id %}" class="btn btn-primary">
+                        <i class="fas fa-edit"></i>
+                        تعديل القاعة
+                    </a>
+                    <button onclick="window.print()" class="btn btn-info">
+                        <i class="fas fa-print"></i>
+                        طباعة
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Room Info -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">معلومات القاعة</h5>
+                    <table class="table table-sm">
+                        <tr>
+                            <th>الاسم:</th>
+                            <td>{{ room.name }}</td>
+                        </tr>
+                        <tr>
+                            <th>السعة:</th>
+                            <td>{{ room.capacity }} طالب</td>
+                        </tr>
+                        <tr>
+                            <th>الحالة:</th>
+                            <td>
+                                {% if room.is_active %}
+                                <span class="badge bg-success">نشطة</span>
+                                {% else %}
+                                <span class="badge bg-danger">غير نشطة</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">إحصائيات الاستخدام</h5>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3 class="{% if utilization.utilization_percentage >= 80 %}text-success{% elif utilization.utilization_percentage >= 50 %}text-warning{% else %}text-danger{% endif %}">
+                                    {{ utilization.utilization_percentage }}%
+                                </h3>
+                                <small>نسبة الاستخدام</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3>{{ utilization.session_count }}</h3>
+                                <small>عدد المجموعات</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3>{{ utilization.used_hours }}</h3>
+                                <small>ساعات مستخدمة</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h3>{{ utilization.available_hours }}</h3>
+                                <small>ساعات متاحة</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="progress mt-3">
+                        <div class="progress-bar {% if utilization.utilization_percentage >= 80 %}bg-success{% elif utilization.utilization_percentage >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                             style="width: {{ utilization.utilization_percentage }}%">
+                            {{ utilization.utilization_percentage }}%
+                        </div>
+                    </div>
+                    
+                    {% if utilization.underutilized %}
+                    <div class="alert alert-warning mt-2 mb-0">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        هذه القاعة غير مستغلة بشكل كافٍ
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Weekly Schedule -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-calendar-week"></i>
+                        الجدول الأسبوعي
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>اليوم</th>
+                                    <th>الوقت</th>
+                                    <th>المجموعة</th>
+                                    <th>المدرس</th>
+                                    <th>المدة</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for day_value, day_label in days %}
+                                {% with sessions=schedule|get_item:day_value %}
+                                {% if sessions %}
+                                    {% for session in sessions %}
+                                    <tr>
+                                        {% if forloop.first %}
+                                        <td rowspan="{{ sessions|length }}" class="align-middle">
+                                            <strong>{{ day_label }}</strong>
+                                        </td>
+                                        {% endif %}
+                                        <td>{{ session.start }} - {{ session.end }}</td>
+                                        <td>
+                                            <a href="{% url 'teachers:group_list' %}">
+                                                {{ session.group_name }}
+                                            </a>
+                                        </td>
+                                        <td>{{ session.teacher }}</td>
+                                        <td>{{ session.duration }} دقيقة</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                <tr>
+                                    <td><strong>{{ day_label }}</strong></td>
+                                    <td colspan="4" class="text-center text-muted">
+                                        <em>لا توجد حصص مجدولة</em>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                                {% endwith %}
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Peak Hours -->
+    {% if utilization.peak_hours %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-clock"></i>
+                        ساعات الذروة
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-0">
+                        أكثر الأوقات ازدحاماً في هذه القاعة:
+                        {% for hour in utilization.peak_hours %}
+                        <span class="badge bg-primary">{{ hour }}</span>
+                        {% endfor %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+@media print {
+    .btn-group {
+        display: none;
+    }
+    
+    .card {
+        page-break-inside: avoid;
+    }
+}
+</style>
+{% endblock %}

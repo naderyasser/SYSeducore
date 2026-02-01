@@ -1,0 +1,19 @@
+{% load static %}
+<!-- Gray Screen - Other Blocked -->
+<div class="status-screen gray slide-in shake-animation">
+    <i class="bi bi-slash-circle status-icon"></i>
+    <h1 class="status-title">⛔ ممنوع</h1>
+    <h2 class="student-name">{{ student_name|default:"غير معروف" }}</h2>
+    <p class="status-message">{{ message }}</p>
+    <p class="time-display">
+        <i class="bi bi-clock"></i> {{ time }}
+    </p>
+    <p class="auto-clean mt-3">
+        <i class="bi bi-hourglass-split"></i>
+        سيتم الإخفاء تلقائياً بعد 5 ثوانٍ
+    </p>
+</div>
+
+<script>
+    playKioskSound('error');
+</script>

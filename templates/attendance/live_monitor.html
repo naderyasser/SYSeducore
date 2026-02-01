@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>شاشة المراقبة الحية - نظام الحضور</title>
+    
+    <!-- Bootstrap 5 RTL -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="/static/css/live-monitor.css" rel="stylesheet">
+</head>
+<body class="monitor-mode">
+    <!-- Header -->
+    <header class="monitor-header">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <h1 class="mb-0">
+                        <i class="fas fa-tv"></i>
+                        شاشة المراقبة الحية
+                    </h1>
+                </div>
+                <div class="col-md-6">
+                    <div class="summary-stats d-flex justify-content-around">
+                        <div class="stat-item">
+                            <i class="fas fa-calendar-day"></i>
+                            <span id="current-date">--</span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-clock"></i>
+                            <span id="current-time">--:--:--</span>
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-users"></i>
+                            <span id="total-present">0</span> حاضر
+                        </div>
+                        <div class="stat-item">
+                            <i class="fas fa-chalkboard-teacher"></i>
+                            <span id="active-sessions">0</span> جلسة
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="monitor-controls">
+                        <button id="fullscreen-btn" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-expand"></i>
+                        </button>
+                        <button id="refresh-btn" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                        <button id="print-btn" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-print"></i>
+                        </button>
+                        <button id="settings-btn" class="btn btn-sm btn-outline-light">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="monitor-main">
+        <div class="container-fluid">
+            <div class="row">
+                <!-- Alerts Sidebar -->
+                <aside class="col-md-2 alerts-sidebar" id="alerts-sidebar">
+                    <h5 class="alerts-title">
+                        <i class="fas fa-bell"></i>
+                        التنبيهات
+                        <span class="badge bg-danger" id="alerts-count">0</span>
+                    </h5>
+                    <div id="alerts-container" class="alerts-container">
+                        <!-- Alerts will be loaded here -->
+                        <div class="no-alerts">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <p>لا توجد تنبيهات</p>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Rooms Grid -->
+                <section class="col-md-10">
+                    <div id="rooms-grid" class="rooms-grid">
+                        <!-- Loading state -->
+                        <div class="loading-state">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">جاري التحميل...</span>
+                            </div>
+                            <p>جاري تحميل البيانات...</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <!-- Room Detail Modal -->
+    <div class="modal fade" id="roomDetailModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="roomDetailTitle">تفاصيل القاعة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="roomDetailBody">
+                    <!-- Room details will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal fade" id="settingsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">إعدادات الشاشة</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="settings-form">
+                        <div class="mb-3">
+                            <label class="form-label">فترة التحديث (ثانية)</label>
+                            <input type="number" class="form-control" id="refresh-interval" min="1" max="60" value="5">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">إظهار التنبيهات</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="show-alerts" checked>
+                                <label class="form-check-label" for="show-alerts">تفعيل</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">تشغيل الأصوات</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enable-sounds">
+                                <label class="form-check-label" for="enable-sounds">تفعيل</label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">وضع كشك الشاشة</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="kiosk-mode" checked>
+                                <label class="form-check-label" for="kiosk-mode">تفعيل</label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="button" class="btn btn-primary" id="save-settings">حفظ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="/static/js/live-monitor.js"></script>
+</body>
+</html>

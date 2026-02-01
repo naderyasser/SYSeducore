@@ -1,62 +1,351 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 
-{% block title %}المدفوعات{% endblock %}
+{% block title %}سجل المدفوعات - {% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0"><i class="bi bi-wallet2 me-2"></i>سجل المدفوعات</h4>
-</div>
-
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>الطالب</th>
-                        <th>المجموعة</th>
-                        <th>المبلغ المستحق</th>
-                        <th>المبلغ المدفوع</th>
-                        <th>الحالة</th>
-                        <th>تاريخ الدفع</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for payment in payments %}
-                    <tr>
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
-                                    <i class="bi bi-person-fill text-white" style="font-size: 0.875rem;"></i>
-                                </div>
-                                <span class="fw-semibold">{{ payment.student.full_name }}</span>
-                            </div>
-                        </td>
-                        <td>{{ payment.student.group.group_name|default:"-" }}</td>
-                        <td><span class="fw-semibold">{{ payment.amount_due }} ج.م</span></td>
-                        <td>{{ payment.amount_paid }} ج.م</td>
-                        <td>
-                            {% if payment.status == 'paid' %}
-                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>مدفوع</span>
-                            {% elif payment.status == 'partial' %}
-                            <span class="badge bg-warning"><i class="bi bi-exclamation-circle me-1"></i>جزئي</span>
-                            {% else %}
-                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>غير مدفوع</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ payment.payment_date|date:"Y-m-d"|default:"-" }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                            <p class="mt-2 mb-0">لا يوجد سجلات مدفوعات</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<div class="container-fluid py-4" x-data="paymentsData()">
+    
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="bi bi-cash-coin"></i>
+                        سجل المدفوعات
+                    </h1>
+                    <p class="text-muted mb-0">إدارة ومتابعة مدفوعات الطلاب</p>
+                </div>
+                <div>
+                    <a href="{% url 'payments:create' %}" class="btn btn-primary">
+                        <i class="bi bi-plus-circle"></i>
+                        تسجيل دفع جديد
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
+    
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form id="filter-form" class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">البحث</label>
+                            <input type="search" 
+                                   name="search" 
+                                   class="form-control" 
+                                   placeholder="اسم الطالب أو الكود..."
+                                   x-model="filters.search"
+                                   @debounce.500ms="applyFilters()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">الشهر</label>
+                            <input type="month" 
+                                   name="month" 
+                                   class="form-control"
+                                   x-model="filters.month"
+                                   @change="applyFilters()">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">الحالة</label>
+                            <select name="status" class="form-select" x-model="filters.status" @change="applyFilters()">
+                                <option value="">الكل</option>
+                                <option value="paid">مدفوع</option>
+                                <option value="partial">مدفوع جزئياً</option>
+                                <option value="unpaid">غير مدفوع</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">المجموعة</label>
+                            <select name="group" class="form-select" x-model="filters.group" @change="applyFilters()">
+                                <option value="">الكل</option>
+                                <template x-for="group in groups" :key="group.id">
+                                    <option :value="group.id" x-text="group.name"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="col-md-3 d-flex align-items-end">
+                            <button type="button" class="btn btn-outline-secondary me-2" @click="resetFilters()">
+                                <i class="bi bi-x-circle"></i>
+                                إعادة تعيين
+                            </button>
+                            <button type="button" class="btn btn-success" @click="exportPayments()">
+                                <i class="bi bi-file-earmark-excel"></i>
+                                تصدير
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+                    <div class="stat-value text-success" x-text="summary.paid_count">0</div>
+                    <div class="stat-label">مدفوع بالكامل</div>
+                    <small class="text-muted" x-text="formatCurrency(summary.paid_amount)"></small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-clock-fill"></i></div>
+                    <div class="stat-value text-warning" x-text="summary.partial_count">0</div>
+                    <div class="stat-label">مدفوع جزئياً</div>
+                    <small class="text-muted" x-text="formatCurrency(summary.partial_amount)"></small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card danger">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-x-circle-fill"></i></div>
+                    <div class="stat-value text-danger" x-text="summary.unpaid_count">0</div>
+                    <div class="stat-label">غير مدفوع</div>
+                    <small class="text-muted" x-text="formatCurrency(summary.unpaid_amount)"></small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-wallet2"></i></div>
+                    <div class="stat-value text-info" x-text="formatCurrency(summary.total_collected)">0</div>
+                    <div class="stat-label">إجمالي المحصل</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Payments Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" class="form-check-input" @change="toggleAll($event)">
+                                    </th>
+                                    <th>الكود</th>
+                                    <th>اسم الطالب</th>
+                                    <th>المجموعة</th>
+                                    <th>الشهر</th>
+                                    <th>المبلغ المطلوب</th>
+                                    <th>المدفوع</th>
+                                    <th>المتبقي</th>
+                                    <th>الحالة</th>
+                                    <th>تاريخ الدفع</th>
+                                    <th class="no-print">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="payments-table"
+                                  hx-get="{% url 'payments:api_list' %}"
+                                  hx-trigger="load, htmx:filter from:#filter-form"
+                                  hx-include="#filter-form"
+                                  hx-swap="innerHTML">
+                                <!-- Loaded via HTMX -->
+                                <tr>
+                                    <td colspan="11" class="text-center py-4">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">جاري التحميل...</span>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <!-- Pagination -->
+                <div class="card-footer">
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0 justify-content-center">
+                            <li class="page-item" :class="{disabled: pagination.page === 1}">
+                                <a class="page-link" href="#" @click.prevent="changePage(pagination.page - 1)">السابق</a>
+                            </li>
+                            <template x-for="page in pagination.pages" :key="page">
+                                <li class="page-item" :class="{active: page === pagination.page}">
+                                    <a class="page-link" href="#" @click.prevent="changePage(page)" x-text="page"></a>
+                                </li>
+                            </template>
+                            <li class="page-item" :class="{disabled: pagination.page === pagination.total_pages}">
+                                <a class="page-link" href="#" @click.prevent="changePage(pagination.page + 1)">التالي</a>
+                            </li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bulk Actions Modal -->
+    <div class="modal fade" id="bulkActionsModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">إجراءات جماعية</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p x-text="selectedPayments.length + ' طالب محدد'"></p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-success" @click="bulkMarkPaid()">
+                            <i class="bi bi-check-circle"></i>
+                            تعيين كمدفوع
+                        </button>
+                        <button class="btn btn-warning" @click="bulkSendReminders()">
+                            <i class="bi bi-envelope"></i>
+                            إرسال تذكير
+                        </button>
+                        <button class="btn btn-info" @click="bulkPrintReceipts()">
+                            <i class="bi bi-printer"></i>
+                            طباعة إيصالات
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
 </div>
+{% endblock %}
+
+{% block page_scripts %}
+<script>
+function paymentsData() {
+    return {
+        filters: {
+            search: '',
+            month: '',
+            status: '',
+            group: ''
+        },
+        groups: [],
+        summary: {
+            paid_count: 0,
+            paid_amount: 0,
+            partial_count: 0,
+            partial_amount: 0,
+            unpaid_count: 0,
+            unpaid_amount: 0,
+            total_collected: 0
+        },
+        pagination: {
+            page: 1,
+            per_page: 25,
+            total: 0,
+            total_pages: 1,
+            pages: []
+        },
+        selectedPayments: [],
+        
+        init() {
+            this.loadGroups();
+            this.loadSummary();
+            
+            // Listen for HTMX events
+            document.body.addEventListener('htmx:afterSwap', (event) => {
+                if (event.detail.target.id === 'payments-table') {
+                    this.updatePagination();
+                }
+            });
+        },
+        
+        async loadGroups() {
+            try {
+                const response = await fetch('/api/teachers/groups/');
+                const data = await response.json();
+                this.groups = data.groups || [];
+            } catch (error) {
+                console.error('Error loading groups:', error);
+            }
+        },
+        
+        async loadSummary() {
+            try {
+                const response = await fetch('/api/payments/summary/?' + new URLSearchParams(this.filters));
+                const data = await response.json();
+                this.summary = data.summary || this.summary;
+            } catch (error) {
+                console.error('Error loading summary:', error);
+            }
+        },
+        
+        applyFilters() {
+            htmx.trigger('#filter-form', 'htmx:filter');
+            this.loadSummary();
+        },
+        
+        resetFilters() {
+            this.filters = { search: '', month: '', status: '', group: '' };
+            this.applyFilters();
+        },
+        
+        changePage(page) {
+            this.pagination.page = page;
+            this.applyFilters();
+        },
+        
+        updatePagination() {
+            // Update pagination from HTMX response
+            const table = document.getElementById('payments-table');
+            const pageInfo = table.dataset;
+            if (pageInfo.totalPages) {
+                this.pagination.total_pages = parseInt(pageInfo.totalPages);
+                this.pagination.total = parseInt(pageInfo.total);
+                this.pagination.pages = Array.from({length: this.pagination.total_pages}, (_, i) => i + 1);
+            }
+        },
+        
+        toggleAll(event) {
+            const checkboxes = document.querySelectorAll('.payment-checkbox');
+            checkboxes.forEach(cb => cb.checked = event.target.checked);
+            this.updateSelected();
+        },
+        
+        updateSelected() {
+            const checkboxes = document.querySelectorAll('.payment-checkbox:checked');
+            this.selectedPayments = Array.from(checkboxes).map(cb => parseInt(cb.value));
+        },
+        
+        formatCurrency(amount) {
+            return new Intl.NumberFormat('ar-EG', {
+                style: 'currency',
+                currency: 'EGP'
+            }).format(amount);
+        },
+        
+        async exportPayments() {
+            const url = '/api/payments/export/?' + new URLSearchParams(this.filters);
+            window.open(url, '_blank');
+        },
+        
+        bulkMarkPaid() {
+            // Implement bulk mark as paid
+            console.log('Marking as paid:', this.selectedPayments);
+        },
+        
+        bulkSendReminders() {
+            // Implement bulk send reminders
+            console.log('Sending reminders:', this.selectedPayments);
+        },
+        
+        bulkPrintReceipts() {
+            // Implement bulk print receipts
+            console.log('Printing receipts:', this.selectedPayments);
+        }
+    };
+}
+</script>
 {% endblock %}
