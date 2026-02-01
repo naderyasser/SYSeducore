@@ -1,151 +1,199 @@
 {% extends "base.html" %}
 
-{% block title %}لوحة التحكم - {% endblock %}
+{% block title %}لوحة التحكم - EduCore{% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4" x-data="dashboardData()">
-    
-    <!-- Page Header -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h1 class="h3">
-                <i class="bi bi-speedometer2"></i>
-                لوحة التحكم
-            </h1>
-        </div>
-    </div>
-    
-    <!-- Quick Stats -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card stat-card info">
-                <div class="card-body">
-                    <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
-                    <div class="stat-value" x-text="stats.total_students">-</div>
-                    <div class="stat-label">إجمالي الطلاب</div>
+<div class="fade-in" x-data="dashboardData()">
+
+    <!-- Welcome Card -->
+    <div class="card welcome-card mb-4">
+        <div class="card-body py-4">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h2 class="mb-2">مرحباً، {{ user.get_full_name|default:user.username }}!</h2>
+                    <p class="mb-0 opacity-75">إليك ملخص نشاط المركز التعليمي اليوم</p>
                 </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card success">
-                <div class="card-body">
-                    <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
-                    <div class="stat-value text-success" x-text="stats.today_present">-</div>
-                    <div class="stat-label">حضور اليوم</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card warning">
-                <div class="card-body">
-                    <div class="stat-icon"><i class="bi bi-cash-coin"></i></div>
-                    <div class="stat-value text-warning" x-text="stats.pending_payments">-</div>
-                    <div class="stat-label">مدفوعات معلقة</div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card primary">
-                <div class="card-body">
-                    <div class="stat-icon"><i class="bi bi-calendar-check"></i></div>
-                    <div class="stat-value text-primary" x-text="stats.active_groups">-</div>
-                    <div class="stat-label">مجموعات نشطة</div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Quick Actions -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-lightning-fill"></i>
-                        إجراءات سريعة
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row g-3">
-                        <div class="col-md-3 col-6">
-                            <a href="{% url 'attendance:scanner_select' %}" class="btn btn-primary w-100">
-                                <i class="bi bi-qr-code-scan d-block mb-2" style="font-size: 2rem;"></i>
-                                تسجيل الحضور
-                            </a>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <a href="{% url 'students:create' %}" class="btn btn-success w-100">
-                                <i class="bi bi-person-plus d-block mb-2" style="font-size: 2rem;"></i>
-                                إضافة طالب
-                            </a>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <a href="{% url 'payments:create' %}" class="btn btn-warning w-100">
-                                <i class="bi bi-cash d-block mb-2" style="font-size: 2rem;"></i>
-                                تسجيل دفع
-                            </a>
-                        </div>
-                        <div class="col-md-3 col-6">
-                            <a href="{% url 'reports:attendance' %}" class="btn btn-info w-100">
-                                <i class="bi bi-file-earmark-bar-graph d-block mb-2" style="font-size: 2rem;"></i>
-                                التقارير
-                            </a>
-                        </div>
+                <div class="col-md-4 text-md-start">
+                    <div class="fs-5">
+                        <i class="bi bi-calendar3 me-2"></i>
+                        <span id="today-date"></span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Today's Sessions -->
-    <div class="row mb-4">
+
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card stat-card primary h-100">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-people-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value" x-text="stats.total_students">-</div>
+                        <div class="stat-label">إجمالي الطلاب</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card stat-card success h-100">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-check-circle-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-success" x-text="stats.today_present">-</div>
+                        <div class="stat-label">حضور اليوم</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card stat-card warning h-100">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-cash-coin"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-warning" x-text="stats.pending_payments">-</div>
+                        <div class="stat-label">مدفوعات معلقة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card stat-card info h-100">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-collection-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-info" x-text="stats.total_groups">-</div>
+                        <div class="stat-label">المجموعات النشطة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card mb-4">
+        <div class="card-header d-flex align-items-center">
+            <i class="bi bi-lightning-fill text-warning me-2"></i>
+            <h5 class="mb-0">إجراءات سريعة</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-3 col-6">
+                    <a href="{% url 'attendance:scanner_select' %}" class="quick-action">
+                        <div class="quick-action-icon bg-primary text-white">
+                            <i class="bi bi-qr-code-scan"></i>
+                        </div>
+                        <div>
+                            <div class="fw-semibold">تسجيل الحضور</div>
+                            <small class="text-muted">مسح QR Code</small>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-6">
+                    <a href="{% url 'students:create' %}" class="quick-action">
+                        <div class="quick-action-icon bg-success text-white">
+                            <i class="bi bi-person-plus"></i>
+                        </div>
+                        <div>
+                            <div class="fw-semibold">إضافة طالب</div>
+                            <small class="text-muted">تسجيل طالب جديد</small>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-6">
+                    <a href="{% url 'payments:list' %}" class="quick-action">
+                        <div class="quick-action-icon bg-warning text-white">
+                            <i class="bi bi-cash"></i>
+                        </div>
+                        <div>
+                            <div class="fw-semibold">المدفوعات</div>
+                            <small class="text-muted">إدارة المدفوعات</small>
+                        </div>
+                    </a>
+                </div>
+                <div class="col-md-3 col-6">
+                    <a href="{% url 'reports:attendance' %}" class="quick-action">
+                        <div class="quick-action-icon bg-info text-white">
+                            <i class="bi bi-file-earmark-bar-graph"></i>
+                        </div>
+                        <div>
+                            <div class="fw-semibold">التقارير</div>
+                            <small class="text-muted">عرض التقارير</small>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Today's Sessions -->
         <div class="col-lg-8">
-            <div class="card">
+            <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-calendar-day"></i>
-                        حصص اليوم
-                    </h5>
-                    <span class="badge bg-primary" x-text="sessions.length"></span>
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-calendar-day text-primary me-2"></i>
+                        <h5 class="mb-0">حصص اليوم</h5>
+                    </div>
+                    <span class="badge bg-primary" x-text="sessions.length + ' حصة'"></span>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
-                            <thead class="table-light">
+                            <thead>
                                 <tr>
                                     <th>المجموعة</th>
                                     <th>المدرس</th>
                                     <th>الوقت</th>
+                                    <th>القاعة</th>
                                     <th>الحالة</th>
-                                    <th>إجراءات</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <template x-for="session in sessions" :key="session.id">
                                     <tr>
-                                        <td x-text="session.group_name"></td>
+                                        <td class="fw-semibold" x-text="session.group_name"></td>
                                         <td x-text="session.teacher_name"></td>
                                         <td>
+                                            <i class="bi bi-clock me-1 text-muted"></i>
                                             <span x-text="session.time"></span>
-                                            <small class="text-muted d-block" x-text="session.day"></small>
                                         </td>
+                                        <td x-text="session.room_name"></td>
                                         <td>
-                                            <span class="badge" 
-                                                  :class="session.status === 'active' ? 'bg-success' : 'bg-secondary'"
-                                                  x-text="session.status === 'active' ? 'نشط' : 'منتهي'">
+                                            <span class="badge"
+                                                  :class="{
+                                                      'badge-success': session.status === 'active',
+                                                      'badge-primary': session.status === 'scheduled',
+                                                      'badge-secondary': session.status === 'completed'
+                                                  }"
+                                                  x-text="session.status === 'active' ? 'جارية الآن' : (session.status === 'scheduled' ? 'قادمة' : 'منتهية')">
                                             </span>
                                         </td>
                                         <td>
-                                            <a :href="`/attendance/scanner/${session.id}/`" 
-                                               class="btn btn-sm btn-primary">
+                                            <a :href="'/attendance/scanner/' + session.id + '/'"
+                                               class="btn btn-sm btn-primary"
+                                               x-show="session.status !== 'completed'">
                                                 <i class="bi bi-qr-code-scan"></i>
                                             </a>
                                         </td>
                                     </tr>
                                 </template>
-                                <tr x-show="sessions.length === 0">
-                                    <td colspan="5" class="text-center py-4 text-muted">
-                                        لا توجد حصص مجدولة لليوم
+                                <tr x-show="sessions.length === 0 && !loading">
+                                    <td colspan="6" class="text-center py-5">
+                                        <div class="empty-state">
+                                            <i class="bi bi-calendar-x empty-state-icon"></i>
+                                            <h5 class="empty-state-title">لا توجد حصص اليوم</h5>
+                                            <p class="empty-state-text">لا توجد حصص مجدولة لهذا اليوم</p>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr x-show="loading">
+                                    <td colspan="6" class="text-center py-4">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">جاري التحميل...</span>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
@@ -154,30 +202,44 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Recent Activity -->
         <div class="col-lg-4">
-            <div class="card">
-                <div class="card-header">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-clock-history"></i>
-                        النشاط الأخير
-                    </h5>
+            <div class="card h-100">
+                <div class="card-header d-flex align-items-center">
+                    <i class="bi bi-clock-history text-info me-2"></i>
+                    <h5 class="mb-0">النشاط الأخير</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="list-group list-group-flush" style="max-height: 400px; overflow-y: auto;">
+                    <div style="max-height: 400px; overflow-y: auto;">
                         <template x-for="activity in recentActivity" :key="activity.id">
-                            <div class="list-group-item">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h6 class="mb-1" x-text="activity.title"></h6>
-                                        <small class="text-muted" x-text="activity.description"></small>
+                            <div class="activity-item px-3">
+                                <div class="activity-icon"
+                                     :class="{
+                                         'bg-success text-white': activity.status === 'present',
+                                         'bg-danger text-white': activity.status === 'late_blocked',
+                                         'bg-warning text-dark': activity.status === 'partial',
+                                         'bg-secondary text-white': !['present', 'late_blocked', 'partial'].includes(activity.status)
+                                     }">
+                                    <i class="bi"
+                                       :class="{
+                                           'bi-check-lg': activity.status === 'present',
+                                           'bi-x-lg': activity.status === 'late_blocked',
+                                           'bi-person': !['present', 'late_blocked'].includes(activity.status)
+                                       }"></i>
+                                </div>
+                                <div class="activity-content">
+                                    <div class="activity-title" x-text="activity.student_name"></div>
+                                    <div class="activity-time">
+                                        <span x-text="activity.group_name"></span>
+                                        <span class="mx-1">-</span>
+                                        <span x-text="activity.time"></span>
                                     </div>
-                                    <small class="text-muted" x-text="activity.time"></small>
                                 </div>
                             </div>
                         </template>
-                        <div x-show="recentActivity.length === 0" class="text-center py-4 text-muted">
+                        <div x-show="recentActivity.length === 0 && !loading" class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
                             لا يوجد نشاط حديث
                         </div>
                     </div>
@@ -185,84 +247,71 @@
             </div>
         </div>
     </div>
-    
-    <!-- Payment Alerts -->
-    <div class="row" x-show="paymentAlerts.length > 0">
-        <div class="col-12">
-            <div class="card border-warning">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="card-title mb-0">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                        تنبيهات المدفوعات
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <template x-for="alert in paymentAlerts" :key="alert.id">
-                            <div class="col-md-4 mb-3">
-                                <div class="alert alert-warning mb-0">
-                                    <h6 class="alert-heading" x-text="alert.student_name"></h6>
-                                    <p class="mb-1" x-text="alert.message"></p>
-                                    <a :href="`/payments/student/${alert.student_id}/`" class="btn btn-sm btn-warning">
-                                        عرض التفاصيل
-                                    </a>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
+
 </div>
 {% endblock %}
 
 {% block page_scripts %}
 <script>
+// Set today's date
+document.getElementById('today-date').textContent = new Date().toLocaleDateString('ar-EG', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+});
+
 function dashboardData() {
     return {
+        loading: true,
         stats: {
             total_students: 0,
             today_present: 0,
             pending_payments: 0,
-            active_groups: 0
+            total_groups: 0
         },
         sessions: [],
         recentActivity: [],
-        paymentAlerts: [],
-        
+
         init() {
             this.loadStats();
             this.loadSessions();
             this.loadRecentActivity();
         },
-        
+
         async loadStats() {
             try {
                 const response = await fetch('/api/reports/stats/');
-                const data = await response.json();
-                this.stats = data.stats || this.stats;
+                if (response.ok) {
+                    const data = await response.json();
+                    this.stats = data.stats || this.stats;
+                }
             } catch (error) {
                 console.error('Error loading stats:', error);
             }
         },
-        
+
         async loadSessions() {
             try {
                 const response = await fetch('/api/attendance/sessions/today/');
-                const data = await response.json();
-                this.sessions = data.sessions || [];
+                if (response.ok) {
+                    const data = await response.json();
+                    this.sessions = data.sessions || [];
+                }
             } catch (error) {
                 console.error('Error loading sessions:', error);
+            } finally {
+                this.loading = false;
             }
         },
-        
+
         async loadRecentActivity() {
             try {
                 const response = await fetch('/api/reports/activity/recent/');
-                const data = await response.json();
-                this.recentActivity = data.activities || [];
+                if (response.ok) {
+                    const data = await response.json();
+                    this.recentActivity = data.activities || [];
+                }
             } catch (error) {
                 console.error('Error loading activity:', error);
             }

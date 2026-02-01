@@ -14,10 +14,52 @@ logger = logging.getLogger(__name__)
 @login_required
 def payment_list(request):
     """
-    List all payments.
+    List all payments with filtering and stats.
     """
-    payments = Payment.objects.select_related('student').all()
-    return render(request, 'payments/list.html', {'payments': payments})
+    from django.core.paginator import Paginator
+    from django.db.models import Q, Sum, Count
+
+    payments = Payment.objects.select_related('student', 'student__group').all()
+
+    # Apply filters
+    search = request.GET.get('search', '')
+    status_filter = request.GET.get('status', '')
+    month_filter = request.GET.get('month', '')
+
+    if search:
+        payments = payments.filter(
+            Q(student__full_name__icontains=search) |
+            Q(student__barcode__icontains=search)
+        )
+
+    if status_filter:
+        payments = payments.filter(status=status_filter)
+
+    if month_filter:
+        try:
+            year, month = month_filter.split('-')
+            payments = payments.filter(month__year=int(year), month__month=int(month))
+        except ValueError:
+            pass
+
+    # Calculate stats
+    stats = {
+        'paid_count': Payment.objects.filter(status='paid').count(),
+        'partial_count': Payment.objects.filter(status='partial').count(),
+        'unpaid_count': Payment.objects.filter(status='unpaid').count(),
+        'total_collected': Payment.objects.aggregate(total=Sum('amount_paid'))['total'] or 0,
+    }
+
+    # Order and paginate
+    payments = payments.order_by('-month', '-payment_date')
+    paginator = Paginator(payments, 25)
+    page = request.GET.get('page', 1)
+    payments = paginator.get_page(page)
+
+    return render(request, 'payments/list.html', {
+        'payments': payments,
+        'stats': stats,
+    })
 
 
 @login_required

@@ -201,36 +201,50 @@ def live_monitor_settings(request):
 @require_http_methods(["GET"])
 def today_sessions_api(request):
     """
-    API endpoint for getting today's sessions as JSON
+    API endpoint for getting today's sessions as JSON.
+    Returns groups scheduled for today based on their schedule_day.
     """
     from django.utils import timezone
-    from .models import Session
-    
+    from apps.teachers.models import Group
+    from datetime import datetime, timedelta
+
     today = timezone.now().date()
-    weekday = today.weekday()  # 0=Monday, 6=Sunday
-    
-    sessions = Session.objects.filter(
-        day_of_week=weekday,
+
+    # Map Python weekday (0=Monday) to model day names
+    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    today_day = day_names[today.weekday()]
+
+    # Get groups scheduled for today
+    groups = Group.objects.filter(
+        schedule_day=today_day,
         is_active=True
-    ).select_related('group', 'group__teacher', 'room').order_by('start_time')
-    
+    ).select_related('teacher', 'room').order_by('schedule_time')
+
     sessions_data = []
-    for session in sessions:
-        # Check if session is currently active
-        from datetime import datetime, time
-        now = datetime.now().time()
-        is_active = session.start_time <= now <= session.end_time
-        
+    now = datetime.now().time()
+
+    for group in groups:
+        # Calculate if session is currently active
+        schedule_time = group.schedule_time
+        duration = getattr(group, 'session_duration', 120) or 120  # Default 2 hours
+
+        start_datetime = datetime.combine(today, schedule_time)
+        end_datetime = start_datetime + timedelta(minutes=duration)
+        end_time = end_datetime.time()
+
+        is_active = schedule_time <= now <= end_time
+        is_past = now > end_time
+
         sessions_data.append({
-            'id': session.session_id,
-            'group_name': session.group.group_name if session.group else 'N/A',
-            'teacher_name': session.group.teacher.full_name if session.group and session.group.teacher else 'N/A',
-            'room_name': session.room.room_name if session.room else 'N/A',
-            'time': f"{session.start_time.strftime('%H:%M')} - {session.end_time.strftime('%H:%M')}",
+            'id': group.group_id,
+            'group_name': group.group_name,
+            'teacher_name': group.teacher.full_name if group.teacher else 'N/A',
+            'room_name': group.room.name if group.room else 'N/A',
+            'time': schedule_time.strftime('%H:%M'),
             'day': today.strftime('%Y-%m-%d'),
-            'status': 'active' if is_active else 'scheduled',
+            'status': 'active' if is_active else ('completed' if is_past else 'scheduled'),
         })
-    
+
     return JsonResponse({'sessions': sessions_data})
 
 

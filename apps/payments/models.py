@@ -163,3 +163,8 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.student.full_name} - {self.group.group_name} - {self.month.strftime('%Y-%m')}"
+
+    @property
+    def remaining(self):
+        """Calculate remaining amount to be paid."""
+        return max(0, self.amount_due - self.amount_paid)

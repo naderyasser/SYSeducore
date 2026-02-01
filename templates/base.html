@@ -6,78 +6,181 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
-    <title>{% block title %}نظام إدارة المراكز التعليمية{% endblock %}</title>
-    
+    <title>{% block title %}EduCore - نظام إدارة المراكز التعليمية{% endblock %}</title>
+
+    <!-- Google Fonts - Cairo -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <!-- Bootstrap 5.3 RTL CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css"
-          crossorigin="anonymous">
-    
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.rtl.min.css" crossorigin="anonymous">
+
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{% static 'css/main.css' %}">
-    
+
+    <!-- Modern Dashboard CSS -->
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+
     {% block extra_css %}{% endblock %}
-    
-    <style>
-        /* HTMX Utilities */
-        [hx-indicator] {
-            opacity: 1;
-            transition: opacity 200ms ease-in;
-        }
-        [hx-indicator].htmx-request {
-            opacity: 0;
-        }
-        .htmx-indicator {
-            display: none;
-        }
-        .htmx-request .htmx-indicator {
-            display: inline;
-        }
-        .htmx-request.htmx-indicator {
-            display: inline;
-        }
-        
-        /* Alpine.js transition utilities */
-        [x-cloak] { display: none !important; }
-        
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #888;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #555;
-        }
-    </style>
 </head>
-<body class="bg-light">
-    <!-- Alpine.js App Root -->
-    <div x-data="appData()" class="d-flex flex-column min-vh-100">
-        
-        <!-- Navigation -->
-        {% include "partials/navbar.html" %}
-        
+<body x-data="appData()">
+
+    <!-- Sidebar Overlay (Mobile) -->
+    <div class="sidebar-overlay" :class="{'show': sidebarOpen}" @click="sidebarOpen = false"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" :class="{'show': sidebarOpen}">
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-icon">
+                <i class="bi bi-mortarboard-fill"></i>
+            </div>
+            <div class="sidebar-brand-text">
+                EduCore
+                <small>نظام إدارة المراكز</small>
+            </div>
+        </div>
+
+        <div class="sidebar-menu">
+            <div class="sidebar-menu-title">القائمة الرئيسية</div>
+            <ul class="sidebar-nav">
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'reports:dashboard' %}" class="sidebar-nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                        <i class="bi bi-grid-1x2-fill"></i>
+                        <span>لوحة التحكم</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'attendance:scanner_select' %}" class="sidebar-nav-link {% if 'attendance' in request.path %}active{% endif %}">
+                        <i class="bi bi-qr-code-scan"></i>
+                        <span>تسجيل الحضور</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-menu-title">إدارة البيانات</div>
+            <ul class="sidebar-nav">
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'students:list' %}" class="sidebar-nav-link {% if 'students' in request.path %}active{% endif %}">
+                        <i class="bi bi-people-fill"></i>
+                        <span>الطلاب</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'teachers:list' %}" class="sidebar-nav-link {% if 'teachers' in request.path and 'group' not in request.path %}active{% endif %}">
+                        <i class="bi bi-person-workspace"></i>
+                        <span>المدرسين</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'teachers:group_list' %}" class="sidebar-nav-link {% if 'groups' in request.path %}active{% endif %}">
+                        <i class="bi bi-collection-fill"></i>
+                        <span>المجموعات</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-menu-title">المالية</div>
+            <ul class="sidebar-nav">
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'payments:list' %}" class="sidebar-nav-link {% if 'payments' in request.path %}active{% endif %}">
+                        <i class="bi bi-cash-coin"></i>
+                        <span>المدفوعات</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'payments:settlement_list' %}" class="sidebar-nav-link {% if 'settlement' in request.path %}active{% endif %}">
+                        <i class="bi bi-calculator-fill"></i>
+                        <span>حساب المستحقات</span>
+                    </a>
+                </li>
+            </ul>
+
+            <div class="sidebar-menu-title">التقارير</div>
+            <ul class="sidebar-nav">
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'reports:attendance' %}" class="sidebar-nav-link">
+                        <i class="bi bi-clipboard-data-fill"></i>
+                        <span>تقرير الحضور</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'reports:payments' %}" class="sidebar-nav-link">
+                        <i class="bi bi-graph-up-arrow"></i>
+                        <span>تقرير المدفوعات</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </aside>
+
+    <!-- Main Wrapper -->
+    <div class="main-wrapper">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-light d-lg-none" @click="sidebarOpen = !sidebarOpen">
+                    <i class="bi bi-list"></i>
+                </button>
+                <div class="header-search d-none d-md-block">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="بحث..." class="form-control">
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <button class="header-action-btn" title="الإشعارات">
+                    <i class="bi bi-bell"></i>
+                    <span class="badge bg-danger">3</span>
+                </button>
+
+                <div class="dropdown">
+                    <div class="header-user" data-bs-toggle="dropdown">
+                        <div class="header-user-info">
+                            <div class="header-user-name">
+                                {% if user.is_authenticated %}
+                                    {{ user.get_full_name|default:user.username }}
+                                {% else %}
+                                    زائر
+                                {% endif %}
+                            </div>
+                            <div class="header-user-role">
+                                {% if user.is_authenticated %}{{ user.get_role_display|default:"مستخدم" }}{% endif %}
+                            </div>
+                        </div>
+                        <div class="header-user-avatar">
+                            {% if user.is_authenticated %}
+                                {{ user.username|slice:":1"|upper }}
+                            {% else %}
+                                <i class="bi bi-person"></i>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <ul class="dropdown-menu dropdown-menu-start">
+                        {% if user.is_authenticated %}
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>الملف الشخصي</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>الإعدادات</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <form method="post" action="{% url 'accounts:logout' %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="dropdown-item text-danger">
+                                        <i class="bi bi-box-arrow-right me-2"></i>تسجيل الخروج
+                                    </button>
+                                </form>
+                            </li>
+                        {% else %}
+                            <li><a class="dropdown-item" href="{% url 'accounts:login' %}"><i class="bi bi-box-arrow-in-right me-2"></i>تسجيل الدخول</a></li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </header>
+
         <!-- Toast Container -->
-        <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1100;">
+        <div class="toast-container position-fixed top-0 start-0 p-3" style="z-index: 1100;">
             <template x-for="toast in toasts" :key="toast.id">
-                <div class="toast show"
-                     :class="['toast-' + toast.type, 'border-' + toast.type]"
-                     role="alert"
-                     x-transition:enter="toast-enter"
-                     x-transition:enter-start="opacity-0 translate-x-full"
-                     x-transition:enter-end="opacity-100 translate-x-0"
-                     x-transition:leave="toast-leave"
-                     x-transition:leave-start="opacity-100 translate-x-0"
-                     x-transition:leave-end="opacity-0 translate-x-full">
+                <div class="toast show" role="alert">
                     <div class="toast-header">
                         <i :class="toast.icon + ' me-2'"></i>
                         <strong class="me-auto" x-text="toast.title"></strong>
@@ -87,42 +190,44 @@
                 </div>
             </template>
         </div>
-        
+
         <!-- Main Content -->
-        <main class="flex-grow-1">
+        <main class="main-content">
             {% block content %}{% endblock %}
         </main>
-        
-        <!-- Footer -->
-        {% include "partials/footer.html" %}
-        
     </div>
-    
-    <!-- jQuery (for some legacy code if needed) -->
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"
-            integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
-            crossorigin="anonymous"></script>
-    
-    <!-- Bootstrap 5.3 JS Bundle -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
-            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
-            crossorigin="anonymous"></script>
-    
-    <!-- HTMX -->
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/htmx.org@1.9.11"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/client-side-templates.js"></script>
-    <script src="https://unpkg.com/htmx.org/dist/ext/response-targets.js"></script>
-    
-    <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
-    
-    <!-- Custom JavaScript -->
     <script src="{% static 'js/main.js' %}"></script>
-    
+
+    <script>
+        function appData() {
+            return {
+                sidebarOpen: false,
+                toasts: [],
+                addToast(type, title, message, duration = 5000) {
+                    const id = Date.now();
+                    const icons = {
+                        success: 'bi bi-check-circle-fill text-success',
+                        danger: 'bi bi-x-circle-fill text-danger',
+                        warning: 'bi bi-exclamation-triangle-fill text-warning',
+                        info: 'bi bi-info-circle-fill text-info'
+                    };
+                    this.toasts.push({ id, type, title, message, icon: icons[type] || icons.info });
+                    setTimeout(() => this.removeToast(id), duration);
+                },
+                removeToast(id) {
+                    this.toasts = this.toasts.filter(t => t.id !== id);
+                }
+            };
+        }
+    </script>
+
     {% block extra_js %}{% endblock %}
-    
-    <!-- Page-specific scripts -->
     {% block page_scripts %}{% endblock %}
-    
 </body>
 </html>
