@@ -1,0 +1,16 @@
+{
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /root/\\.gemini/antigravity/scratch/SYSeducore && source venv/bin/activate && python manage\\.py check 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /root/\\.gemini/antigravity/scratch/SYSeducore && source venv/bin/activate && python manage\\.py shell -c \"\nfrom apps\\.payments\\.views import payment_list\nfrom apps\\.attendance\\.htmx_views import select_session\nfrom apps\\.reports\\.api_views import get_recent_activities\nprint\\('All imports OK'\\)\n\" 2>&1$/": {
+            "approve": true,
+            "matchCommandLine": true
+        },
+        "/^cd /root/\\.gemini/antigravity/scratch/SYSeducore && source venv/bin/activate && python manage\\.py shell << 'EOF'\nfrom django\\.test import RequestFactory\nfrom django\\.contrib\\.auth import get_user_model\nUser = get_user_model\\(\\)\nuser = User\\.objects\\.first\\(\\)\nfactory = RequestFactory\\(\\)\n\nnew_views = \\[\n    \\('apps\\.attendance\\.views', 'live_monitor_dashboard', '/attendance/monitor/'\\),\n    \\('apps\\.teachers\\.views', 'room_list', '/teachers/rooms/'\\),\n    \\('apps\\.teachers\\.views', 'room_utilization_report', '/teachers/rooms/utilization/'\\),\n    \\('apps\\.notifications\\.views', 'notification_stats', '/notifications/stats/'\\),\n    \\('apps\\.notifications\\.views', 'template_list', '/notifications/templates/'\\),\n    \\('apps\\.notifications\\.views', 'cost_report', '/notifications/costs/'\\),\n    \\('apps\\.reports\\.views', 'notifications_list', '/reports/notifications/'\\),\n\\]\n\nfor module, func_name, url in new_views:\n    try:\n        mod = __import__\\(module, fromlist=\\[func_name\\]\\)\n        func = getattr\\(mod, func_name\\)\n        request = factory\\.get\\(url\\)\n        request\\.user = user\n        response = func\\(request\\)\n        print\\(f\"✅ \\{func_name\\}: \\{response\\.status_code\\}\"\\)\n    except Exception as e:\n        print\\(f\"❌ \\{func_name\\}: \\{type\\(e\\)\\.__name__\\}: \\{e\\}\"\\)\nEOF\n$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
+}

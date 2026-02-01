@@ -1,0 +1,200 @@
+[2026-02-01 16:01:41 +0000] [3194030] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:01:41 +0000] [3194030] [INFO] Listening at: http://0.0.0.0:3000 (3194030)
+[2026-02-01 16:01:41 +0000] [3194030] [INFO] Using worker: sync
+[2026-02-01 16:01:41 +0000] [3194032] [INFO] Booting worker with pid: 3194032
+[2026-02-01 16:01:42 +0000] [3194034] [INFO] Booting worker with pid: 3194034
+[2026-02-01 16:01:42 +0000] [3194035] [INFO] Booting worker with pid: 3194035
+[2026-02-01 16:01:42 +0000] [3194039] [INFO] Booting worker with pid: 3194039
+[2026-02-01 16:03:13 +0000] [3194030] [INFO] Handling signal: term
+[2026-02-01 18:03:13 +0200] [3194039] [INFO] Worker exiting (pid: 3194039)
+[2026-02-01 18:03:13 +0200] [3194035] [INFO] Worker exiting (pid: 3194035)
+[2026-02-01 18:03:13 +0200] [3194032] [INFO] Worker exiting (pid: 3194032)
+[2026-02-01 18:03:13 +0200] [3194034] [INFO] Worker exiting (pid: 3194034)
+[2026-02-01 16:03:14 +0000] [3194030] [INFO] Shutting down: Master
+[2026-02-01 16:03:14 +0000] [3194497] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:03:14 +0000] [3194497] [INFO] Listening at: http://0.0.0.0:3000 (3194497)
+[2026-02-01 16:03:14 +0000] [3194497] [INFO] Using worker: sync
+[2026-02-01 16:03:14 +0000] [3194501] [INFO] Booting worker with pid: 3194501
+[2026-02-01 16:03:14 +0000] [3194503] [INFO] Booting worker with pid: 3194503
+[2026-02-01 16:03:14 +0000] [3194504] [INFO] Booting worker with pid: 3194504
+[2026-02-01 16:03:14 +0000] [3194505] [INFO] Booting worker with pid: 3194505
+[2026-02-01 16:35:57 +0000] [3194497] [INFO] Handling signal: term
+[2026-02-01 18:35:57 +0200] [3194505] [INFO] Worker exiting (pid: 3194505)
+[2026-02-01 18:35:57 +0200] [3194501] [INFO] Worker exiting (pid: 3194501)
+[2026-02-01 18:35:57 +0200] [3194503] [INFO] Worker exiting (pid: 3194503)
+[2026-02-01 18:35:57 +0200] [3194504] [INFO] Worker exiting (pid: 3194504)
+[2026-02-01 16:35:57 +0000] [3194497] [INFO] Shutting down: Master
+[2026-02-01 16:36:00 +0000] [3202504] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:36:00 +0000] [3202504] [INFO] Listening at: http://0.0.0.0:3000 (3202504)
+[2026-02-01 16:36:00 +0000] [3202504] [INFO] Using worker: sync
+[2026-02-01 16:36:00 +0000] [3202505] [INFO] Booting worker with pid: 3202505
+[2026-02-01 16:36:00 +0000] [3202506] [INFO] Booting worker with pid: 3202506
+[2026-02-01 16:36:01 +0000] [3202507] [INFO] Booting worker with pid: 3202507
+[2026-02-01 16:36:01 +0000] [3202509] [INFO] Booting worker with pid: 3202509
+[2026-02-01 16:36:01 +0000] [3202543] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:36:01 +0000] [3202543] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:36:01 +0000] [3202543] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:36:02 +0000] [3202543] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:36:02 +0000] [3202543] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:36:03 +0000] [3202543] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:36:03 +0000] [3202543] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:36:04 +0000] [3202543] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:36:04 +0000] [3202543] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:36:05 +0000] [3202543] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:36:05 +0000] [3202543] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:36:06 +0000] [3202543] [ERROR] Can't connect to ('0.0.0.0', 3000)
+[2026-02-01 16:37:26 +0000] [3203203] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:37:26 +0000] [3203203] [INFO] Listening at: http://0.0.0.0:3000 (3203203)
+[2026-02-01 16:37:26 +0000] [3203203] [INFO] Using worker: sync
+[2026-02-01 16:37:26 +0000] [3203204] [INFO] Booting worker with pid: 3203204
+[2026-02-01 16:37:26 +0000] [3203205] [INFO] Booting worker with pid: 3203205
+[2026-02-01 16:37:26 +0000] [3203206] [INFO] Booting worker with pid: 3203206
+[2026-02-01 16:37:27 +0000] [3203207] [INFO] Booting worker with pid: 3203207
+[2026-02-01 16:37:34 +0000] [3203297] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:37:34 +0000] [3203297] [INFO] Listening at: http://0.0.0.0:3000 (3203297)
+[2026-02-01 16:37:34 +0000] [3203297] [INFO] Using worker: sync
+[2026-02-01 16:37:34 +0000] [3203299] [INFO] Booting worker with pid: 3203299
+[2026-02-01 16:37:34 +0000] [3203301] [INFO] Booting worker with pid: 3203301
+[2026-02-01 16:37:34 +0000] [3203302] [INFO] Booting worker with pid: 3203302
+[2026-02-01 16:37:34 +0000] [3203303] [INFO] Booting worker with pid: 3203303
+[2026-02-01 16:37:37 +0000] [3203345] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 16:37:37 +0000] [3203345] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:37:37 +0000] [3203345] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:37:38 +0000] [3203345] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:37:38 +0000] [3203345] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:37:39 +0000] [3203345] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:37:39 +0000] [3203345] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:37:40 +0000] [3203345] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:37:40 +0000] [3203345] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:37:41 +0000] [3203345] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 16:37:41 +0000] [3203345] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 16:37:42 +0000] [3203345] [ERROR] Can't connect to ('0.0.0.0', 3000)
+[2026-02-01 17:08:01 +0000] [3203297] [INFO] Handling signal: term
+[2026-02-01 19:08:01 +0200] [3203303] [INFO] Worker exiting (pid: 3203303)
+[2026-02-01 19:08:01 +0200] [3203302] [INFO] Worker exiting (pid: 3203302)
+[2026-02-01 19:08:01 +0200] [3203301] [INFO] Worker exiting (pid: 3203301)
+[2026-02-01 19:08:01 +0200] [3203299] [INFO] Worker exiting (pid: 3203299)
+[2026-02-01 17:08:01 +0000] [3203297] [INFO] Worker (pid:3203303) was sent SIGTERM!
+[2026-02-01 17:08:02 +0000] [3203297] [INFO] Shutting down: Master
+[2026-02-01 17:08:05 +0000] [3211574] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 17:08:05 +0000] [3211574] [INFO] Listening at: http://0.0.0.0:3000 (3211574)
+[2026-02-01 17:08:05 +0000] [3211574] [INFO] Using worker: sync
+[2026-02-01 17:08:05 +0000] [3211575] [INFO] Booting worker with pid: 3211575
+[2026-02-01 17:08:05 +0000] [3211576] [INFO] Booting worker with pid: 3211576
+[2026-02-01 17:08:05 +0000] [3211577] [INFO] Booting worker with pid: 3211577
+[2026-02-01 17:08:05 +0000] [3211578] [INFO] Booting worker with pid: 3211578
+[2026-02-01 17:08:06 +0000] [3211615] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 17:08:06 +0000] [3211615] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:08:06 +0000] [3211615] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:08:07 +0000] [3211615] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:08:07 +0000] [3211615] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:08:08 +0000] [3211615] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:08:08 +0000] [3211615] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:08:09 +0000] [3211615] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:08:09 +0000] [3211615] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:08:10 +0000] [3211615] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:08:10 +0000] [3211615] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:08:11 +0000] [3211615] [ERROR] Can't connect to ('0.0.0.0', 3000)
+[2026-02-01 17:14:02 +0000] [3211574] [INFO] Handling signal: term
+[2026-02-01 19:14:02 +0200] [3211576] [INFO] Worker exiting (pid: 3211576)
+[2026-02-01 19:14:02 +0200] [3211577] [INFO] Worker exiting (pid: 3211577)
+[2026-02-01 19:14:02 +0200] [3211578] [INFO] Worker exiting (pid: 3211578)
+[2026-02-01 19:14:02 +0200] [3211575] [INFO] Worker exiting (pid: 3211575)
+[2026-02-01 17:14:02 +0000] [3211574] [INFO] Worker (pid:3211576) was sent SIGTERM!
+[2026-02-01 17:14:02 +0000] [3211574] [INFO] Shutting down: Master
+[2026-02-01 17:14:06 +0000] [3214364] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 17:14:06 +0000] [3214364] [INFO] Listening at: http://0.0.0.0:3000 (3214364)
+[2026-02-01 17:14:06 +0000] [3214364] [INFO] Using worker: sync
+[2026-02-01 17:14:06 +0000] [3214367] [INFO] Booting worker with pid: 3214367
+[2026-02-01 17:14:06 +0000] [3214368] [INFO] Booting worker with pid: 3214368
+[2026-02-01 17:14:06 +0000] [3214371] [INFO] Booting worker with pid: 3214371
+[2026-02-01 17:14:06 +0000] [3214372] [INFO] Booting worker with pid: 3214372
+[2026-02-01 17:14:07 +0000] [3214406] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 17:14:07 +0000] [3214406] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:14:07 +0000] [3214406] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:14:08 +0000] [3214406] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:14:08 +0000] [3214406] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:14:09 +0000] [3214406] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:14:09 +0000] [3214406] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:14:10 +0000] [3214406] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:14:10 +0000] [3214406] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:14:11 +0000] [3214406] [ERROR] Connection in use: ('0.0.0.0', 3000)
+[2026-02-01 17:14:11 +0000] [3214406] [ERROR] connection to ('0.0.0.0', 3000) failed: [Errno 98] Address already in use
+[2026-02-01 17:14:12 +0000] [3214406] [ERROR] Can't connect to ('0.0.0.0', 3000)
+[2026-02-01 19:47:05 +0000] [3214364] [INFO] Handling signal: term
+[2026-02-01 21:47:05 +0200] [3214368] [INFO] Worker exiting (pid: 3214368)
+[2026-02-01 21:47:05 +0200] [3214367] [INFO] Worker exiting (pid: 3214367)
+[2026-02-01 21:47:05 +0200] [3214372] [INFO] Worker exiting (pid: 3214372)
+[2026-02-01 19:47:35 +0000] [3214364] [INFO] Shutting down: Master
+[2026-02-01 19:47:35 +0000] [3281235] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 19:47:35 +0000] [3281235] [INFO] Listening at: http://0.0.0.0:3000 (3281235)
+[2026-02-01 19:47:35 +0000] [3281235] [INFO] Using worker: sync
+[2026-02-01 19:47:35 +0000] [3281236] [INFO] Booting worker with pid: 3281236
+[2026-02-01 19:47:35 +0000] [3281238] [INFO] Booting worker with pid: 3281238
+[2026-02-01 19:47:35 +0000] [3281239] [INFO] Booting worker with pid: 3281239
+[2026-02-01 19:47:35 +0000] [3281240] [INFO] Booting worker with pid: 3281240
+[2026-02-01 19:48:55 +0000] [3281235] [INFO] Handling signal: term
+[2026-02-01 21:48:55 +0200] [3281238] [INFO] Worker exiting (pid: 3281238)
+[2026-02-01 21:48:55 +0200] [3281239] [INFO] Worker exiting (pid: 3281239)
+[2026-02-01 21:48:55 +0200] [3281236] [INFO] Worker exiting (pid: 3281236)
+[2026-02-01 21:48:55 +0200] [3281240] [INFO] Worker exiting (pid: 3281240)
+[2026-02-01 19:48:56 +0000] [3281235] [INFO] Shutting down: Master
+[2026-02-01 19:48:56 +0000] [3282008] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 19:48:56 +0000] [3282008] [INFO] Listening at: http://0.0.0.0:3000 (3282008)
+[2026-02-01 19:48:56 +0000] [3282008] [INFO] Using worker: sync
+[2026-02-01 19:48:56 +0000] [3282010] [INFO] Booting worker with pid: 3282010
+[2026-02-01 19:48:56 +0000] [3282012] [INFO] Booting worker with pid: 3282012
+[2026-02-01 19:48:56 +0000] [3282013] [INFO] Booting worker with pid: 3282013
+[2026-02-01 19:48:56 +0000] [3282014] [INFO] Booting worker with pid: 3282014
+[2026-02-01 19:58:49 +0000] [3282008] [INFO] Handling signal: term
+[2026-02-01 21:58:49 +0200] [3282014] [INFO] Worker exiting (pid: 3282014)
+[2026-02-01 21:58:49 +0200] [3282010] [INFO] Worker exiting (pid: 3282010)
+[2026-02-01 21:58:49 +0200] [3282012] [INFO] Worker exiting (pid: 3282012)
+[2026-02-01 21:58:49 +0200] [3282013] [INFO] Worker exiting (pid: 3282013)
+[2026-02-01 19:58:50 +0000] [3282008] [INFO] Shutting down: Master
+[2026-02-01 19:58:50 +0000] [3285406] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 19:58:50 +0000] [3285406] [INFO] Listening at: http://0.0.0.0:3000 (3285406)
+[2026-02-01 19:58:50 +0000] [3285406] [INFO] Using worker: sync
+[2026-02-01 19:58:50 +0000] [3285413] [INFO] Booting worker with pid: 3285413
+[2026-02-01 19:58:50 +0000] [3285415] [INFO] Booting worker with pid: 3285415
+[2026-02-01 19:58:50 +0000] [3285418] [INFO] Booting worker with pid: 3285418
+[2026-02-01 19:58:50 +0000] [3285419] [INFO] Booting worker with pid: 3285419
+[2026-02-01 20:02:40 +0000] [3285406] [INFO] Handling signal: term
+[2026-02-01 22:02:40 +0200] [3285419] [INFO] Worker exiting (pid: 3285419)
+[2026-02-01 22:02:40 +0200] [3285415] [INFO] Worker exiting (pid: 3285415)
+[2026-02-01 22:02:40 +0200] [3285413] [INFO] Worker exiting (pid: 3285413)
+[2026-02-01 22:02:40 +0200] [3285418] [INFO] Worker exiting (pid: 3285418)
+[2026-02-01 20:02:40 +0000] [3285406] [INFO] Shutting down: Master
+[2026-02-01 20:02:40 +0000] [3287385] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 20:02:40 +0000] [3287385] [INFO] Listening at: http://0.0.0.0:3000 (3287385)
+[2026-02-01 20:02:40 +0000] [3287385] [INFO] Using worker: sync
+[2026-02-01 20:02:41 +0000] [3287389] [INFO] Booting worker with pid: 3287389
+[2026-02-01 20:02:41 +0000] [3287391] [INFO] Booting worker with pid: 3287391
+[2026-02-01 20:02:41 +0000] [3287394] [INFO] Booting worker with pid: 3287394
+[2026-02-01 20:02:41 +0000] [3287395] [INFO] Booting worker with pid: 3287395
+[2026-02-01 20:04:51 +0000] [3287385] [INFO] Handling signal: term
+[2026-02-01 22:04:51 +0200] [3287389] [INFO] Worker exiting (pid: 3287389)
+[2026-02-01 22:04:51 +0200] [3287395] [INFO] Worker exiting (pid: 3287395)
+[2026-02-01 22:04:51 +0200] [3287391] [INFO] Worker exiting (pid: 3287391)
+[2026-02-01 22:04:51 +0200] [3287394] [INFO] Worker exiting (pid: 3287394)
+[2026-02-01 20:04:51 +0000] [3287385] [INFO] Shutting down: Master
+[2026-02-01 20:04:51 +0000] [3288375] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 20:04:51 +0000] [3288375] [INFO] Listening at: http://0.0.0.0:3000 (3288375)
+[2026-02-01 20:04:51 +0000] [3288375] [INFO] Using worker: sync
+[2026-02-01 20:04:51 +0000] [3288381] [INFO] Booting worker with pid: 3288381
+[2026-02-01 20:04:52 +0000] [3288383] [INFO] Booting worker with pid: 3288383
+[2026-02-01 20:04:52 +0000] [3288384] [INFO] Booting worker with pid: 3288384
+[2026-02-01 20:04:52 +0000] [3288385] [INFO] Booting worker with pid: 3288385
+[2026-02-01 20:06:58 +0000] [3288375] [INFO] Handling signal: term
+[2026-02-01 22:06:58 +0200] [3288381] [INFO] Worker exiting (pid: 3288381)
+[2026-02-01 22:06:58 +0200] [3288383] [INFO] Worker exiting (pid: 3288383)
+[2026-02-01 22:06:58 +0200] [3288385] [INFO] Worker exiting (pid: 3288385)
+[2026-02-01 22:06:58 +0200] [3288384] [INFO] Worker exiting (pid: 3288384)
+[2026-02-01 20:06:58 +0000] [3288375] [INFO] Shutting down: Master
+[2026-02-01 20:06:59 +0000] [3289391] [INFO] Starting gunicorn 25.0.0
+[2026-02-01 20:06:59 +0000] [3289391] [INFO] Listening at: http://0.0.0.0:3000 (3289391)
+[2026-02-01 20:06:59 +0000] [3289391] [INFO] Using worker: sync
+[2026-02-01 20:06:59 +0000] [3289392] [INFO] Booting worker with pid: 3289392
+[2026-02-01 20:06:59 +0000] [3289394] [INFO] Booting worker with pid: 3289394
+[2026-02-01 20:06:59 +0000] [3289395] [INFO] Booting worker with pid: 3289395
+[2026-02-01 20:06:59 +0000] [3289396] [INFO] Booting worker with pid: 3289396

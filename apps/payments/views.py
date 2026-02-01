@@ -19,7 +19,7 @@ def payment_list(request):
     from django.core.paginator import Paginator
     from django.db.models import Q, Sum, Count
 
-    payments = Payment.objects.select_related('student', 'student__group').all()
+    payments = Payment.objects.select_related('student', 'group').all()
 
     # Apply filters
     search = request.GET.get('search', '')
@@ -29,7 +29,7 @@ def payment_list(request):
     if search:
         payments = payments.filter(
             Q(student__full_name__icontains=search) |
-            Q(student__barcode__icontains=search)
+            Q(student__student_code__icontains=search)
         )
 
     if status_filter:

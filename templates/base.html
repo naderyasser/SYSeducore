@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
-    <title>{% block title %}EduCore - نظام إدارة المراكز التعليمية{% endblock %}</title>
+    <link rel="icon" type="image/x-icon" href="{% static 'images/logo.jpeg' %}">
+    <title>{% block title %}مركز البداية - نظام إدارة المراكز التعليمية{% endblock %}</title>
 
     <!-- Google Fonts - Cairo -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,10 +33,10 @@
     <aside class="sidebar" :class="{'show': sidebarOpen}">
         <div class="sidebar-brand">
             <div class="sidebar-brand-icon">
-                <i class="bi bi-mortarboard-fill"></i>
+                <img src="{% static 'images/logo.jpeg' %}" alt="مركز البداية" style="width: 45px; height: 45px; border-radius: 10px; object-fit: cover;">
             </div>
             <div class="sidebar-brand-text">
-                EduCore
+                مركز البداية
                 <small>نظام إدارة المراكز</small>
             </div>
         </div>
@@ -51,9 +51,15 @@
                     </a>
                 </li>
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'attendance:scanner_select' %}" class="sidebar-nav-link {% if 'attendance' in request.path %}active{% endif %}">
+                    <a href="{% url 'attendance:scanner_select' %}" class="sidebar-nav-link {% if 'scanner' in request.path %}active{% endif %}">
                         <i class="bi bi-qr-code-scan"></i>
                         <span>تسجيل الحضور</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'attendance:live_monitor' %}" class="sidebar-nav-link {% if 'monitor' in request.path %}active{% endif %}">
+                        <i class="bi bi-display"></i>
+                        <span>شاشة المراقبة</span>
                     </a>
                 </li>
             </ul>
@@ -67,7 +73,7 @@
                     </a>
                 </li>
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'teachers:list' %}" class="sidebar-nav-link {% if 'teachers' in request.path and 'group' not in request.path %}active{% endif %}">
+                    <a href="{% url 'teachers:list' %}" class="sidebar-nav-link {% if '/teachers/' in request.path and 'group' not in request.path and 'room' not in request.path %}active{% endif %}">
                         <i class="bi bi-person-workspace"></i>
                         <span>المدرسين</span>
                     </a>
@@ -78,12 +84,18 @@
                         <span>المجموعات</span>
                     </a>
                 </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'teachers:room_list' %}" class="sidebar-nav-link {% if 'rooms' in request.path %}active{% endif %}">
+                        <i class="bi bi-door-open-fill"></i>
+                        <span>القاعات</span>
+                    </a>
+                </li>
             </ul>
 
             <div class="sidebar-menu-title">المالية</div>
             <ul class="sidebar-nav">
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'payments:list' %}" class="sidebar-nav-link {% if 'payments' in request.path %}active{% endif %}">
+                    <a href="{% url 'payments:list' %}" class="sidebar-nav-link {% if request.path == '/payments/' %}active{% endif %}">
                         <i class="bi bi-cash-coin"></i>
                         <span>المدفوعات</span>
                     </a>
@@ -96,18 +108,52 @@
                 </li>
             </ul>
 
+            <div class="sidebar-menu-title">الإشعارات</div>
+            <ul class="sidebar-nav">
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'reports:notifications' %}" class="sidebar-nav-link {% if 'notifications' in request.path and 'reports' in request.path %}active{% endif %}">
+                        <i class="bi bi-whatsapp"></i>
+                        <span>سجل WhatsApp</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'notifications:stats' %}" class="sidebar-nav-link {% if request.path == '/notifications/stats/' %}active{% endif %}">
+                        <i class="bi bi-bar-chart-fill"></i>
+                        <span>إحصائيات الإشعارات</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'notifications:templates' %}" class="sidebar-nav-link {% if 'templates' in request.path %}active{% endif %}">
+                        <i class="bi bi-file-text-fill"></i>
+                        <span>قوالب الرسائل</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'notifications:cost_report' %}" class="sidebar-nav-link {% if 'costs' in request.path %}active{% endif %}">
+                        <i class="bi bi-currency-dollar"></i>
+                        <span>تكاليف الإشعارات</span>
+                    </a>
+                </li>
+            </ul>
+
             <div class="sidebar-menu-title">التقارير</div>
             <ul class="sidebar-nav">
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'reports:attendance' %}" class="sidebar-nav-link">
+                    <a href="{% url 'reports:attendance' %}" class="sidebar-nav-link {% if request.path == '/reports/attendance/' %}active{% endif %}">
                         <i class="bi bi-clipboard-data-fill"></i>
                         <span>تقرير الحضور</span>
                     </a>
                 </li>
                 <li class="sidebar-nav-item">
-                    <a href="{% url 'reports:payments' %}" class="sidebar-nav-link">
+                    <a href="{% url 'reports:payments' %}" class="sidebar-nav-link {% if request.path == '/reports/payments/' %}active{% endif %}">
                         <i class="bi bi-graph-up-arrow"></i>
                         <span>تقرير المدفوعات</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'teachers:room_utilization_report' %}" class="sidebar-nav-link {% if 'utilization' in request.path %}active{% endif %}">
+                        <i class="bi bi-pie-chart-fill"></i>
+                        <span>استخدام القاعات</span>
                     </a>
                 </li>
             </ul>

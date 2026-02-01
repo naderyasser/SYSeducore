@@ -2,7 +2,6 @@
 Comprehensive Unit Tests for Accounts App
 """
 
-import pytest
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.contrib.auth import get_user_model
@@ -126,7 +125,8 @@ class LoginViewTestCase(TestCase):
             'password': 'SecurePass123!'
         })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'حسابك غير نشط')
+        # Django returns generic error for inactive user
+        self.assertContains(response, 'اسم المستخدم أو كلمة المرور غير صحيحة')
     
     def test_login_view_redirect_authenticated_user(self):
         """Test redirect for already authenticated user"""

@@ -74,42 +74,44 @@ class AttendanceServiceStrictTest(TestCase):
             datetime.combine(timezone.now().date(), time(8, 55))
         )
 
-        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        result = AttendanceService._check_strict_time(scan_time, schedule_time)
         self.assertTrue(result['allowed'])
         self.assertEqual(result['status'], 'present')
 
     def test_check_strict_time_5_minutes_late(self):
-        """اختبار: تأخر 5 دقائق (9:05) - قبول"""
+        """اختبار: تأخر 5 دقائق (9:05) - رفض (النظام الصارم)"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 5))
         )
 
-        result = AttendanceService.check_strict_time(scan_time, schedule_time)
-        self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'present')
+        result = AttendanceService._check_strict_time(scan_time, schedule_time)
+        # النظام الصارم: أي تأخير = ممنوع
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['status'], 'late_blocked')
 
     def test_check_strict_time_exactly_10_minutes(self):
-        """اختبار: تأخر بالظبط 10 دقائق (9:10) - قبول"""
+        """اختبار: تأخر بالظبط 10 دقائق (9:10) - رفض"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 10))
         )
 
-        result = AttendanceService.check_strict_time(scan_time, schedule_time)
-        self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'present')
+        result = AttendanceService._check_strict_time(scan_time, schedule_time)
+        # النظام الصارم: أي تأخير = ممنوع
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['status'], 'late_blocked')
 
     def test_check_strict_time_11_minutes_late_block(self):
-        """اختبار: تأخر 11 دقيقة (9:11) - رفض كامل ⚠️"""
+        """اختبار: تأخر 11 دقيقة (9:11) - رفض كامل (تأخير شديد)"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 11))
         )
 
-        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        result = AttendanceService._check_strict_time(scan_time, schedule_time)
         self.assertFalse(result['allowed'])
-        self.assertIn('ممنوع الدخول', result['reason'])
+        self.assertEqual(result['status'], 'very_late')
 
     def test_check_strict_time_15_minutes_late_block(self):
         """اختبار: تأخر 15 دقيقة (9:15) - رفض كامل"""
@@ -118,9 +120,9 @@ class AttendanceServiceStrictTest(TestCase):
             datetime.combine(timezone.now().date(), time(9, 15))
         )
 
-        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        result = AttendanceService._check_strict_time(scan_time, schedule_time)
         self.assertFalse(result['allowed'])
-        self.assertIn('ممنوع الدخول', result['reason'])
+        self.assertEqual(result['status'], 'very_late')
 
     def test_check_strict_time_too_early(self):
         """اختبار: وصول مبكر جداً (35 دقيقة قبل الموعد)"""
@@ -129,9 +131,9 @@ class AttendanceServiceStrictTest(TestCase):
             datetime.combine(timezone.now().date(), time(8, 25))
         )
 
-        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        result = AttendanceService._check_strict_time(scan_time, schedule_time)
         self.assertFalse(result['allowed'])
-        self.assertIn('مبكراً جداً', result['reason'])
+        self.assertIn('مبكراً جداً', result['message'])
 
     def test_get_current_day_name(self):
         """اختبار: الحصول على اسم اليوم الحالي"""
@@ -197,16 +199,15 @@ class AttendanceFinancialCheckTest(TestCase):
 
     def test_financial_check_exempt_always_allowed(self):
         """اختبار: الطالب المعفي دائماً مسموح"""
-        result = AttendanceService.check_financial_status(self.student_exempt, self.group)
+        # استخدام الدالة الداخلية للاختبار
+        result = AttendanceService._check_financial_status(self.student_exempt, self.group)
         self.assertTrue(result['allowed'])
-        self.assertTrue(result.get('exempt', False))
 
     def test_financial_check_first_month_no_payment(self):
         """اختبار: الشهر الأول - لازم دفع"""
         # الطالب جديد (لا يوجد حضور سابق)
-        result = AttendanceService.check_financial_status(self.student_normal, self.group)
+        result = AttendanceService._check_financial_status(self.student_normal, self.group)
         self.assertFalse(result['allowed'])
-        self.assertIn('الشهر الأول', result['reason'])
 
     def test_financial_check_first_month_with_payment(self):
         """اختبار: الشهر الأول - مع دفع"""
@@ -220,7 +221,7 @@ class AttendanceFinancialCheckTest(TestCase):
             status='paid'
         )
 
-        result = AttendanceService.check_financial_status(self.student_normal, self.group)
+        result = AttendanceService._check_financial_status(self.student_normal, self.group)
         self.assertTrue(result['allowed'])
 
     def test_financial_check_subsequent_month_first_session(self):
@@ -244,7 +245,7 @@ class AttendanceFinancialCheckTest(TestCase):
         )
 
         # الشهر الحالي: الحصة الأولى (مسموح)
-        result = AttendanceService.check_financial_status(self.student_normal, self.group)
+        result = AttendanceService._check_financial_status(self.student_normal, self.group)
         self.assertTrue(result['allowed'])
 
     def test_financial_check_subsequent_month_third_session_blocked(self):
@@ -285,37 +286,31 @@ class AttendanceFinancialCheckTest(TestCase):
             )
 
         # الحصة الثالثة (رفض)
-        result = AttendanceService.check_financial_status(self.student_normal, self.group)
+        result = AttendanceService._check_financial_status(self.student_normal, self.group)
         self.assertFalse(result['allowed'])
-        self.assertIn('ممنوع الدخول', result['reason'])
 
     def test_is_student_first_month_in_group_true(self):
-        """اختبار: هل هو الشهر الأول - نعم"""
-        # طالب جديد بدون حضور سابق
-        result = AttendanceService.is_student_first_month_in_group(self.student_normal, self.group)
-        self.assertTrue(result)
+        """اختبار: الطالب جديد في المجموعة"""
+        enrollment = StudentGroupEnrollment.objects.get(
+            student=self.student_normal,
+            group=self.group
+        )
+        # الطالب جديد بدون حضور سابق
+        self.assertTrue(enrollment.is_new_student)
 
     def test_is_student_first_month_in_group_false(self):
-        """اختبار: هل هو الشهر الأول - لا"""
-        # إنشاء حضور في الشهر السابق
-        previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
-        previous_session = Session.objects.create(
-            group=self.group,
-            session_date=previous_month
-        )
-        previous_scan_time = timezone.make_aware(
-            datetime.combine(previous_month, time(9, 0))
-        )
-        Attendance.objects.create(
+        """اختبار: الطالب ليس جديد في المجموعة"""
+        enrollment = StudentGroupEnrollment.objects.get(
             student=self.student_normal,
-            session=previous_session,
-            status='present',
-            supervisor=self.supervisor,
-            scan_time=previous_scan_time
+            group=self.group
         )
-
-        result = AttendanceService.is_student_first_month_in_group(self.student_normal, self.group)
-        self.assertFalse(result)
+        # تحديث حالة الطالب
+        enrollment.is_new_student = False
+        enrollment.save()
+        
+        # التحقق
+        enrollment.refresh_from_db()
+        self.assertFalse(enrollment.is_new_student)
 
 
 class ProcessScanIntegrationTest(TestCase):

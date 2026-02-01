@@ -654,5 +654,6 @@ class NotificationService:
         )
 
 
-# Import NotificationCost at module level for record_message
-from .models import NotificationCost
+# Note: Removed module-level import of NotificationCost from models
+# to prevent name collision with NotificationCost service class above.
+# The service class methods use local imports where needed.

@@ -120,14 +120,14 @@
                         {% for payment in payments %}
                         <tr>
                             <td>
-                                <span class="badge badge-primary">{{ payment.student.barcode|default:"-" }}</span>
+                                <span class="badge badge-primary">{{ payment.student.student_code|default:"-" }}</span>
                             </td>
                             <td>
                                 <a href="{% url 'students:detail' payment.student.student_id %}">
                                     {{ payment.student.full_name }}
                                 </a>
                             </td>
-                            <td>{{ payment.student.group.group_name|default:"-" }}</td>
+                            <td>{{ payment.group.group_name|default:"-" }}</td>
                             <td>{{ payment.month|date:"Y-m" }}</td>
                             <td>{{ payment.amount_due }} ج.م</td>
                             <td class="text-success">{{ payment.amount_paid }} ج.م</td>

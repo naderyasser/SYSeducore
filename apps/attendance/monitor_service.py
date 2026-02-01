@@ -138,7 +138,7 @@ class LiveMonitorService:
             schedule_day=day,
             is_active=True
         ).select_related('teacher', 'room').prefetch_related(
-            'enrolled_students__student'
+            'enrolled_students'
         )
         
         for group in groups:

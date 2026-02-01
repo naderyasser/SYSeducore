@@ -2,7 +2,6 @@
 Comprehensive Unit Tests for Payments App
 """
 
-import pytest
 from decimal import Decimal
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -26,7 +25,7 @@ class PaymentModelTestCase(TestCase):
         )
         
         self.teacher = Teacher.objects.create(
-            teacher_name='Test Teacher',
+            full_name='Test Teacher',
             is_active=True
         )
         
@@ -104,7 +103,7 @@ class CreditServiceTestCase(TestCase):
         )
         
         self.teacher = Teacher.objects.create(
-            teacher_name='Test Teacher',
+            full_name='Test Teacher',
             is_active=True
         )
         
@@ -166,7 +165,7 @@ class PaymentViewsTestCase(TestCase):
         )
         
         self.teacher = Teacher.objects.create(
-            teacher_name='Test Teacher',
+            full_name='Test Teacher',
             is_active=True
         )
         
@@ -237,7 +236,7 @@ class SettlementServiceTestCase(TestCase):
     
     def setUp(self):
         self.teacher = Teacher.objects.create(
-            teacher_name='Test Teacher',
+            full_name='Test Teacher',
             commission_rate=Decimal('0.50'),  # 50%
             is_active=True
         )

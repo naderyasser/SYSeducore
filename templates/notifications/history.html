@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% load notification_tags %}
+
+{% block title %}{{ page_title }} - {{ block.super }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="bi bi-clock-history text-primary"></i>
+            {{ page_title }}
+            {% if student %}
+            <small class="text-muted fs-6">- {{ student.full_name }}</small>
+            {% endif %}
+        </h2>
+        <div>
+            <a href="{% url 'notifications:stats' %}" class="btn btn-outline-primary">
+                <i class="bi bi-bar-chart"></i> إحصائيات
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">نوع الإشعار</label>
+                    <select name="type" class="form-select">
+                        <option value="">الكل</option>
+                        {% for type_code, type_name in notification_types %}
+                        <option value="{{ type_code }}" {% if current_filters.type == type_code %}selected{% endif %}>{{ type_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">الحالة</label>
+                    <select name="status" class="form-select">
+                        <option value="">الكل</option>
+                        {% for status_code, status_name in status_choices %}
+                        <option value="{{ status_code }}" {% if current_filters.status == status_code %}selected{% endif %}>{{ status_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="date_from" class="form-control" value="{{ current_filters.date_from|default:'' }}">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="date_to" class="form-control" value="{{ current_filters.date_to|default:'' }}">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> بحث
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Notifications List -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>الطالب</th>
+                            <th>النوع</th>
+                            <th>الحالة</th>
+                            <th>الرسالة</th>
+                            <th>التوقيت</th>
+                            <th>التكلفة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr>
+                            <td>
+                                {% if log.student %}
+                                <a href="{% url 'students:detail' log.student.student_id %}">
+                                    {{ log.student.full_name }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">{{ log.student_name|default:'-' }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge 
+                                    {% if log.notification_type == 'attendance_success' %}bg-success
+                                    {% elif log.notification_type == 'late_block' %}bg-warning text-dark
+                                    {% elif log.notification_type == 'financial_block' %}bg-danger
+                                    {% elif log.notification_type == 'payment' %}bg-info
+                                    {% else %}bg-secondary{% endif %}">
+                                    {{ log.get_notification_type_display }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if log.status == 'sent' or log.status == 'delivered' %}
+                                <span class="badge bg-success"><i class="bi bi-check-circle"></i> {{ log.get_status_display }}</span>
+                                {% elif log.status == 'pending' %}
+                                <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split"></i> {{ log.get_status_display }}</span>
+                                {% elif log.status == 'failed' %}
+                                <span class="badge bg-danger"><i class="bi bi-x-circle"></i> {{ log.get_status_display }}</span>
+                                {% elif log.status == 'skipped' %}
+                                <span class="badge bg-secondary"><i class="bi bi-dash-circle"></i> {{ log.get_status_display }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ log.get_status_display }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-truncate d-inline-block" style="max-width: 300px;" title="{{ log.message }}">
+                                    {{ log.message|truncatechars:80 }}
+                                </small>
+                            </td>
+                            <td>
+                                <small>{{ log.sent_at|date:"Y/m/d H:i" }}</small>
+                            </td>
+                            <td>
+                                {% if log.cost %}
+                                <span class="text-muted">{{ log.cost }} ج.م</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                لا توجد إشعارات مطابقة للبحث
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Pagination -->
+        {% if logs.has_other_pages %}
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if logs.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.previous_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="bi bi-chevron-right"></i> السابق
+                        </a>
+                    </li>
+                    {% endif %}
+                    
+                    <li class="page-item disabled">
+                        <span class="page-link">صفحة {{ logs.number }} من {{ logs.paginator.num_pages }}</span>
+                    </li>
+                    
+                    {% if logs.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.next_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            التالي <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

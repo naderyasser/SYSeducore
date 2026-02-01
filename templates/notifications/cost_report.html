@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+
+{% block title %}تقرير تكاليف الإشعارات{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="bi bi-currency-dollar text-success"></i>
+                        تقرير تكاليف الإشعارات
+                    </h1>
+                    <p class="text-muted mb-0">متابعة تكاليف رسائل WhatsApp الشهرية</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Month Selector -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-2 align-items-end">
+                        <div class="col-5">
+                            <label class="form-label small">السنة</label>
+                            <select name="year" class="form-select">
+                                {% for y in "2024 2025 2026"|make_list %}
+                                    <option value="{{ y }}" {% if y == selected_year|stringformat:"s" %}selected{% endif %}>{{ y }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label small">الشهر</label>
+                            <select name="month" class="form-select">
+                                {% for m in "1 2 3 4 5 6 7 8 9 10 11 12"|make_list %}
+                                    <option value="{{ m }}" {% if m == selected_month|stringformat:"s" %}selected{% endif %}>{{ m }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-2">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-search"></i>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-chat-dots-fill"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-success">{{ report.total_messages|default:0 }}</div>
+                        <div class="stat-label">إجمالي الرسائل</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card primary">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-wallet2"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-primary">{{ report.total_cost|default:0|floatformat:2 }} {{ report.currency|default:"EGP" }}</div>
+                        <div class="stat-label">إجمالي التكلفة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-tag"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-info">{{ report.cost_per_message|default:0.05|floatformat:3 }} {{ report.currency|default:"EGP" }}</div>
+                        <div class="stat-label">تكلفة الرسالة</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card warning">
+                <div class="card-body">
+                    <div class="stat-icon"><i class="bi bi-calendar3"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value text-warning">{{ selected_month }}/{{ selected_year }}</div>
+                        <div class="stat-label">الشهر المحدد</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Breakdown by Type -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>توزيع الرسائل حسب النوع</h5>
+                </div>
+                <div class="card-body">
+                    {% if report.by_type %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>نوع الإشعار</th>
+                                    <th>العدد</th>
+                                    <th>التكلفة التقريبية</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for type, count in report.by_type.items %}
+                                <tr>
+                                    <td>
+                                        {% if type == 'attendance_success' %}
+                                            <i class="bi bi-check-circle text-success me-2"></i>حضور ناجح
+                                        {% elif type == 'late_block' %}
+                                            <i class="bi bi-clock text-warning me-2"></i>تأخير
+                                        {% elif type == 'financial_block_new' %}
+                                            <i class="bi bi-exclamation-triangle text-danger me-2"></i>حظر مالي (جديد)
+                                        {% elif type == 'financial_block_debt' %}
+                                            <i class="bi bi-exclamation-circle text-danger me-2"></i>حظر مالي (ديون)
+                                        {% elif type == 'payment_reminder' %}
+                                            <i class="bi bi-bell text-info me-2"></i>تذكير دفع
+                                        {% elif type == 'payment_confirmation' %}
+                                            <i class="bi bi-receipt text-primary me-2"></i>تأكيد دفع
+                                        {% else %}
+                                            <i class="bi bi-chat me-2"></i>{{ type }}
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="badge bg-primary">{{ count }}</span></td>
+                                    <td>{{ count|floatformat:0 }} × {{ report.cost_per_message|default:0.05|floatformat:3 }} = {{ count|floatformat:0 }} EGP</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-inbox display-4"></i>
+                        <p class="mt-2">لا توجد بيانات لهذا الشهر</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>الأشهر السابقة</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        {% for cost in costs %}
+                        <a href="?year={{ cost.month.year }}&month={{ cost.month.month }}" 
+                           class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                            <span>{{ cost.month|date:"Y/m" }}</span>
+                            <span>
+                                <span class="badge bg-secondary">{{ cost.total_messages }} رسالة</span>
+                                <span class="badge bg-success">{{ cost.total_cost|floatformat:2 }} {{ cost.currency }}</span>
+                            </span>
+                        </a>
+                        {% empty %}
+                        <div class="list-group-item text-center text-muted">
+                            لا توجد سجلات سابقة
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
