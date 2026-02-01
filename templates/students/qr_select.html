@@ -1,0 +1,238 @@
+{% extends 'base.html' %}
+
+{% block title %}طباعة كروت QR - مركز البداية{% endblock %}
+
+{% block extra_css %}
+<style>
+    .student-checkbox-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 15px;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    .student-checkbox-card:hover {
+        border-color: #4e73df;
+        background: #f8f9ff;
+    }
+    .student-checkbox-card.selected {
+        border-color: #4e73df;
+        background: linear-gradient(135deg, rgba(78, 115, 223, 0.1), rgba(78, 115, 223, 0.05));
+    }
+    .student-checkbox-card input[type="checkbox"] {
+        width: 20px;
+        height: 20px;
+    }
+    .selection-toolbar {
+        position: sticky;
+        bottom: 20px;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 -5px 30px rgba(0,0,0,0.15);
+        padding: 15px 25px;
+        z-index: 100;
+    }
+    .qr-preview {
+        width: 60px;
+        height: 60px;
+        background: #f8f9fc;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .filter-pills .btn {
+        border-radius: 20px;
+        margin: 3px;
+    }
+    .filter-pills .btn.active {
+        background: #4e73df;
+        border-color: #4e73df;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" x-data="qrSelectPage()">
+    
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h2 class="mb-1">
+                <i class="bi bi-qr-code text-primary me-2"></i>
+                طباعة كروت QR
+            </h2>
+            <p class="text-muted mb-0">اختر الطلاب المراد طباعة كروت QR لهم</p>
+        </div>
+        <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+        </a>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-4">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control border-start-0" 
+                               placeholder="بحث بالاسم أو الكود..."
+                               x-model="searchQuery"
+                               @input="filterStudents()">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select" x-model="selectedGroup" @change="filterStudents()">
+                        <option value="">كل المجموعات</option>
+                        {% for group in groups %}
+                        <option value="{{ group.group_id }}">{{ group.group_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 text-end">
+                    <button class="btn btn-outline-primary" @click="selectAll()">
+                        <i class="bi bi-check-all me-1"></i>تحديد الكل
+                    </button>
+                    <button class="btn btn-outline-secondary" @click="deselectAll()">
+                        <i class="bi bi-x-lg me-1"></i>إلغاء التحديد
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Students Grid -->
+    <div class="row g-3" id="students-grid">
+        {% for student in students %}
+        <div class="col-md-4 col-lg-3 student-item"
+             data-name="{{ student.full_name|lower }}"
+             data-code="{{ student.student_code }}"
+             data-groups="{% for g in student.groups.all %}{{ g.group_id }},{% endfor %}">
+            <div class="student-checkbox-card h-100" 
+                 :class="{ 'selected': selectedStudents.includes({{ student.student_id }}) }"
+                 @click="toggleStudent({{ student.student_id }})">
+                <div class="d-flex align-items-start gap-3">
+                    <input type="checkbox" 
+                           class="form-check-input mt-1"
+                           :checked="selectedStudents.includes({{ student.student_id }})"
+                           @click.stop="toggleStudent({{ student.student_id }})">
+                    <div class="qr-preview">
+                        {% if student.qr_code_base64 %}
+                        <img src="{{ student.qr_code_base64 }}" 
+                             alt="QR" 
+                             style="width: 50px; height: 50px;">
+                        {% else %}
+                        <i class="bi bi-qr-code text-muted" style="font-size: 24px;"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex-grow-1 min-width-0">
+                        <h6 class="mb-1 text-truncate">{{ student.full_name }}</h6>
+                        <span class="badge bg-primary">{{ student.student_code }}</span>
+                        <div class="mt-2">
+                            {% for g in student.groups.all|slice:":2" %}
+                            <span class="badge bg-light text-dark small">{{ g.group_name }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="text-center py-5 text-muted">
+                <i class="bi bi-inbox" style="font-size: 48px;"></i>
+                <h5 class="mt-3">لا يوجد طلاب</h5>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Selection Toolbar -->
+    <div class="selection-toolbar mt-4" x-show="selectedStudents.length > 0" x-transition>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <strong class="text-primary">
+                    <i class="bi bi-check-circle-fill me-2"></i>
+                    <span x-text="selectedStudents.length"></span> طالب محدد
+                </strong>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-secondary" @click="deselectAll()">
+                    <i class="bi bi-x-lg me-1"></i>إلغاء
+                </button>
+                <button class="btn btn-primary btn-lg" @click="printSelected()">
+                    <i class="bi bi-printer me-2"></i>طباعة الكروت
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function qrSelectPage() {
+    return {
+        selectedStudents: [],
+        searchQuery: '',
+        selectedGroup: '',
+        
+        toggleStudent(id) {
+            const index = this.selectedStudents.indexOf(id);
+            if (index > -1) {
+                this.selectedStudents.splice(index, 1);
+            } else {
+                this.selectedStudents.push(id);
+            }
+        },
+        
+        selectAll() {
+            const visibleItems = document.querySelectorAll('.student-item:not([style*="display: none"])');
+            this.selectedStudents = [];
+            visibleItems.forEach(item => {
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                const card = item.querySelector('.student-checkbox-card');
+                const match = card.getAttribute('@click').match(/toggleStudent\((\d+)\)/);
+                if (match) {
+                    this.selectedStudents.push(parseInt(match[1]));
+                }
+            });
+        },
+        
+        deselectAll() {
+            this.selectedStudents = [];
+        },
+        
+        filterStudents() {
+            const items = document.querySelectorAll('.student-item');
+            items.forEach(item => {
+                const name = item.dataset.name;
+                const code = item.dataset.code;
+                const groups = item.dataset.groups;
+                
+                const searchMatch = !this.searchQuery || 
+                    name.includes(this.searchQuery.toLowerCase()) ||
+                    code.includes(this.searchQuery);
+                
+                const groupMatch = !this.selectedGroup || 
+                    groups.includes(this.selectedGroup + ',');
+                
+                item.style.display = (searchMatch && groupMatch) ? '' : 'none';
+            });
+        },
+        
+        printSelected() {
+            if (this.selectedStudents.length === 0) {
+                alert('يرجى تحديد طالب واحد على الأقل');
+                return;
+            }
+            window.location.href = '{% url "students:print_qr_codes" %}?student_ids=' + this.selectedStudents.join(',');
+        }
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,466 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}إدارة الطلاب - مركز البداية{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        border-radius: 15px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: none;
+    }
+    .stats-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    .stats-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+    }
+    .search-box {
+        position: relative;
+    }
+    .search-box input {
+        padding-right: 45px;
+        border-radius: 10px;
+        border: 2px solid #e9ecef;
+        transition: border-color 0.2s;
+    }
+    .search-box input:focus {
+        border-color: #4e73df;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.15);
+    }
+    .search-box .search-icon {
+        position: absolute;
+        right: 15px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+    }
+    .student-card {
+        border-radius: 12px;
+        transition: all 0.2s;
+        border: 1px solid #e9ecef;
+    }
+    .student-card:hover {
+        border-color: #4e73df;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    .student-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        font-weight: bold;
+        color: white;
+    }
+    .filter-btn {
+        border-radius: 20px;
+        padding: 8px 20px;
+        font-size: 14px;
+        transition: all 0.2s;
+    }
+    .filter-btn.active {
+        background: linear-gradient(135deg, #4e73df, #224abe);
+        border-color: #4e73df;
+    }
+    .action-btn {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+    .badge-code {
+        background: linear-gradient(135deg, #4e73df, #224abe);
+        font-size: 12px;
+        padding: 6px 12px;
+        border-radius: 6px;
+    }
+    .table-modern {
+        border-collapse: separate;
+        border-spacing: 0 8px;
+    }
+    .table-modern thead th {
+        background: #f8f9fc;
+        border: none;
+        padding: 15px;
+        font-weight: 600;
+        color: #5a5c69;
+        font-size: 13px;
+    }
+    .table-modern tbody tr {
+        background: white;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+    }
+    .table-modern tbody td {
+        padding: 15px;
+        vertical-align: middle;
+        border: none;
+    }
+    .table-modern tbody tr:hover {
+        box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+    }
+    .empty-state {
+        padding: 60px 20px;
+    }
+    .empty-state i {
+        font-size: 64px;
+        color: #d1d3e2;
+    }
+    .qr-badge {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+    .groups-tags .badge {
+        margin: 2px;
+        font-size: 11px;
+        font-weight: 500;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" x-data="studentsPage()">
+    
+    <!-- Header -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+        <div>
+            <h2 class="mb-1">
+                <i class="bi bi-people-fill text-primary me-2"></i>
+                إدارة الطلاب
+            </h2>
+            <p class="text-muted mb-0">إدارة وتنظيم بيانات الطلاب</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'students:print_qr_codes' %}?all=true" class="btn btn-outline-primary">
+                <i class="bi bi-qr-code me-2"></i>طباعة كروت QR
+            </a>
+            <a href="{% url 'students:create' %}" class="btn btn-primary">
+                <i class="bi bi-person-plus me-2"></i>إضافة طالب جديد
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3 col-6">
+            <div class="card stats-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stats-icon bg-primary bg-opacity-10 text-primary me-3">
+                        <i class="bi bi-people"></i>
+                    </div>
+                    <div>
+                        <h3 class="mb-0">{{ total_students }}</h3>
+                        <small class="text-muted">إجمالي الطلاب</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card stats-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stats-icon bg-success bg-opacity-10 text-success me-3">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div>
+                        <h3 class="mb-0">{{ active_students }}</h3>
+                        <small class="text-muted">طلاب نشطين</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card stats-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stats-icon bg-info bg-opacity-10 text-info me-3">
+                        <i class="bi bi-qr-code"></i>
+                    </div>
+                    <div>
+                        <h3 class="mb-0">{{ students_with_qr }}</h3>
+                        <small class="text-muted">لديهم QR</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 col-6">
+            <div class="card stats-card h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="stats-icon bg-warning bg-opacity-10 text-warning me-3">
+                        <i class="bi bi-person-plus"></i>
+                    </div>
+                    <div>
+                        <h3 class="mb-0">{{ new_this_month }}</h3>
+                        <small class="text-muted">جدد هذا الشهر</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters & Search -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-center">
+                <div class="col-md-5">
+                    <div class="search-box">
+                        <i class="bi bi-search search-icon"></i>
+                        <input type="text" 
+                               class="form-control form-control-lg" 
+                               placeholder="بحث بالاسم أو الكود أو رقم الهاتف..."
+                               x-model="searchQuery"
+                               @input="filterStudents()">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select class="form-select form-select-lg" x-model="selectedGroup" @change="filterStudents()">
+                        <option value="">كل المجموعات</option>
+                        {% for group in groups %}
+                        <option value="{{ group.group_id }}">{{ group.group_name }} - {{ group.teacher.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <div class="btn-group w-100" role="group">
+                        <button type="button" 
+                                class="btn filter-btn"
+                                :class="statusFilter === 'all' ? 'btn-primary active' : 'btn-outline-secondary'"
+                                @click="statusFilter = 'all'; filterStudents()">
+                            الكل
+                        </button>
+                        <button type="button" 
+                                class="btn filter-btn"
+                                :class="statusFilter === 'active' ? 'btn-primary active' : 'btn-outline-secondary'"
+                                @click="statusFilter = 'active'; filterStudents()">
+                            نشط
+                        </button>
+                        <button type="button" 
+                                class="btn filter-btn"
+                                :class="statusFilter === 'inactive' ? 'btn-primary active' : 'btn-outline-secondary'"
+                                @click="statusFilter = 'inactive'; filterStudents()">
+                            غير نشط
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Students Table -->
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-modern mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">#</th>
+                            <th>الطالب</th>
+                            <th>الكود</th>
+                            <th>المجموعات</th>
+                            <th>رقم ولي الأمر</th>
+                            <th>QR</th>
+                            <th>الحالة</th>
+                            <th style="width: 150px;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody id="students-tbody">
+                        {% for student in students %}
+                        <tr class="student-row" 
+                            data-name="{{ student.full_name|lower }}"
+                            data-code="{{ student.student_code }}"
+                            data-phone="{{ student.parent_phone }}"
+                            data-active="{{ student.is_active|yesno:'true,false' }}"
+                            data-groups="{% for g in student.groups.all %}{{ g.group_id }},{% endfor %}">
+                            <td>
+                                <div class="student-avatar" style="background: linear-gradient(135deg, hsl({{ forloop.counter|add:100 }}, 70%, 50%), hsl({{ forloop.counter|add:150 }}, 70%, 40%));">
+                                    {{ student.full_name|slice:":1" }}
+                                </div>
+                            </td>
+                            <td>
+                                <div>
+                                    <strong>{{ student.full_name }}</strong>
+                                    <br>
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar3 me-1"></i>
+                                        {{ student.created_at|date:"Y/m/d" }}
+                                    </small>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge badge-code">{{ student.student_code }}</span>
+                            </td>
+                            <td>
+                                <div class="groups-tags">
+                                    {% for enrollment in student.studentgroupenrollment_set.all|slice:":3" %}
+                                    <span class="badge bg-{{ forloop.counter|divisibleby:2|yesno:'info,primary' }} bg-opacity-75">
+                                        {{ enrollment.group.group_name }}
+                                    </span>
+                                    {% empty %}
+                                    <span class="text-muted small">لا يوجد</span>
+                                    {% endfor %}
+                                    {% if student.studentgroupenrollment_set.count > 3 %}
+                                    <span class="badge bg-secondary">+{{ student.studentgroupenrollment_set.count|add:"-3" }}</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                <a href="tel:{{ student.parent_phone }}" class="text-decoration-none">
+                                    <i class="bi bi-telephone text-success me-1"></i>
+                                    {{ student.parent_phone }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if student.qr_code_base64 %}
+                                <span class="qr-badge bg-success bg-opacity-10 text-success" title="QR موجود">
+                                    <i class="bi bi-qr-code"></i>
+                                </span>
+                                {% else %}
+                                <span class="qr-badge bg-warning bg-opacity-10 text-warning" title="QR غير موجود">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if student.is_active %}
+                                <span class="badge bg-success bg-opacity-10 text-success px-3 py-2">
+                                    <i class="bi bi-check-circle me-1"></i>نشط
+                                </span>
+                                {% else %}
+                                <span class="badge bg-secondary bg-opacity-10 text-secondary px-3 py-2">
+                                    <i class="bi bi-pause-circle me-1"></i>غير نشط
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="{% url 'students:detail' student_id=student.student_id %}" 
+                                       class="btn btn-sm action-btn btn-outline-primary" 
+                                       title="عرض التفاصيل">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <a href="{% url 'students:update' student_id=student.student_id %}" 
+                                       class="btn btn-sm action-btn btn-outline-secondary"
+                                       title="تعديل">
+                                        <i class="bi bi-pencil"></i>
+                                    </a>
+                                    <a href="{% url 'students:qr_card_single' student_id=student.student_id %}" 
+                                       class="btn btn-sm action-btn btn-outline-info"
+                                       title="طباعة كارت QR">
+                                        <i class="bi bi-qr-code"></i>
+                                    </a>
+                                    <a href="https://wa.me/{{ student.parent_phone|slice:'1:' }}" 
+                                       target="_blank"
+                                       class="btn btn-sm action-btn btn-outline-success"
+                                       title="واتساب">
+                                        <i class="bi bi-whatsapp"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8">
+                                <div class="empty-state text-center">
+                                    <i class="bi bi-inbox"></i>
+                                    <h5 class="mt-3 text-muted">لا يوجد طلاب</h5>
+                                    <p class="text-muted">قم بإضافة طلاب جدد للبدء</p>
+                                    <a href="{% url 'students:create' %}" class="btn btn-primary mt-2">
+                                        <i class="bi bi-person-plus me-2"></i>إضافة طالب جديد
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Footer with count -->
+        {% if students %}
+        <div class="card-footer bg-light">
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="text-muted">
+                    <span id="visible-count">{{ students|length }}</span> طالب من إجمالي {{ total_students }}
+                </span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary" disabled>
+                        <i class="bi bi-chevron-right"></i>
+                    </button>
+                    <button class="btn btn-outline-secondary" disabled>
+                        <i class="bi bi-chevron-left"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function studentsPage() {
+    return {
+        searchQuery: '',
+        selectedGroup: '',
+        statusFilter: 'all',
+        
+        filterStudents() {
+            const rows = document.querySelectorAll('.student-row');
+            let visibleCount = 0;
+            
+            rows.forEach(row => {
+                const name = row.dataset.name;
+                const code = row.dataset.code;
+                const phone = row.dataset.phone;
+                const isActive = row.dataset.active === 'true';
+                const groups = row.dataset.groups;
+                
+                // Search filter
+                const searchMatch = !this.searchQuery || 
+                    name.includes(this.searchQuery.toLowerCase()) ||
+                    code.includes(this.searchQuery) ||
+                    phone.includes(this.searchQuery);
+                
+                // Group filter
+                const groupMatch = !this.selectedGroup || 
+                    groups.includes(this.selectedGroup + ',');
+                
+                // Status filter
+                let statusMatch = true;
+                if (this.statusFilter === 'active') statusMatch = isActive;
+                else if (this.statusFilter === 'inactive') statusMatch = !isActive;
+                
+                // Show/hide row
+                if (searchMatch && groupMatch && statusMatch) {
+                    row.style.display = '';
+                    visibleCount++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            
+            // Update count
+            document.getElementById('visible-count').textContent = visibleCount;
+        }
+    }
+}
+</script>
+{% endblock %}

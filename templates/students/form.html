@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %}{% endblock %}
+{% block title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %} - مركز البداية{% endblock %}
 
 {% block content %}
 <div class="mb-4">
@@ -11,8 +11,8 @@
 
 <div class="row justify-content-center">
     <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
                 <h5 class="mb-0">
                     {% if student %}
                     <i class="bi bi-pencil me-2"></i>تعديل الطالب - {{ student.full_name }}
@@ -22,41 +22,96 @@
                 </h5>
             </div>
             <div class="card-body">
-                <form method="post">
+                {% if form.non_field_errors %}
+                <div class="alert alert-danger">
+                    {% for error in form.non_field_errors %}
+                    <p class="mb-0">{{ error }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <form method="post" id="studentForm">
                     {% csrf_token %}
 
                     <div class="row g-3">
+                        <!-- الاسم الكامل -->
                         <div class="col-md-6">
-                            <label for="student_code" class="form-label">كود الطالب <span class="text-danger">*</span></label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-hash"></i></span>
-                                <input type="text" name="student_code" id="student_code" class="form-control"
-                                    value="{{ student.student_code|default:'' }}" required placeholder="مثال: 1001">
-                            </div>
-                            <small class="text-muted">رقم مميز لكل طالب يستخدم لتسجيل الحضور</small>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="full_name" class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
+                            <label for="id_full_name" class="form-label">
+                                الاسم الكامل <span class="text-danger">*</span>
+                            </label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                <input type="text" name="full_name" id="full_name" class="form-control"
-                                    value="{{ student.full_name|default:'' }}" required placeholder="اسم الطالب">
+                                <input type="text" 
+                                       name="full_name" 
+                                       id="id_full_name" 
+                                       class="form-control {% if form.full_name.errors %}is-invalid{% endif %}"
+                                       value="{{ form.full_name.value|default:'' }}" 
+                                       required 
+                                       placeholder="اسم الطالب الثلاثي">
+                                {% if form.full_name.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.full_name.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
 
+                        <!-- كود الطالب -->
                         <div class="col-md-6">
-                            <label for="parent_phone" class="form-label">رقم ولي الأمر <span class="text-danger">*</span></label>
+                            <label for="id_student_code" class="form-label">
+                                كود الطالب
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-hash"></i></span>
+                                <input type="text" 
+                                       name="student_code" 
+                                       id="id_student_code" 
+                                       class="form-control {% if form.student_code.errors %}is-invalid{% endif %}"
+                                       value="{{ form.student_code.value|default:'' }}" 
+                                       placeholder="اتركه فارغاً للتوليد التلقائي">
+                                {% if form.student_code.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.student_code.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                سيتم توليد كود تلقائياً إذا تركته فارغاً
+                            </small>
+                        </div>
+
+                        <!-- رقم ولي الأمر -->
+                        <div class="col-md-6">
+                            <label for="id_parent_phone" class="form-label">
+                                رقم ولي الأمر <span class="text-danger">*</span>
+                            </label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-phone"></i></span>
-                                <input type="text" name="parent_phone" id="parent_phone" class="form-control"
-                                    value="{{ student.parent_phone|default:'' }}" required placeholder="01xxxxxxxxx">
+                                <input type="tel" 
+                                       name="parent_phone" 
+                                       id="id_parent_phone" 
+                                       class="form-control {% if form.parent_phone.errors %}is-invalid{% endif %}"
+                                       value="{{ form.parent_phone.value|default:'' }}" 
+                                       required 
+                                       placeholder="01xxxxxxxxx"
+                                       dir="ltr">
+                                {% if form.parent_phone.errors %}
+                                <div class="invalid-feedback">
+                                    {% for error in form.parent_phone.errors %}{{ error }}{% endfor %}
+                                </div>
+                                {% endif %}
                             </div>
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                رقم الهاتف لإرسال إشعارات الحضور
+                            </small>
                         </div>
 
+                        <!-- المجموعات -->
                         <div class="col-md-6">
-                            <label for="groups" class="form-label">المجموعات</label>
-                            <select name="groups" id="groups" class="form-select" multiple style="height: 120px;">
+                            <label for="id_groups" class="form-label">المجموعات</label>
+                            <select name="groups" id="id_groups" class="form-select" multiple style="height: 100px;">
                                 {% for group in groups %}
                                 <option value="{{ group.group_id }}"
                                     {% if student and group in student.groups.all %}selected{% endif %}>
@@ -64,14 +119,24 @@
                                 </option>
                                 {% endfor %}
                             </select>
-                            <small class="text-muted">اضغط Ctrl للاختيار المتعدد</small>
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                اضغط Ctrl للاختيار المتعدد (اختياري)
+                            </small>
                         </div>
 
+                        <!-- حالة الطالب -->
                         <div class="col-12">
                             <div class="form-check form-switch">
-                                <input type="checkbox" name="is_active" class="form-check-input" id="isActive"
-                                    {% if not student or student.is_active %}checked{% endif %}>
-                                <label for="isActive" class="form-check-label">طالب نشط</label>
+                                <input type="checkbox" 
+                                       name="is_active" 
+                                       class="form-check-input" 
+                                       id="id_is_active"
+                                       {% if not student or student.is_active %}checked{% endif %}>
+                                <label for="id_is_active" class="form-check-label">
+                                    <i class="bi bi-check-circle text-success me-1"></i>
+                                    طالب نشط
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -88,6 +153,22 @@
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Help Section -->
+        <div class="card mt-3">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="bi bi-question-circle text-info me-2"></i>
+                    ملاحظات هامة
+                </h6>
+                <ul class="mb-0 text-muted small">
+                    <li>الاسم الكامل ورقم ولي الأمر مطلوبان</li>
+                    <li>سيتم توليد كود QR تلقائياً للطالب</li>
+                    <li>يمكنك تعيين الطالب للمجموعات لاحقاً من صفحة المجموعات</li>
+                    <li>الطلاب غير النشطين لن يظهروا في قوائم الحضور</li>
+                </ul>
             </div>
         </div>
     </div>
