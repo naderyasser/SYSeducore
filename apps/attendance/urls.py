@@ -12,6 +12,9 @@ urlpatterns = [
     # Scanner select page
     path('scanner/select/', htmx_views.scanner_select, name='scanner_select'),
     
+    # Create session
+    path('session/create/', htmx_views.create_session, name='create_session'),
+    
     # Scanner page for specific session (Normal Mode)
     path('scanner/<int:session_id>/', htmx_views.scanner_page, name='scanner_page'),
     

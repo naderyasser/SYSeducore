@@ -1,13 +1,13 @@
 {% for enrollment in enrollments %}
-    {% with attendance=enrollments.student.attendances.all|first %}
+    {% with student=enrollment.student %}
         <tr class="fade-in" style="animation-delay: calc({{ forloop.counter0 }} * 50ms)">
             <td>{{ forloop.counter }}</td>
             <td>
-                <code>{{ enrollment.student.student_code }}</code>
+                <code>{{ student.student_code }}</code>
             </td>
             <td>
-                <a href="{% url 'students:detail' enrollment.student.student_id %}">
-                    {{ enrollment.student.full_name }}
+                <a href="{% url 'students:detail' student.student_id %}">
+                    {{ student.full_name }}
                 </a>
             </td>
             <td>
@@ -17,40 +17,33 @@
                 </span>
             </td>
             <td>
-                {% if attendance %}
-                    <span class="text-muted">{{ attendance.scan_time|date:"H:i:s" }}</span>
-                {% else %}
+                {% for att in attendances %}
+                    {% if att.student_id == student.student_id %}
+                        <span class="text-muted">{{ att.scan_time|date:"H:i:s" }}</span>
+                    {% endif %}
+                {% empty %}
                     <span class="text-muted">-</span>
-                {% endif %}
+                {% endfor %}
             </td>
             <td>
-                {% if attendance %}
-                    <span class="badge status-badge {{ attendance.status }}">
-                        {% if attendance.status == 'present' %}حاضر
-                        {% elif attendance.status == 'late' %}متأخر
-                        {% elif attendance.status == 'absent' %}غائب
-                        {% endif %}
-                    </span>
-                {% else %}
+                {% with has_attendance=False %}
+                {% for att in attendances %}
+                    {% if att.student_id == student.student_id %}
+                        <span class="badge {% if att.allow_entry %}bg-success{% else %}bg-danger{% endif %}">
+                            {% if att.status == 'present' %}حاضر
+                            {% elif att.status == 'late_blocked' %}متأخر - ممنوع
+                            {% elif att.status == 'blocked_payment' %}ممنوع - مصروفات
+                            {% else %}{{ att.get_status_display }}
+                            {% endif %}
+                        </span>
+                    {% endif %}
+                {% empty %}
                     <span class="badge bg-secondary">لم يسجل</span>
-                {% endif %}
+                {% endfor %}
+                {% endwith %}
             </td>
             <td class="no-print">
-                {% if attendance %}
-                    <button class="btn btn-sm btn-outline-danger" 
-                            hx-post="{% url 'attendance:htmx_delete_attendance' attendance.attendance_id %}"
-                            hx-confirm="هل أنت متأكد من حذف هذا السجل؟"
-                            hx-target="closest tr">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                {% else %}
-                    <button class="btn btn-sm btn-outline-primary"
-                            hx-post="{% url 'attendance:htmx_manual_attendance' session.id enrollment.student.student_id %}"
-                            hx-target="closest tr">
-                        <i class="bi bi-hand-index-thumb"></i>
-                        يدوي
-                    </button>
-                {% endif %}
+                <span class="text-muted small">-</span>
             </td>
         </tr>
     {% endwith %}

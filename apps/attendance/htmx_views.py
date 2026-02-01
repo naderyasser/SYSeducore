@@ -2,12 +2,13 @@
 HTMX Views for Attendance App
 Returns HTML fragments for HTMX requests - STRICT MODE
 """
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from django.http import HttpResponse
 from django.template.loader import render_to_string
 from django.utils import timezone
+from django.contrib import messages
 from .models import Session, Attendance
 from .services import AttendanceService
 from apps.teachers.models import Group
@@ -27,10 +28,57 @@ def scanner_select(request):
         is_cancelled=False
     ).select_related('group__teacher', 'group__room')
     
+    # Get all active groups for creating new sessions
+    all_groups = Group.objects.filter(is_active=True).select_related('teacher')
+    
     return render(request, 'attendance/scanner_select.html', {
         'sessions': sessions,
-        'today': today
+        'today': today,
+        'all_groups': all_groups,
     })
+
+
+@login_required
+@require_POST
+def create_session(request):
+    """
+    Create a new session for a group
+    """
+    group_id = request.POST.get('group_id')
+    session_date = request.POST.get('session_date')
+    
+    if not group_id:
+        messages.error(request, 'يجب اختيار المجموعة')
+        return redirect('attendance:scanner_select')
+    
+    try:
+        group = Group.objects.get(group_id=group_id)
+    except Group.DoesNotExist:
+        messages.error(request, 'المجموعة غير موجودة')
+        return redirect('attendance:scanner_select')
+    
+    # Parse date or use today
+    if session_date:
+        from datetime import datetime
+        session_date = datetime.strptime(session_date, '%Y-%m-%d').date()
+    else:
+        session_date = timezone.now().date()
+    
+    # Check if session already exists
+    existing = Session.objects.filter(group=group, session_date=session_date).first()
+    if existing:
+        messages.info(request, f'الجلسة موجودة بالفعل - {group.group_name}')
+        return redirect('attendance:scanner_page', session_id=existing.session_id)
+    
+    # Create session
+    session = Session.objects.create(
+        group=group,
+        session_date=session_date,
+        is_cancelled=False
+    )
+    
+    messages.success(request, f'تم إنشاء جلسة جديدة - {group.group_name}')
+    return redirect('attendance:scanner_page', session_id=session.session_id)
 
 
 @login_required

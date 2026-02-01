@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}اختر الحصة - {% endblock %}
+{% block title %}اختر الحصة - مركز البداية{% endblock %}
 
 {% block content %}
 <div class="container-fluid py-4">
@@ -8,11 +8,19 @@
     <!-- Page Header -->
     <div class="row mb-4">
         <div class="col-12">
-            <h1 class="h3">
-                <i class="bi bi-qr-code-scan"></i>
-                اختر الحصة لتسجيل الحضور
-            </h1>
-            <p class="text-muted">اختر المجموعة التي تريد تسجيل الحضور لها</p>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h1 class="h3 mb-1">
+                        <i class="bi bi-qr-code-scan text-primary"></i>
+                        اختر الحصة لتسجيل الحضور
+                    </h1>
+                    <p class="text-muted mb-0">اختر المجموعة التي تريد تسجيل الحضور لها - {{ today|date:"Y/m/d" }}</p>
+                </div>
+                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#createSessionModal">
+                    <i class="bi bi-plus-circle me-1"></i>
+                    إنشاء جلسة جديدة
+                </button>
+            </div>
         </div>
     </div>
     
@@ -68,14 +76,56 @@
                     <i class="bi bi-calendar-x fs-1 text-muted d-block mb-3"></i>
                     <h4>لا توجد حصص مجدولة لليوم</h4>
                     <p class="text-muted">لم يتم العثور على حصص نشطة لليوم {{ today|date:"Y-m-d" }}</p>
-                    <a href="{% url 'teachers:group_list' %}" class="btn btn-outline-primary">
-                        <i class="bi bi-plus-circle"></i>
-                        إضافة حصة جديدة
-                    </a>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createSessionModal">
+                        <i class="bi bi-plus-circle me-1"></i>
+                        إنشاء جلسة جديدة
+                    </button>
                 </div>
             </div>
         {% endif %}
     </div>
     
+</div>
+
+<!-- Create Session Modal -->
+<div class="modal fade" id="createSessionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="bi bi-plus-circle me-2"></i>
+                    إنشاء جلسة جديدة
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'attendance:create_session' %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">المجموعة <span class="text-danger">*</span></label>
+                        <select name="group_id" class="form-select" required>
+                            <option value="">-- اختر المجموعة --</option>
+                            {% for group in all_groups %}
+                            <option value="{{ group.group_id }}">
+                                {{ group.group_name }} - {{ group.teacher.full_name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">التاريخ</label>
+                        <input type="date" name="session_date" class="form-control" value="{{ today|date:'Y-m-d' }}">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg me-1"></i>
+                        إنشاء الجلسة
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 </div>
 {% endblock %}

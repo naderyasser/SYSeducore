@@ -4,8 +4,7 @@
 
 {% block content %}
 <div class="container-fluid py-4"
-     x-data="scannerData()"
-     x-init="init()"
+     x-data="scannerPageData"
      data-session-info="{{ group_name }} - {{ session_date|date:'Y-m-d' }}"
      data-session-id="{{ session_id }}"
      data-total-students="{{ total_students }}">
@@ -217,7 +216,7 @@
                                 </tr>
                             </thead>
                             <tbody id="attendance-list"
-                                   hx-get="{% url 'attendance:api_session_attendance' session_id %}"
+                                   hx-get="{% url 'attendance:htmx_api_session_attendance' session_id %}"
                                    hx-trigger="load, every 5s"
                                    hx-swap="innerHTML">
                                 <!-- Loaded via HTMX -->
@@ -284,12 +283,16 @@
 
 {% block page_scripts %}
 <script>
-// Scanner-specific Alpine.js data extension
-function scannerData() {
-    return {
-        ...scannerData(), // Inherit base scanner data
+// Scanner page data - extends the base scannerData
+document.addEventListener('alpine:init', () => {
+    Alpine.data('scannerPageData', () => ({
+        // Basic scanner data
+        barcode: '',
+        isProcessing: false,
+        recentScans: [],
+        maxRecentScans: 10,
         
-        // Session info - will be set from data attributes
+        // Session info
         sessionInfo: '',
         sessionId: null,
         
@@ -304,64 +307,87 @@ function scannerData() {
         // Search
         searchQuery: '',
         
-        // Update stats from HTMX response
-        updateStats(newStats) {
-            this.stats = { ...this.stats, ...newStats };
-        },
-        
-        // Clear result after delay
-        clearResultDelay: 3000,
-        
         init() {
             // Get data from DOM
-            const container = document.querySelector('[x-data]');
+            const container = this.$el;
             this.sessionInfo = container.dataset.sessionInfo || '';
             this.sessionId = parseInt(container.dataset.sessionId) || null;
             this.stats.total = parseInt(container.dataset.totalStudents) || 0;
             
-            // Call parent init
+            // Focus on input
             this.$nextTick(() => {
                 this.$refs.barcodeInput?.focus();
             });
             
             // Listen for HTMX events
             document.body.addEventListener('htmx:afterRequest', (event) => {
-                const xhr = event.detail.xhr;
-                if (event.detail.target.id === 'scan-result') {
+                if (event.detail.target?.id === 'scan-result') {
                     this.isProcessing = false;
                     
                     try {
-                        const response = JSON.parse(xhr.responseText);
+                        const response = JSON.parse(event.detail.xhr.responseText);
                         
-                        // Add to recent scans
-                        if (response.success) {
+                        if (response.student_name) {
                             this.addRecentScan({
                                 id: Date.now(),
                                 student_name: response.student_name,
-                                status: response.status,
+                                status: response.status || 'present',
                                 time: new Date().toLocaleTimeString('ar-EG'),
                                 message: response.message
                             });
                             
                             // Play sound
-                            playSound(response.status === 'blocked' ? 'error' : 'success');
-                            
-                            // Clear input
-                            this.clearInput();
-                            
-                            // Update stats
-                            if (response.stats) {
-                                this.updateStats(response.stats);
+                            if (typeof playSound === 'function') {
+                                playSound(response.status === 'blocked' ? 'error' : 'success');
                             }
+                        }
+                        
+                        // Update stats
+                        if (response.stats) {
+                            this.stats = { ...this.stats, ...response.stats };
                         }
                     } catch (e) {
                         // Not JSON response
-                        this.isProcessing = false;
                     }
+                    
+                    // Clear input
+                    this.clearInput();
                 }
             });
+        },
+        
+        clearInput() {
+            this.barcode = '';
+            this.$refs.barcodeInput?.focus();
+        },
+        
+        addRecentScan(scan) {
+            this.recentScans.unshift(scan);
+            if (this.recentScans.length > this.maxRecentScans) {
+                this.recentScans.pop();
+            }
+        },
+        
+        getStatusBadgeClass(status) {
+            const classes = {
+                present: 'bg-success',
+                late: 'bg-warning text-dark',
+                absent: 'bg-danger',
+                blocked: 'bg-secondary'
+            };
+            return classes[status] || 'bg-secondary';
+        },
+        
+        getStatusText(status) {
+            const texts = {
+                present: 'حاضر',
+                late: 'متأخر',
+                absent: 'غائب',
+                blocked: 'ممنوع'
+            };
+            return texts[status] || status;
         }
-    };
-}
+    }));
+});
 </script>
 {% endblock %}
