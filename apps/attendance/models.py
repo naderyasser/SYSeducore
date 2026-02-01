@@ -248,3 +248,95 @@ class BlockedAttempt(models.Model):
     
     def __str__(self):
         return f"{self.student.full_name} - {self.get_reason_display()} - {self.attempt_time.strftime('%Y-%m-%d %H:%M')}"
+
+
+class KioskDevice(models.Model):
+    """
+    Kiosk Device model for managing QR scanning devices.
+    Each kiosk is bound to a specific room.
+    """
+    device_id = models.CharField(
+        max_length=50,
+        unique=True,
+        primary_key=True,
+        verbose_name="معرف الجهاز",
+        help_text="معرف فريد للجهاز (مثال: KIOSK-001)"
+    )
+    device_name = models.CharField(
+        max_length=100,
+        verbose_name="اسم الجهاز",
+        help_text="اسم وصفي للجهاز (مثال: جهاز القاعة 1)"
+    )
+    room = models.ForeignKey(
+        'teachers.Room',
+        on_delete=models.PROTECT,
+        related_name='kiosks',
+        verbose_name="القاعة المرتبطة",
+        help_text="القاعة التي يخدمها هذا الجهاز"
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="نشط",
+        help_text="هل الجهاز يعمل حالياً؟"
+    )
+    
+    last_heartbeat = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="آخر اتصال",
+        help_text="آخر مرة أرسل فيها الجهاز إشارة حياة"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'kiosk_devices'
+        verbose_name = 'جهاز مسح ضوئي'
+        verbose_name_plural = 'أجهزة المسح الضوئي'
+        ordering = ['device_id']
+    
+    def __str__(self):
+        return f"{self.device_name} ({self.room.name})"
+    
+    def get_current_session(self):
+        """Get the currently active session for this kiosk's room"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        now = timezone.now()
+        current_time = now.time()
+        current_day = now.strftime('%A')
+        
+        # Get groups scheduled for this room at this time
+        from apps.teachers.models import Group
+        groups = Group.objects.filter(
+            room=self.room,
+            schedule_day=current_day,
+            is_active=True
+        )
+        
+        for group in groups:
+            start_time = group.schedule_time
+            end_time = (
+                timezone.datetime.combine(timezone.now().date(), start_time) +
+                timedelta(minutes=group.duration)
+            ).time()
+            
+            # Check if current time is within session window (30 min before to end)
+            early_window = (
+                timezone.datetime.combine(timezone.now().date(), start_time) -
+                timedelta(minutes=30)
+            ).time()
+            
+            if early_window <= current_time <= end_time:
+                # Get or create session for today
+                session, _ = Session.objects.get_or_create(
+                    group=group,
+                    session_date=now.date()
+                )
+                return session
+        
+        return None
+

@@ -179,3 +179,161 @@ def live_monitor_settings(request):
     }
     
     return render(request, 'attendance/monitor_settings.html', context)
+
+
+@require_http_methods(["POST"])
+def scan_teacher_qr(request):
+    """
+    Teacher QR scan endpoint - marks teacher as attended
+    """
+    try:
+        data = json.loads(request.body)
+        qr_code = data.get('qr_code', '').strip()
+        
+        if not qr_code or not qr_code.startswith('TEACHER-'):
+            return JsonResponse({
+                'success': False,
+                'message': 'كود المدرس غير صحيح',
+                'color_code': 'red'
+            })
+        
+        # Extract teacher ID
+        try:
+            teacher_id = int(qr_code.split('-')[1])
+        except (IndexError, ValueError):
+            return JsonResponse({
+                'success': False,
+                'message': 'كود المدرس غير صحيح',
+                'color_code': 'red'
+            })
+        
+        # Get teacher
+        from apps.teachers.models import Teacher
+        try:
+            teacher = Teacher.objects.get(teacher_id=teacher_id, is_active=True)
+        except Teacher.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'المدرس غير موجود',
+                'color_code': 'red'
+            })
+        
+        # Get current session for this teacher
+        now = timezone.now()
+        current_day = now.strftime('%A')
+        
+        from apps.teachers.models import Group
+        groups = Group.objects.filter(
+            teacher=teacher,
+            schedule_day=current_day,
+            is_active=True
+        )
+        
+        session_found = False
+        for group in groups:
+            # Check if within session time window
+            start_time = group.schedule_time
+            end_time = (
+                timezone.datetime.combine(now.date(), start_time) +
+                timezone.timedelta(minutes=group.duration)
+            ).time()
+            
+            current_time = now.time()
+            if start_time <= current_time <= end_time:
+                # Get or create session
+                session, _ = Session.objects.get_or_create(
+                    group=group,
+                    session_date=now.date()
+                )
+                
+                # Mark teacher as attended
+                session.teacher_attended = True
+                session.teacher_checkin_time = now
+                session.save(update_fields=['teacher_attended', 'teacher_checkin_time'])
+                
+                session_found = True
+                
+                logger.info(
+                    f"Teacher {teacher.full_name} checked in for session "
+                    f"{session.session_id} at {now}"
+                )
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': f'مرحباً {teacher.full_name}\nتم تسجيل حضورك بنجاح',
+                    'color_code': 'green',
+                    'teacher_name': teacher.full_name,
+                    'group_name': group.group_name,
+                    'session_time': start_time.strftime('%H:%M')
+                })
+        
+        if not session_found:
+            return JsonResponse({
+                'success': False,
+                'message': f'{teacher.full_name}\nلا توجد حصة مجدولة الآن',
+                'color_code': 'white'
+            })
+    
+    except Exception as e:
+        logger.exception(f"Error in teacher QR scan: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': 'خطأ في النظام',
+            'color_code': 'red'
+        })
+
+
+@require_http_methods(["GET"])
+def kiosk_current_session(request, device_id):
+    """
+    API endpoint for kiosk to get current session info
+    """
+    try:
+        from .models import KioskDevice
+        
+        kiosk = get_object_or_404(KioskDevice, device_id=device_id, is_active=True)
+        
+        # Update heartbeat
+        kiosk.last_heartbeat = timezone.now()
+        kiosk.save(update_fields=['last_heartbeat'])
+        
+        # Get current session
+        session = kiosk.get_current_session()
+        
+        if not session:
+            return JsonResponse({
+                'has_session': False,
+                'message': 'لا توجد حصة حالياً في هذه القاعة'
+            })
+        
+        # Get session details
+        group = session.group
+        
+        # Count attendance
+        total_students = group.enrollments.filter(is_active=True).count()
+        attended_count = Attendance.objects.filter(
+            session=session,
+            allow_entry=True
+        ).count()
+        
+        return JsonResponse({
+            'has_session': True,
+            'session_id': session.session_id,
+            'group_name': group.group_name,
+            'teacher_name': group.teacher.full_name,
+            'room_name': group.room.name,
+            'schedule_time': group.schedule_time.strftime('%H:%M'),
+            'duration': group.duration,
+            'total_students': total_students,
+            'attended_count': attended_count,
+            'is_cancelled': session.is_cancelled,
+            'cancellation_reason': session.cancellation_reason if session.is_cancelled else None
+        })
+    
+    except Exception as e:
+        logger.exception(f"Error getting kiosk session: {str(e)}")
+        return JsonResponse({
+            'has_session': False,
+            'error': 'خطأ في النظام'
+        }, status=500)
+

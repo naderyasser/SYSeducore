@@ -8,8 +8,14 @@ from .forms import StudentForm
 from .utils import QRCodeGenerator
 from apps.teachers.models import Group
 from apps.accounts.decorators import supervisor_required
-from weasyprint import HTML
 import io
+
+# Import weasyprint conditionally (requires GTK binaries on Windows)
+try:
+    from weasyprint import HTML
+    HAS_WEASYPRINT = True
+except (ImportError, OSError):
+    HAS_WEASYPRINT = False
 
 
 @login_required

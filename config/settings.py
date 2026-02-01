@@ -260,6 +260,10 @@ if crontab is not None:
             'task': 'apps.notifications.tasks.send_monthly_reminders_task',
             'schedule': crontab(hour=9, minute=0, day_of_month=1),  # 1st of every month at 9 AM
         },
+        'check-teacher-attendance-auto-cancel': {
+            'task': 'attendance.check_teacher_attendance',
+            'schedule': crontab(minute='*/5'),  # Every 5 minutes
+        },
     }
 else:
     CELERY_BEAT_SCHEDULE = {}

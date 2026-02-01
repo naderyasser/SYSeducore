@@ -37,6 +37,20 @@ class Teacher(models.Model):
     specialization = models.CharField(max_length=100, verbose_name="التخصص")
     hire_date = models.DateField(verbose_name="تاريخ التعيين")
     
+    # QR Code fields for teacher check-in
+    qr_code_base64 = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="رمز الاستجابة السريعة (QR)",
+        help_text="رمز QR للمدرس لتسجيل حضور الحصص"
+    )
+    qr_code_generated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="تاريخ توليد QR",
+        help_text="تاريخ آخر توليد لرمز QR"
+    )
+    
     is_active = models.BooleanField(default=True, verbose_name="نشط")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -49,6 +63,41 @@ class Teacher(models.Model):
     
     def __str__(self):
         return self.full_name
+    
+    def generate_qr_code(self):
+        """Generate QR code for teacher check-in"""
+        import qrcode
+        import io
+        import base64
+        from django.utils import timezone
+        
+        # Generate QR data with teacher identifier
+        qr_data = f"TEACHER-{self.teacher_id}"
+        
+        # Create QR code
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=4,
+        )
+        qr.add_data(qr_data)
+        qr.make(fit=True)
+        
+        # Create image
+        img = qr.make_image(fill_color="black", back_color="white")
+        
+        # Convert to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+        
+        # Update model
+        self.qr_code_base64 = f"data:image/png;base64,{img_str}"
+        self.qr_code_generated_at = timezone.now()
+        self.save(update_fields=['qr_code_base64', 'qr_code_generated_at'])
+        
+        return self.qr_code_base64
 
 
 class Group(models.Model):

@@ -52,4 +52,14 @@ urlpatterns = [
     
     # Live monitor settings
     path('monitor/settings/', views.live_monitor_settings, name='live_monitor_settings'),
+    
+    # ========================================
+    # Teacher & Kiosk APIs
+    # ========================================
+    
+    # Teacher QR scan endpoint
+    path('api/scan-teacher/', views.scan_teacher_qr, name='scan_teacher_qr'),
+    
+    # Kiosk current session API
+    path('api/kiosk/<str:device_id>/current-session/', views.kiosk_current_session, name='kiosk_current_session'),
 ]

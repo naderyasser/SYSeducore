@@ -119,6 +119,29 @@ class AttendanceService:
             )
 
         # ========================================
+        # الخطوة 2.5: فحص إلغاء الحصة (CRITICAL CHECK)
+        # ========================================
+        # Get or create session for today
+        session, _ = Session.objects.get_or_create(
+            group=matching_group,
+            session_date=current_time.date()
+        )
+        
+        # Check if session is cancelled
+        if session.is_cancelled:
+            return AttendanceService._create_blocked_response(
+                student=student,
+                status='no_session',
+                color_code='white',
+                allow_entry=False,
+                message=f'تم إلغاء الحصة اليوم\n{session.cancellation_reason}',
+                minutes_late=0,
+                reason='session_cancelled',
+                current_time=current_time,
+                group_name=matching_group.group_name
+            )
+
+        # ========================================
         # الخطوة 3: فحص الوقت الصارم (STRICT MODE)
         # ========================================
         time_check = AttendanceService._check_strict_time(
@@ -196,12 +219,7 @@ class AttendanceService:
         # ========================================
         # التسجيل النهائي (حضور مسموح)
         # ========================================
-        # الحصول على أو إنشاء الحصة
-        session, _ = Session.objects.get_or_create(
-            group=matching_group,
-            session_date=timezone.now().date(),
-            defaults={'teacher_attended': False}
-        )
+        # Session already retrieved in step 2.5, no need to get_or_create again
 
         # التحقق من عدم التسجيل المسبق
         if Attendance.objects.filter(student=student, session=session).exists():

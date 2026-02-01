@@ -601,6 +601,57 @@ class NotificationService:
             template_type='payment_confirmation',
             context=context
         )
+    
+    def send_session_cancelled(
+        self,
+        student,
+        group,
+        reason: str,
+        session_date
+    ) -> Dict[str, Any]:
+        """
+        Send session cancelled notification
+        
+        Args:
+            student: Student object
+            group: Group object
+            reason: Cancellation reason
+            session_date: Session date
+            
+        Returns:
+            dict: Result
+        """
+        context = {
+            'student_name': student.full_name,
+            'group_name': group.group_name,
+            'teacher_name': group.teacher.full_name,
+            'session_date': session_date.strftime('%Y-%m-%d'),
+            'reason': reason,
+        }
+        
+        # Fallback template if not in database
+        message = f"""إلغاء حصة ⚠️
+
+عزيزي ولي الأمر
+تم إلغاء حصة اليوم للطالب/ة {student.full_name}
+
+المادة: {group.group_name}
+المدرس: {group.teacher.full_name}
+التاريخ: {session_date.strftime('%Y-%m-%d')}
+
+السبب: {reason}
+
+نعتذر عن أي إزعاج 🙏"""
+        
+        return self.whatsapp_service.send_message(
+            to=student.parent_phone,
+            message=message,
+            student=student,
+            student_name=student.full_name,
+            notification_type='session_cancelled',
+            template_type='session_cancelled',
+            context=context
+        )
 
 
 # Import NotificationCost at module level for record_message
