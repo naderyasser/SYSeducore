@@ -75,7 +75,7 @@ def stats_api(request):
         return JsonResponse({'stats': stats, 'cached': False})
     
     except Exception as e:
-        logger.exception(f\"Error generating dashboard stats: {str(e)}\")
+        logger.exception(f"Error generating dashboard stats: {str(e)}")
         return JsonResponse({'error': 'Failed to load statistics'}, status=500)
 
 
@@ -105,10 +105,11 @@ def recent_activity_api(request):
                     'date': attendance.scan_time.strftime('%Y-%m-%d'),
                 })
             except AttributeError as e:
-                logger.warning(f\"Skipping malformed attendance record {attendance.attendance_id}: {str(e)}\")\n                continue
+                logger.warning(f"Skipping malformed attendance record {attendance.attendance_id}: {str(e)}")
+                continue
 
         return JsonResponse({'activities': activities})
     
     except Exception as e:
-        logger.exception(f\"Error fetching recent activities: {str(e)}\")
+        logger.exception(f"Error fetching recent activities: {str(e)}")
         return JsonResponse({'error': 'Failed to load activities'}, status=500)
