@@ -1,0 +1,504 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ room.name }} - تفاصيل القاعة{% endblock %}
+{% block page_title %}{{ room.name }} - تفاصيل القاعة{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-header {
+        background: #3b82f6;
+        color: #fff;
+        border-radius: 8px;
+        padding: 25px;
+        margin-bottom: 20px;
+    }
+
+    .detail-header h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .back-link {
+        color: rgba(255, 255, 255, 0.9);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        margin-bottom: 15px;
+        transition: color 0.2s;
+    }
+
+    .back-link:hover {
+        color: #fff;
+    }
+
+    .detail-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .detail-stat {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+    }
+
+    .detail-stat .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .detail-stat .label {
+        font-size: 0.8rem;
+        opacity: 0.9;
+    }
+
+    /* Capacity Bar */
+    .capacity-section {
+        margin-top: 15px;
+    }
+
+    .capacity-bar-bg {
+        height: 6px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .capacity-bar-fill {
+        height: 100%;
+        background: #10b981;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+
+    .capacity-bar-fill.warning { background: #f59e0b; }
+    .capacity-bar-fill.danger { background: #ef4444; }
+
+    /* Content Cards */
+    .content-card {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
+    }
+
+    .content-card .card-header {
+        padding: 18px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .content-card .card-body {
+        padding: 20px;
+    }
+
+    /* Stats Cards */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .summary-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .summary-card .icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        margin-bottom: 10px;
+    }
+
+    .summary-card .icon.blue { background: #dbeafe; color: #2563eb; }
+    .summary-card .icon.green { background: #dcfce7; color: #16a34a; }
+    .summary-card .icon.orange { background: #fef3c7; color: #d97706; }
+    .summary-card .icon.purple { background: #f3e8ff; color: #9333ea; }
+
+    .summary-card .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .summary-card .label {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    /* Schedule Items */
+    .schedule-day {
+        padding: 15px 20px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .schedule-day:last-child {
+        border-bottom: none;
+    }
+
+    .day-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+    }
+
+    .day-name {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 1rem;
+    }
+
+    .day-badge {
+        background: #dbeafe;
+        color: #1e40af;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .session-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 15px;
+        background: #f9fafb;
+        border-radius: 6px;
+        margin-bottom: 8px;
+    }
+
+    .session-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .session-time {
+        background: #3b82f6;
+        color: #fff;
+        padding: 5px 12px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    .session-info {
+        flex: 1;
+        margin: 0 15px;
+    }
+
+    .session-info h6 {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 2px;
+    }
+
+    .session-info p {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .session-count {
+        text-align: left;
+    }
+
+    .session-count .num {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #3b82f6;
+    }
+
+    .session-count .label {
+        font-size: 0.7rem;
+        color: #9ca3af;
+    }
+
+    /* Group Cards */
+    .groups-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 15px;
+    }
+
+    .group-item {
+        background: #f9fafb;
+        border-radius: 8px;
+        padding: 15px;
+        border-right: 4px solid #3b82f6;
+    }
+
+    .group-item h6 {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 12px;
+    }
+
+    .group-detail {
+        display: flex;
+        justify-content: space-between;
+        padding: 6px 0;
+        font-size: 0.85rem;
+    }
+
+    .group-detail .label {
+        color: #6b7280;
+    }
+
+    .group-detail .value {
+        font-weight: 500;
+        color: #1f2937;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 2rem;
+        margin-bottom: 10px;
+        display: block;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    @media (max-width: 768px) {
+        .detail-header {
+            padding: 20px;
+        }
+
+        .detail-header h1 {
+            font-size: 1.2rem;
+        }
+
+        .detail-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .groups-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="{% url 'teachers:room_list' %}" class="back-link">
+    <i class="bi bi-arrow-right me-1"></i>
+    العودة للقاعات
+</a>
+
+<!-- Detail Header -->
+<div class="detail-header">
+    <h1><i class="bi bi-door-open me-2"></i>{{ room.name }}</h1>
+    <p>تفاصيل القاعة وجدولها الأسبوعي</p>
+
+    <div class="detail-stats">
+        <div class="detail-stat">
+            <div class="value">{{ room.capacity }}</div>
+            <div class="label">السعة</div>
+        </div>
+        <div class="detail-stat">
+            <div class="value">{{ total_students }}</div>
+            <div class="label">المستخدم</div>
+        </div>
+        <div class="detail-stat">
+            <div class="value">{{ capacity_available }}</div>
+            <div class="label">متاح</div>
+        </div>
+        <div class="detail-stat" style="flex: 2;">
+            <div class="value" style="font-size: 1rem;">نسبة الاستخدام</div>
+            <div class="capacity-bar-bg">
+                <div class="capacity-bar-fill {% if occupancy_rate > 90 %}danger{% elif occupancy_rate > 70 %}warning{% endif %}"
+                     style="width: {{ occupancy_rate }}%;"></div>
+            </div>
+            <div class="label" style="margin-top: 5px;">{{ occupancy_rate|floatformat:1 }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="stats-row">
+    <div class="summary-card">
+        <div class="icon blue">
+            <i class="bi bi-collection"></i>
+        </div>
+        <div class="value">{{ groups_with_students|length }}</div>
+        <div class="label">المجموعات</div>
+    </div>
+    <div class="summary-card">
+        <div class="icon green">
+            <i class="bi bi-calendar-week"></i>
+        </div>
+        <div class="value">{{ weekly_schedule|length }}</div>
+        <div class="label">أيام نشطة</div>
+    </div>
+    <div class="summary-card">
+        <div class="icon orange">
+            <i class="bi bi-people"></i>
+        </div>
+        <div class="value">{{ total_students }}</div>
+        <div class="label">إجمالي الطلاب</div>
+    </div>
+    <div class="summary-card">
+        <div class="icon purple">
+            <i class="bi bi-clock"></i>
+        </div>
+        <div class="value">{{ groups_with_students|length }}</div>
+        <div class="label">حصص أسبوعياً</div>
+    </div>
+</div>
+
+<!-- Weekly Schedule -->
+{% if weekly_schedule %}
+<div class="content-card">
+    <div class="card-header">
+        <i class="bi bi-calendar-week me-2" style="color: #3b82f6;"></i>
+        الجدول الأسبوعي
+    </div>
+    <div class="card-body">
+        {% for day_key, day_data in weekly_schedule.items %}
+        <div class="schedule-day">
+            <div class="day-header">
+                <span class="day-name">{{ day_data.ar_name }}</span>
+                <span class="day-badge">{{ day_data.groups|length }} حصة</span>
+            </div>
+
+            {% for group in day_data.groups %}
+            <div class="session-item">
+                <div class="session-time">
+                    {{ group.schedule_time|date:"H:i" }}
+                </div>
+                <div class="session-info">
+                    <h6>{{ group.group_name }}</h6>
+                    <p>
+                        <i class="bi bi-person me-1"></i>{{ group.teacher.full_name|default:"-" }}
+                    </p>
+                </div>
+                <div class="session-count">
+                    <div class="num">
+                        {% for gs in groups_with_students %}
+                            {% if gs.group.group_id == group.group_id %}
+                                {{ gs.students_count }}
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="label">طالب</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="content-card">
+    <div class="card-body">
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <p>لا توجد حصص مجدولة لهذه القاعة</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Groups in Room -->
+{% if groups_with_students %}
+<div class="content-card">
+    <div class="card-header">
+        <i class="bi bi-collection me-2" style="color: #3b82f6;"></i>
+        المجموعات في القاعة
+    </div>
+    <div class="card-body">
+        <div class="groups-grid">
+            {% for item in groups_with_students %}
+            <div class="group-item">
+                <h6>{{ item.group.group_name }}</h6>
+                <div class="group-detail">
+                    <span class="label"><i class="bi bi-person me-1"></i>المعلم:</span>
+                    <span class="value">{{ item.group.teacher.full_name|default:"-" }}</span>
+                </div>
+                <div class="group-detail">
+                    <span class="label"><i class="bi bi-calendar3 me-1"></i>اليوم:</span>
+                    <span class="value">{{ item.group.get_schedule_day_display }}</span>
+                </div>
+                <div class="group-detail">
+                    <span class="label"><i class="bi bi-clock me-1"></i>الوقت:</span>
+                    <span class="value">{{ item.group.schedule_time|date:"H:i" }}</span>
+                </div>
+                <div class="group-detail">
+                    <span class="label"><i class="bi bi-people me-1"></i>الطلاب:</span>
+                    <span class="value">{{ item.students_count }} / {{ room.capacity }}</span>
+                </div>
+                <div class="group-detail">
+                    <span class="label"><i class="bi bi-cash me-1"></i>السعر:</span>
+                    <span class="value">{{ item.group.standard_fee }} ريال</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Action Buttons -->
+<div class="action-buttons">
+    <a href="{% url 'teachers:group_create' %}?room={{ room.room_id }}" class="btn btn-primary">
+        <i class="bi bi-plus me-1"></i>إضافة مجموعة
+    </a>
+    <a href="{% url 'teachers:room_update' room_id=room.room_id %}" class="btn btn-outline-secondary">
+        <i class="bi bi-pencil me-1"></i>تعديل القاعة
+    </a>
+    <a href="{% url 'teachers:room_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-list me-1"></i>قائمة القاعات
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh every 30 seconds
+setInterval(function() {
+    fetch('{% url "teachers:api_room_detail" room_id=room.room_id %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update capacity display
+                const occupancyBar = document.querySelector('.capacity-bar-fill');
+                if (occupancyBar) {
+                    const rate = data.room.occupancy_rate;
+                    occupancyBar.style.width = rate + '%';
+                    occupancyBar.className = 'capacity-bar-fill';
+                    if (rate > 90) {
+                        occupancyBar.classList.add('danger');
+                    } else if (rate > 70) {
+                        occupancyBar.classList.add('warning');
+                    }
+                }
+            }
+        })
+        .catch(error => console.error('Error updating capacity:', error));
+}, 30000);
+</script>
+{% endblock %}

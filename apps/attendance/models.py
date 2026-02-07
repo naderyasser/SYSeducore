@@ -62,7 +62,8 @@ class Attendance(models.Model):
         'accounts.User',
         on_delete=models.SET_NULL,
         null=True,
-        related_name='supervised_attendances'
+        related_name='supervised_attendances',
+        verbose_name="المشرف المسجل"
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -74,3 +75,86 @@ class Attendance(models.Model):
     
     def __str__(self):
         return f"{self.student.full_name} - {self.status}"
+
+
+class ActivityLog(models.Model):
+    """
+    سجل النشاط - لتتبع من قام بكل عملية
+    Who is Active? - تسجيل اسم المستخدم (الموظف) في كل عملية
+    """
+    ACTION_CHOICES = [
+        ('student_create', 'إنشاء طالب'),
+        ('student_update', 'تعديل طالب'),
+        ('student_delete', 'حذف طالب'),
+        ('attendance_scan', 'تسجيل حضور'),
+        ('payment_create', 'إنشاء دفعة'),
+        ('payment_update', 'تعديل دفعة'),
+        ('group_create', 'إنشاء مجموعة'),
+        ('group_update', 'تعديل مجموعة'),
+        ('enrollment_create', 'تسجيل في مجموعة'),
+        ('enrollment_remove', 'إزالة من مجموعة'),
+        ('override_financial', 'تجاوز القيود المالية'),
+        ('override_time', 'تجاوز قيود الوقت'),
+    ]
+
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='activity_logs',
+        verbose_name="المستخدم"
+    )
+    action = models.CharField(
+        max_length=30,
+        choices=ACTION_CHOICES,
+        verbose_name="نوع العملية"
+    )
+    description = models.TextField(
+        verbose_name="تفاصيل العملية"
+    )
+    target_model = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name="الموديل المستهدف"
+    )
+    target_id = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="معرف السجل"
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        verbose_name="عنوان IP"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'activity_logs'
+        verbose_name = 'سجل نشاط'
+        verbose_name_plural = 'سجلات النشاط'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        user_name = self.user.get_full_name() if self.user else 'مجهول'
+        return f"{user_name} - {self.get_action_display()} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
+
+    @classmethod
+    def log(cls, user, action, description, target_model='', target_id=None, request=None):
+        """Helper method to create a log entry"""
+        ip_address = None
+        if request:
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0]
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+
+        return cls.objects.create(
+            user=user,
+            action=action,
+            description=description,
+            target_model=target_model,
+            target_id=target_id,
+            ip_address=ip_address
+        )

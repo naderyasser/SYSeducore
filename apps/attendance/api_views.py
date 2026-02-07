@@ -9,26 +9,26 @@ from .services import AttendanceService
 @require_http_methods(["POST"])
 def process_scan(request):
     """
-    API endpoint لمعالجة مسح الباركود
+    API endpoint لمعالجة إدخال كود الطالب
     """
     try:
         data = json.loads(request.body)
-        barcode = data.get('barcode')
+        student_code = data.get('student_code')
         
-        if not barcode:
+        if not student_code:
             return JsonResponse({
                 'success': False,
-                'message': 'الباركود مطلوب'
+                'message': 'كود الطالب مطلوب'
             }, status=400)
         
-        result = AttendanceService.process_scan(barcode, request.user)
+        result = AttendanceService.process_scan(student_code, request.user)
         
         # تحويل الكائنات إلى dict
         if result.get('success') and 'student' in result:
             result['student'] = {
                 'id': result['student'].student_id,
                 'name': result['student'].full_name,
-                'barcode': result['student'].barcode
+                'student_code': result['student'].student_code
             }
             if 'attendance' in result:
                 result['attendance'] = {
@@ -36,6 +36,18 @@ def process_scan(request):
                     'status': result['attendance'].status,
                     'scan_time': result['attendance'].scan_time.isoformat()
                 }
+            if 'group' in result:
+                result['group'] = {
+                    'id': result['group'].group_id,
+                    'name': result['group'].group_name
+                }
+
+        # Convert instant_status Payment object
+        if 'instant_status' in result:
+            status_data = result['instant_status']
+            if 'current_payment' in status_data:
+                del status_data['current_payment']  # Remove non-serializable object
+            result['instant_status'] = status_data
         
         status_code = 200 if result['success'] else 400
         return JsonResponse(result, status=status_code)
@@ -48,7 +60,7 @@ def process_scan(request):
     except Exception as e:
         return JsonResponse({
             'success': False,
-            'message': 'حدث خطأ في الخادم'
+            'message': f'حدث خطأ في الخادم: {str(e)}'
         }, status=500)
 
 
@@ -104,7 +116,7 @@ def student_history(request, student_id):
             'student': {
                 'id': student.student_id,
                 'name': student.full_name,
-                'barcode': student.barcode,
+                'student_code': student.student_code,
             },
             'attendances': [
                 {

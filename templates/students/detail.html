@@ -1,6 +1,214 @@
 {% extends 'base.html' %}
 
 {% block title %}تفاصيل الطالب - {{ student.full_name }}{% endblock %}
+{% block page_title %}تفاصيل الطالب{% endblock %}
+
+{% block extra_css %}
+<style>
+    .student-profile-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        overflow: hidden;
+    }
+
+    .profile-header {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: #fff;
+        padding: 30px;
+        text-align: center;
+    }
+
+    .profile-avatar {
+        width: 100px;
+        height: 100px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        font-size: 3rem;
+        border: 4px solid rgba(255,255,255,0.3);
+    }
+
+    .profile-name {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .profile-code {
+        background: rgba(255,255,255,0.2);
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 1rem;
+        font-weight: 600;
+        display: inline-block;
+        margin-top: 10px;
+        font-family: monospace;
+        letter-spacing: 2px;
+    }
+
+    .profile-body {
+        padding: 25px;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: #6b7280;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .info-value {
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .barcode-section {
+        text-align: center;
+        padding: 20px;
+        background: #f9fafb;
+        border-radius: 12px;
+        margin-top: 20px;
+    }
+
+    .barcode-section img {
+        max-width: 250px;
+        width: 100%;
+        height: 60px;
+        object-fit: contain;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 8px;
+        background: #fff;
+    }
+
+    .section-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        margin-bottom: 20px;
+    }
+
+    .section-header {
+        padding: 20px 25px;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .section-title i {
+        color: #3b82f6;
+    }
+
+    .section-body {
+        padding: 20px 25px;
+    }
+
+    .group-card {
+        background: #f9fafb;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-right: 4px solid #3b82f6;
+    }
+
+    .group-card:last-child {
+        margin-bottom: 0;
+    }
+
+    .group-name {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 5px;
+    }
+
+    .group-info {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 15px;
+    }
+
+    .stat-box {
+        text-align: center;
+        padding: 15px;
+        background: #f9fafb;
+        border-radius: 10px;
+    }
+
+    .stat-box .number {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #3b82f6;
+    }
+
+    .stat-box .label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-top: 5px;
+    }
+
+    .attendance-table {
+        width: 100%;
+    }
+
+    .attendance-table th {
+        background: #f9fafb;
+        padding: 12px;
+        font-size: 0.85rem;
+        color: #6b7280;
+        font-weight: 600;
+        text-align: right;
+    }
+
+    .attendance-table td {
+        padding: 12px;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .action-buttons .btn {
+        flex: 1;
+        min-width: 140px;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="mb-4">
@@ -10,78 +218,242 @@
 </div>
 
 <div class="row g-4">
-    <div class="col-md-5">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-person me-2"></i>معلومات الطالب</h5>
+    <!-- Left Column - Student Profile -->
+    <div class="col-lg-4">
+        <div class="student-profile-card">
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                <h2 class="profile-name">{{ student.full_name }}</h2>
+                <div class="profile-code">{{ student.student_code }}</div>
             </div>
-            <div class="card-body">
-                <div class="mb-4 text-center">
-                    <div class="rounded-circle bg-primary d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px;">
-                        <i class="bi bi-person-fill text-white" style="font-size: 2.5rem;"></i>
-                    </div>
-                    <h4 class="mt-3 mb-1">{{ student.full_name }}</h4>
-                    <span class="badge bg-primary">كود: {{ student.student_code }}</span>
+
+            <div class="profile-body">
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-gender-ambiguous"></i>
+                        النوع
+                    </span>
+                    <span class="info-value">
+                        {% if student.gender == 'male' %}
+                        <span class="badge bg-primary">ولد</span>
+                        {% elif student.gender == 'female' %}
+                        <span class="badge bg-info">بنت</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </span>
                 </div>
 
-                <div class="border-top pt-3">
-                    <div class="d-flex justify-content-between mb-3">
-                        <span class="text-muted">رقم ولي الأمر</span>
-                        <span class="fw-semibold">{{ student.parent_phone }}</span>
-                    </div>
-                    <div class="d-flex justify-content-between mb-3">
-                        <span class="text-muted">الحالة</span>
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-phone"></i>
+                        رقم الطالب
+                    </span>
+                    <span class="info-value">{{ student.student_phone|default:"-" }}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-telephone"></i>
+                        رقم ولي الأمر
+                    </span>
+                    <span class="info-value">{{ student.parent_phone }}</span>
+                </div>
+
+                {% if student.parent_name %}
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-person-badge"></i>
+                        ولي الأمر
+                    </span>
+                    <span class="info-value">{{ student.parent_name }}</span>
+                </div>
+                {% endif %}
+
+                {% if student.education_stage %}
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-mortarboard"></i>
+                        المرحلة الدراسية
+                    </span>
+                    <span class="info-value">
+                        {{ student.get_education_stage_display }}
+                        {% if student.education_year %} - السنة {{ student.education_year }}{% endif %}
+                    </span>
+                </div>
+                {% endif %}
+
+                {% if student.education_type %}
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-book"></i>
+                        نوع التعليم
+                    </span>
+                    <span class="info-value">{{ student.get_education_type_display }}</span>
+                </div>
+                {% endif %}
+
+                {% if student.grade %}
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-mortarboard"></i>
+                        الصف الدراسي
+                    </span>
+                    <span class="info-value">{{ student.grade }}</span>
+                </div>
+                {% endif %}
+
+                {% if student.school_name %}
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-building"></i>
+                        المدرسة
+                    </span>
+                    <span class="info-value">{{ student.school_name }}</span>
+                </div>
+                {% endif %}
+
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-calendar"></i>
+                        تاريخ التسجيل
+                    </span>
+                    <span class="info-value">{{ student.created_at|date:"Y-m-d" }}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">
+                        <i class="bi bi-circle-fill {% if student.is_active %}text-success{% else %}text-danger{% endif %}"></i>
+                        الحالة
+                    </span>
+                    <span class="info-value">
                         {% if student.is_active %}
                         <span class="badge bg-success">نشط</span>
                         {% else %}
-                        <span class="badge bg-secondary">غير نشط</span>
+                        <span class="badge bg-danger">غير نشط</span>
                         {% endif %}
+                    </span>
+                </div>
+
+                <!-- Barcode Section -->
+                <div class="barcode-section">
+                    <img src="data:image/png;base64,{{ student.get_barcode_base64 }}" alt="Student Barcode">
+                    <div class="mt-2">
+                        <small class="text-muted">{{ student.student_code }}</small>
                     </div>
                 </div>
 
-                <div class="border-top pt-3">
-                    <h6 class="mb-3"><i class="bi bi-collection me-2"></i>المجموعات</h6>
-                    {% for enrollment in student.studentgroupenrollment_set.all %}
-                    <div class="d-flex align-items-center mb-2 p-2 rounded" style="background: var(--bg-color);">
-                        <i class="bi bi-people-fill text-primary me-2"></i>
-                        <div>
-                            <div class="fw-semibold">{{ enrollment.group.group_name }}</div>
-                            <small class="text-muted">{{ enrollment.group.teacher.full_name }}</small>
-                        </div>
-                    </div>
-                    {% empty %}
-                    <p class="text-muted text-center">لا يوجد مجموعات</p>
-                    {% endfor %}
-                </div>
-
-                <div class="d-grid mt-4">
-                    <a href="{% url 'students:update' student_id=student.student_id %}" class="btn btn-primary">
-                        <i class="bi bi-pencil me-2"></i>تعديل البيانات
+                <!-- Action Buttons -->
+                <div class="action-buttons mt-4">
+                    <a href="{% url 'students:update' student_id=student.student_id %}" class="btn btn-outline-primary">
+                        <i class="bi bi-pencil me-1"></i>تعديل
+                    </a>
+                    <a href="{% url 'students:id_card' student_id=student.student_id %}" target="_blank" class="btn btn-primary">
+                        <i class="bi bi-card-heading me-1"></i>البطاقة
                     </a>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-7">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>سجل الحضور</h5>
+    <!-- Right Column -->
+    <div class="col-lg-8">
+        <!-- Groups Section -->
+        <div class="section-card">
+            <div class="section-header">
+                <h5 class="section-title">
+                    <i class="bi bi-collection"></i>
+                    المجموعات المسجل فيها
+                </h5>
+                <button class="btn btn-sm btn-primary" onclick="showAddToGroup({{ student.student_id }}, '{{ student.full_name }}')">
+                    <i class="bi bi-plus-lg me-1"></i>إضافة لمجموعة
+                </button>
             </div>
-            <div class="card-body p-0">
+            <div class="section-body">
+                {% for enrollment in active_enrollments %}
+                <div class="group-card">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="group-name">{{ enrollment.group.group_name }}</div>
+                            <div class="group-info">
+                                <i class="bi bi-person me-1"></i>{{ enrollment.group.teacher.full_name|default:"-" }}
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-calendar3 me-1"></i>{{ enrollment.group.get_schedule_day_display }}
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-clock me-1"></i>{{ enrollment.group.schedule_time|date:"H:i" }}
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-door-open me-1"></i>{{ enrollment.group.room.name|default:"-" }}
+                            </div>
+                        </div>
+                        <div class="text-start">
+                            <span class="badge bg-info">{{ enrollment.get_financial_status_display }}</span>
+                            <button class="btn btn-sm btn-link text-danger" onclick="removeFromGroup({{ enrollment.id }})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">الطالب غير مسجل في أي مجموعة</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Attendance Stats -->
+        <div class="section-card">
+            <div class="section-header">
+                <h5 class="section-title">
+                    <i class="bi bi-graph-up"></i>
+                    إحصائيات الحضور (آخر 30 يوم)
+                </h5>
+            </div>
+            <div class="section-body">
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="number text-success">{{ attendance_stats.present }}</div>
+                        <div class="label">حاضر</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number text-warning">{{ attendance_stats.late }}</div>
+                        <div class="label">متأخر</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number text-danger">{{ attendance_stats.absent }}</div>
+                        <div class="label">غائب</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Attendance -->
+        <div class="section-card">
+            <div class="section-header">
+                <h5 class="section-title">
+                    <i class="bi bi-clock-history"></i>
+                    سجل الحضور الأخير
+                </h5>
+            </div>
+            <div class="section-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-hover mb-0">
+                    <table class="attendance-table">
                         <thead>
                             <tr>
                                 <th>التاريخ</th>
+                                <th>المجموعة</th>
                                 <th>الحالة</th>
                                 <th>الوقت</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for attendance in recent_attendances %}
+                            {% for attendance in recent_attendance %}
                             <tr>
-                                <td>{{ attendance.session.session_date|date:"Y-m-d" }}</td>
+                                <td>{{ attendance.scan_time|date:"Y-m-d" }}</td>
+                                <td>{{ attendance.session.group.group_name|default:"-" }}</td>
                                 <td>
                                     {% if attendance.status == 'present' %}
                                     <span class="badge bg-success">حاضر</span>
@@ -95,7 +467,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="3" class="text-center py-5 text-muted">
+                                <td colspan="4" class="text-center py-4 text-muted">
                                     <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>
                                     <p class="mt-2 mb-0">لا يوجد سجل حضور</p>
                                 </td>
@@ -108,4 +480,131 @@
         </div>
     </div>
 </div>
+
+<!-- Add to Group Modal -->
+<div class="modal fade" id="addGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">إضافة للمجموعة</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="availableGroupsList">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentStudentId = null;
+
+// Show Add to Group Modal
+function showAddToGroup(studentId, studentName) {
+    currentStudentId = studentId;
+
+    const modal = new bootstrap.Modal(document.getElementById('addGroupModal'));
+    modal.show();
+
+    document.getElementById('availableGroupsList').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary"></div>
+        </div>
+    `;
+
+    fetch(`{% url 'students:api_available_groups' 0 %}`.replace('0', studentId))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.groups.length > 0) {
+                const html = data.groups.map(group => `
+                    <div class="card mb-2 cursor-pointer" onclick="addToGroup(${group.group_id}, '${group.group_name.replace(/'/g, "\\'")}')" style="cursor: pointer;">
+                        <div class="card-body p-3">
+                            <h6 class="mb-1">${group.group_name}</h6>
+                            <small class="text-muted">
+                                <i class="bi bi-person me-1"></i>${group.teacher_name}
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-calendar3 me-1"></i>${group.schedule_day}
+                                <span class="mx-2">|</span>
+                                <i class="bi bi-clock me-1"></i>${group.schedule_time}
+                            </small>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('availableGroupsList').innerHTML = html;
+            } else {
+                document.getElementById('availableGroupsList').innerHTML = `
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                        <p class="mt-2 mb-0">لا توجد مجموعات متاحة</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('availableGroupsList').innerHTML = `
+                <div class="text-center py-4 text-danger">
+                    فشل تحميل المجموعات
+                </div>
+            `;
+        });
+}
+
+// Add to Group
+function addToGroup(groupId, groupName) {
+    if (!confirm(`هل تريد إضافة الطالب لمجموعة "${groupName}"؟`)) return;
+
+    fetch('{% url "students:api_add_to_group" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `student_id=${currentStudentId}&group_id=${groupId}&financial_status=normal`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message || 'فشلت الإضافة');
+        }
+    })
+    .catch(error => {
+        alert('فشل الاتصال بالخادم');
+    });
+}
+
+// Remove from Group
+function removeFromGroup(enrollmentId) {
+    if (!confirm('هل تريد إزالة الطالب من هذه المجموعة؟')) return;
+
+    fetch('{% url "students:api_remove_from_group" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `enrollment_id=${enrollmentId}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message || 'فشلت العملية');
+        }
+    })
+    .catch(error => {
+        alert('فشل الاتصال بالخادم');
+    });
+}
+</script>
 {% endblock %}

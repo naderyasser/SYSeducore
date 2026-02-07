@@ -1,6 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
 import json
 from .models import Payment
 
@@ -28,10 +29,17 @@ def record_payment(request, payment_id):
         
         return JsonResponse({
             'success': True,
-            'new_amount_paid': float(payment.amount_paid)
+            'new_amount_paid': float(payment.amount_paid),
+            'status': payment.status,
+            'status_display': payment.get_status_display()
         })
     except Payment.DoesNotExist:
         return JsonResponse({
             'success': False,
             'error': 'Payment not found'
         }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)

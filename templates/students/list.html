@@ -1,63 +1,1047 @@
 {% extends 'base.html' %}
 
-{% block title %}الطلاب{% endblock %}
+{% block title %}إدارة الطلاب{% endblock %}
+{% block page_title %}إدارة الطلاب{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Page Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    .page-header h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    /* Stats Overview */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+
+    .stat-card .stat-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        flex-shrink: 0;
+    }
+
+    .stat-card .stat-icon.blue { background: #dbeafe; color: #2563eb; }
+    .stat-card .stat-icon.green { background: #dcfce7; color: #16a34a; }
+    .stat-card .stat-icon.orange { background: #fef3c7; color: #d97706; }
+    .stat-card .stat-icon.red { background: #fee2e2; color: #dc2626; }
+
+    .stat-card .stat-content {
+        flex: 1;
+    }
+
+    .stat-card .stat-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #1f2937;
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+
+    /* Filter Section */
+    .filter-section {
+        background: #fff;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
+    }
+
+    .filter-row {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        align-items: end;
+    }
+
+    .search-box {
+        flex: 1;
+        min-width: 250px;
+    }
+
+    .filter-select {
+        min-width: 180px;
+    }
+
+    .filter-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+
+    /* Students Table */
+    .students-table-container {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    .students-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .students-table th {
+        background: #f9fafb;
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 14px 16px;
+        text-align: right;
+        border-bottom: 1px solid #e5e7eb;
+        white-space: nowrap;
+    }
+
+    .students-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid #f3f4f6;
+        vertical-align: middle;
+    }
+
+    .students-table tbody tr:hover {
+        background: #f9fafb;
+    }
+
+    .students-table tbody tr.inactive {
+        background: #fef2f2;
+        opacity: 0.7;
+    }
+
+    /* Student Info Cell */
+    .student-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .student-avatar {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 600;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .student-details h6 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0 0 3px 0;
+    }
+
+    .student-details .student-code {
+        font-size: 0.8rem;
+        color: #6b7280;
+        font-family: monospace;
+    }
+
+    /* Barcode Cell */
+    .barcode-cell {
+        width: 120px;
+        text-align: center;
+    }
+
+    .barcode-thumb {
+        width: 100px;
+        height: 50px;
+        cursor: pointer;
+        border-radius: 4px;
+        border: 1px solid #e5e7eb;
+        padding: 2px;
+        background: #fff;
+        transition: all 0.2s;
+        object-fit: contain;
+    }
+
+    .barcode-thumb:hover {
+        border-color: #3b82f6;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+        transform: scale(1.05);
+    }
+
+    /* Groups Cell */
+    .groups-cell {
+        max-width: 200px;
+    }
+
+    .group-tag {
+        display: inline-block;
+        background: #eff6ff;
+        color: #2563eb;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        margin: 2px;
+    }
+
+    .group-tag.empty {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    /* Status Badge */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .status-badge.active {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .status-badge.inactive {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+    }
+
+    .status-badge.active .status-dot {
+        background: #22c55e;
+        animation: pulse 2s infinite;
+    }
+
+    .status-badge.inactive .status-dot {
+        background: #ef4444;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    /* Action Buttons */
+    .actions-cell {
+        white-space: nowrap;
+        width: 1%;
+    }
+
+    .action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        margin: 0 2px;
+        font-size: 0.9rem;
+    }
+
+    .action-btn.view {
+        background: #dbeafe;
+        color: #2563eb;
+    }
+
+    .action-btn.view:hover {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    .action-btn.whatsapp {
+        background: #d1fae5;
+        color: #059669;
+    }
+
+    .action-btn.whatsapp:hover {
+        background: #10b981;
+        color: #fff;
+    }
+
+    .action-btn.add-group {
+        background: #fef3c7;
+        color: #d97706;
+    }
+
+    .action-btn.add-group:hover {
+        background: #f59e0b;
+        color: #fff;
+    }
+
+    .action-btn.id-card {
+        background: #ede9fe;
+        color: #7c3aed;
+    }
+
+    .action-btn.id-card:hover {
+        background: #8b5cf6;
+        color: #fff;
+    }
+
+    .action-btn.edit {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .action-btn.edit:hover {
+        background: #4b5563;
+        color: #fff;
+    }
+
+    /* Barcode Modal */
+    .barcode-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .barcode-modal.show {
+        display: flex;
+    }
+
+    .barcode-modal-content {
+        background: #fff;
+        border-radius: 16px;
+        padding: 30px;
+        max-width: 500px;
+        width: 90%;
+        text-align: center;
+    }
+
+    .barcode-modal-content img {
+        max-width: 350px;
+        width: 100%;
+        margin: 20px auto;
+        display: block;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px;
+    }
+
+    .barcode-modal h5 {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 5px;
+    }
+
+    .barcode-modal p {
+        color: #6b7280;
+        margin-bottom: 20px;
+    }
+
+    .barcode-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .barcode-actions .btn {
+        flex: 1;
+    }
+
+    /* Add to Group Modal */
+    .group-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .group-modal.show {
+        display: flex;
+    }
+
+    .group-modal-content {
+        background: #fff;
+        border-radius: 16px;
+        padding: 25px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .group-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+
+    .group-modal-header h5 {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .group-close-btn {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+    }
+
+    .group-close-btn:hover {
+        background: #f3f4f6;
+    }
+
+    .group-option {
+        padding: 15px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .group-option:hover {
+        border-color: #3b82f6;
+        background: #eff6ff;
+    }
+
+    .group-option h6 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 8px;
+    }
+
+    .group-option p {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .group-option .group-meta {
+        display: flex;
+        gap: 15px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+    }
+
+    .group-option .group-meta span {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+    .empty-state i {
+        font-size: 3.5rem;
+        color: #d1d5db;
+        margin-bottom: 15px;
+        display: block;
+    }
+
+    .empty-state h3 {
+        font-size: 1.1rem;
+        color: #6b7280;
+        margin-bottom: 10px;
+    }
+
+    .empty-state p {
+        color: #9ca3af;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+    }
+
+    /* Loading Spinner */
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 992px) {
+        .students-table-container {
+            overflow-x: auto;
+        }
+
+        .students-table {
+            min-width: 900px;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .filter-row {
+            flex-direction: column;
+        }
+
+        .search-box, .filter-select {
+            min-width: 100%;
+        }
+
+        .filter-actions {
+            width: 100%;
+        }
+
+        .filter-actions .btn {
+            flex: 1;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0"><i class="bi bi-people me-2"></i>قائمة الطلاب</h4>
-    <a href="{% url 'students:create' %}" class="btn btn-success">
-        <i class="bi bi-person-plus me-2"></i>إضافة طالب
-    </a>
+<!-- Page Header -->
+<div class="page-header">
+    <h1><i class="bi bi-people me-2" style="color: #3b82f6;"></i>إدارة الطلاب</h1>
+    <div class="d-flex gap-2">
+        <a href="{% url 'students:create' %}" class="btn btn-primary">
+            <i class="bi bi-person-plus me-1"></i>إضافة طالب
+        </a>
+    </div>
 </div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>الكود</th>
-                        <th>الاسم</th>
-                        <th>رقم الهاتف</th>
-                        <th>الحالة</th>
-                        <th>الإجراءات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for student in students %}
-                    <tr>
-                        <td>
-                            <span class="badge bg-primary">{{ student.student_code }}</span>
-                        </td>
-                        <td>{{ student.full_name }}</td>
-                        <td>{{ student.parent_phone }}</td>
-                        <td>
-                            {% if student.is_active %}
-                            <span class="badge bg-success">نشط</span>
-                            {% else %}
-                            <span class="badge bg-secondary">غير نشط</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{% url 'students:detail' student_id=student.student_id %}" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                            <a href="{% url 'students:update' student_id=student.student_id %}" class="btn btn-sm btn-outline-secondary">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                            <p class="mt-2 mb-0">لا يوجد طلاب</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<!-- Stats Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i class="bi bi-people"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value" id="totalStudents">{{ stats.total }}</div>
+            <div class="stat-label">إجمالي الطلاب</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i class="bi bi-collection"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value" id="studentsWithGroups">{{ stats.with_groups }}</div>
+            <div class="stat-label">في مجموعات</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i class="bi bi-person-x"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value" id="studentsNoGroups">{{ stats.without_groups }}</div>
+            <div class="stat-label">بدون مجموعات</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i class="bi bi-calendar-plus"></i>
+        </div>
+        <div class="stat-content">
+            <div class="stat-value" id="recentRegistrations">{{ stats.recent }}</div>
+            <div class="stat-label">جديد (30 يوم)</div>
         </div>
     </div>
 </div>
+
+<!-- Filter Section -->
+<div class="filter-section">
+    <form method="get" class="filter-row">
+        <div class="search-box">
+            <label class="form-label">بحث</label>
+            <input type="text"
+                   name="search"
+                   class="form-control"
+                   placeholder="بحث بالاسم، الكود، أو الهاتف..."
+                   value="{{ current_search }}">
+        </div>
+        <div class="filter-select">
+            <label class="form-label">المجموعة</label>
+            <select name="group" class="form-select">
+                <option value="">جميع المجموعات</option>
+                {% for group in all_groups %}
+                <option value="{{ group.group_id }}" {% if current_group == group.group_id|stringformat:"s" %}selected{% endif %}>
+                    {{ group.group_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="filter-select">
+            <label class="form-label">الحالة</label>
+            <select name="status" class="form-select">
+                <option value="">جميع الحالات</option>
+                <option value="active" {% if current_status == 'active' %}selected{% endif %}>نشط</option>
+                <option value="inactive" {% if current_status == 'inactive' %}selected{% endif %}>غير نشط</option>
+                <option value="with_groups" {% if current_status == 'with_groups' %}selected{% endif %}>في مجموعة</option>
+                <option value="no_groups" {% if current_status == 'no_groups' %}selected{% endif %}>بدون مجموعة</option>
+            </select>
+        </div>
+        <div class="filter-select">
+            <label class="form-label">النوع</label>
+            <select name="gender" class="form-select">
+                <option value="">الكل</option>
+                <option value="male" {% if current_gender == 'male' %}selected{% endif %}>ولاد</option>
+                <option value="female" {% if current_gender == 'female' %}selected{% endif %}>بنات</option>
+            </select>
+        </div>
+        <div class="filter-select">
+            <label class="form-label">المرحلة</label>
+            <select name="education_stage" class="form-select">
+                <option value="">جميع المراحل</option>
+                <option value="primary" {% if current_education_stage == 'primary' %}selected{% endif %}>ابتدائي</option>
+                <option value="preparatory" {% if current_education_stage == 'preparatory' %}selected{% endif %}>إعدادي</option>
+                <option value="secondary" {% if current_education_stage == 'secondary' %}selected{% endif %}>ثانوي</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-search me-1"></i>بحث
+            </button>
+            <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-x-circle me-1"></i>مسح
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Students Table -->
+<div class="students-table-container">
+    {% if students %}
+    <table class="students-table">
+        <thead>
+            <tr>
+                <th>الطالب</th>
+                <th>الباركود</th>
+                <th>النوع</th>
+                <th>رقم الهاتف</th>
+                <th>المجموعات</th>
+                <th>الحالة</th>
+                <th>الإجراءات</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for student in students %}
+            <tr class="{% if not student.is_active %}inactive{% endif %}">
+                <td>
+                    <div class="student-info">
+                        <div class="student-avatar">
+                            {{ student.full_name|slice:":1" }}
+                        </div>
+                        <div class="student-details">
+                            <h6>{{ student.full_name }}</h6>
+                            <span class="student-code">
+                                <i class="bi bi-hash"></i>{{ student.student_code }}
+                            </span>
+                        </div>
+                    </div>
+                </td>
+                <td class="barcode-cell">
+                    <img src="data:image/png;base64,{{ student.get_barcode_base64 }}"
+                         alt="Barcode"
+                         class="barcode-thumb"
+                         onclick="showBarcode({{ student.student_id }}, '{{ student.full_name }}', '{{ student.student_code }}')"
+                         title="انقر لتكبير الباركود">
+                </td>
+                <td>
+                    {% if student.gender == 'male' %}
+                    <span class="badge bg-primary" style="font-size: 0.75rem;">ولد</span>
+                    {% elif student.gender == 'female' %}
+                    <span class="badge bg-info" style="font-size: 0.75rem;">بنت</span>
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="tel:{{ student.parent_phone }}" class="text-decoration-none">
+                        <i class="bi bi-phone me-1 text-muted"></i>
+                        {{ student.parent_phone }}
+                    </a>
+                </td>
+                <td class="groups-cell">
+                    {% if student.active_enrollments %}
+                        {% for enrollment in student.active_enrollments %}
+                        <span class="group-tag">{{ enrollment.group.group_name }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="group-tag empty">غير مسجل</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if student.is_active %}
+                    <span class="status-badge active">
+                        <span class="status-dot"></span>
+                        نشط
+                    </span>
+                    {% else %}
+                    <span class="status-badge inactive">
+                        <span class="status-dot"></span>
+                        غير نشط
+                    </span>
+                    {% endif %}
+                </td>
+                <td class="actions-cell">
+                    <a href="{% url 'students:detail' student_id=student.student_id %}" class="action-btn view" title="عرض التفاصيل">
+                        <i class="bi bi-eye"></i>
+                    </a>
+                    <button class="action-btn whatsapp" onclick="sendBarcodeWhatsApp({{ student.student_id }})" title="إرسال الباركود عبر الواتساب">
+                        <i class="bi bi-whatsapp"></i>
+                    </button>
+                    <button class="action-btn add-group" onclick="showAddToGroup({{ student.student_id }}, '{{ student.full_name }}')" title="إضافة لمجموعة">
+                        <i class="bi bi-plus-circle"></i>
+                    </button>
+                    <a href="{% url 'students:id_card' student_id=student.student_id %}" target="_blank" class="action-btn id-card" title="عرض/طباعة البطاقة">
+                        <i class="bi bi-card-heading"></i>
+                    </a>
+                    <a href="{% url 'students:update' student_id=student.student_id %}" class="action-btn edit" title="تعديل">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <h3>لا يوجد طلاب</h3>
+        <p>ابدأ بإضافة طلاب جدد للمركز</p>
+        <a href="{% url 'students:create' %}" class="btn btn-primary">
+            <i class="bi bi-person-plus me-1"></i>إضافة طالب
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Barcode Modal -->
+<div class="barcode-modal" id="barcodeModal">
+    <div class="barcode-modal-content">
+        <h5 id="barcodeStudentName">اسم الطالب</h5>
+        <p id="barcodeStudentCode">كود: 1001</p>
+        <div id="barcodeImage">
+            <i class="bi bi-arrow-clockwise spin" style="font-size: 2rem; color: #3b82f6;"></i>
+        </div>
+        <div class="barcode-actions">
+            <button class="btn btn-outline-secondary" onclick="closeBarcodeModal()">
+                إغلاق
+            </button>
+            <button class="btn btn-success" onclick="downloadBarcode()">
+                <i class="bi bi-download me-1"></i>تحميل
+            </button>
+            <button class="btn btn-primary" onclick="printBarcode()">
+                <i class="bi bi-printer me-1"></i>طباعة
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Add to Group Modal -->
+<div class="group-modal" id="groupModal">
+    <div class="group-modal-content">
+        <div class="group-modal-header">
+            <h5>إضافة للمجموعة - <span id="modalStudentName"></span></h5>
+            <button class="group-close-btn" onclick="closeGroupModal()">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div id="availableGroupsList">
+            <div class="text-center py-4">
+                <i class="bi bi-arrow-clockwise spin" style="font-size: 2rem; color: #3b82f6;"></i>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Global variables
+let currentStudentId = null;
+let currentBarcodeImage = null;
+let currentStudentCode = null;
+let availableGroupsCache = {};
+
+// Show Barcode Modal
+function showBarcode(studentId, studentName, studentCode) {
+    currentStudentId = studentId;
+    currentStudentCode = studentCode;
+
+    document.getElementById('barcodeStudentName').textContent = studentName;
+    document.getElementById('barcodeStudentCode').textContent = `كود: ${studentCode}`;
+    document.getElementById('barcodeImage').innerHTML = '<i class="bi bi-arrow-clockwise spin" style="font-size: 2rem; color: #3b82f6;"></i>';
+
+    document.getElementById('barcodeModal').classList.add('show');
+
+    // Fetch barcode from API
+    fetch(`{% url 'students:api_barcode' 0 %}`.replace('0', studentId))
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentBarcodeImage = data.barcode;
+                document.getElementById('barcodeImage').innerHTML = `<img src="${data.barcode}" alt="Barcode" style="max-width: 200px;">`;
+            }
+        })
+        .catch(error => {
+            document.getElementById('barcodeImage').innerHTML = '<p class="text-danger">فشل تحميل الباركود</p>';
+        });
+}
+
+// Close Barcode Modal
+function closeBarcodeModal() {
+    document.getElementById('barcodeModal').classList.remove('show');
+    currentStudentId = null;
+    currentBarcodeImage = null;
+    currentStudentCode = null;
+}
+
+// Download Barcode
+function downloadBarcode() {
+    if (!currentBarcodeImage) return;
+
+    const link = document.createElement('a');
+    link.href = currentBarcodeImage;
+    link.download = `barcode_${currentStudentCode}.png`;
+    link.click();
+}
+
+// Print Barcode
+function printBarcode() {
+    if (!currentBarcodeImage) return;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+        <html dir="rtl">
+        <head>
+            <title>طباعة الباركود - ${currentStudentCode}</title>
+            <style>
+                body { text-align: center; padding: 20px; font-family: Arial; }
+                img { max-width: 300px; margin: 20px 0; }
+                .code { font-size: 24px; font-weight: bold; margin: 10px 0; }
+            </style>
+        </head>
+        <body>
+            <img src="${currentBarcodeImage}" />
+            <div class="code">${currentStudentCode}</div>
+            <script>window.onload = function() { window.print(); }<\/script>
+        </body>
+        </html>
+    `);
+    printWindow.document.close();
+}
+
+// Send Barcode via WhatsApp
+function sendBarcodeWhatsApp(studentId) {
+    if (!confirm('هل تريد إرسال الباركود عبر الواتساب لولي أمر الطالب؟')) return;
+
+    const btn = event.target.closest('.action-btn');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise spin"></i>';
+    btn.disabled = true;
+
+    fetch(`{% url 'students:api_send_barcode' 0 %}`.replace('0', studentId), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('تم إرسال الباركود بنجاح عبر الواتساب');
+        } else {
+            alert(data.message || 'فشل إرسال الباركود');
+        }
+    })
+    .catch(error => {
+        alert('فشل الاتصال بالخادم');
+    })
+    .finally(() => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+    });
+}
+
+// Show Add to Group Modal
+async function showAddToGroup(studentId, studentName) {
+    currentStudentId = studentId;
+
+    document.getElementById('modalStudentName').textContent = studentName;
+    document.getElementById('availableGroupsList').innerHTML = `
+        <div class="text-center py-4">
+            <i class="bi bi-arrow-clockwise spin" style="font-size: 2rem; color: #3b82f6;"></i>
+        </div>
+    `;
+
+    document.getElementById('groupModal').classList.add('show');
+
+    try {
+        const response = await fetch(`{% url 'students:api_available_groups' 0 %}`.replace('0', studentId));
+        const data = await response.json();
+
+        if (data.success && data.groups.length > 0) {
+            availableGroupsCache = data.groups;
+            renderAvailableGroups();
+        } else {
+            document.getElementById('availableGroupsList').innerHTML = `
+                <div class="text-center py-4">
+                    <i class="bi bi-inbox" style="font-size: 2rem; color: #d1d5db;"></i>
+                    <p class="text-muted mt-2">لا توجد مجموعات متاحة</p>
+                </div>
+            `;
+        }
+    } catch (error) {
+        document.getElementById('availableGroupsList').innerHTML = `
+            <div class="text-center py-4">
+                <p class="text-danger">فشل تحميل المجموعات</p>
+            </div>
+        `;
+    }
+}
+
+// Render Available Groups
+function renderAvailableGroups() {
+    const container = document.getElementById('availableGroupsList');
+
+    container.innerHTML = availableGroupsCache.map(group => `
+        <div class="group-option" onclick="addToGroup(${group.group_id}, '${group.group_name.replace(/'/g, "\\'")}')">
+            <h6>${group.group_name}</h6>
+            <p><i class="bi bi-person me-1"></i>${group.teacher_name}</p>
+            <div class="group-meta">
+                <span><i class="bi bi-calendar3 me-1"></i>${group.schedule_day}</span>
+                <span><i class="bi bi-clock me-1"></i>${group.schedule_time}</span>
+                <span><i class="bi bi-door-open me-1"></i>${group.room_name}</span>
+            </div>
+            <div class="group-meta">
+                <span><i class="bi bi-people me-1"></i>${group.enrolled} / ${group.capacity}</span>
+                <span><i class="bi bi-cash me-1"></i>${group.standard_fee} ج.م</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Add Student to Group
+async function addToGroup(groupId, groupName) {
+    if (!confirm(`هل تريد إضافة الطالب لمجموعة "${groupName}"؟`)) return;
+
+    try {
+        const response = await fetch('{% url "students:api_add_to_group" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: `student_id=${currentStudentId}&group_id=${groupId}&financial_status=normal`
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert(data.message);
+            closeGroupModal();
+            location.reload();
+        } else {
+            alert(data.message || 'فشلت الإضافة');
+        }
+    } catch (error) {
+        alert('فشل الاتصال بالخادم');
+    }
+}
+
+// Close Group Modal
+function closeGroupModal() {
+    document.getElementById('groupModal').classList.remove('show');
+    currentStudentId = null;
+    availableGroupsCache = {};
+}
+
+// Close modals on background click
+document.getElementById('barcodeModal').addEventListener('click', function(e) {
+    if (e.target === this) closeBarcodeModal();
+});
+
+document.getElementById('groupModal').addEventListener('click', function(e) {
+    if (e.target === this) closeGroupModal();
+});
+
+// Close on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeBarcodeModal();
+        closeGroupModal();
+    }
+});
+</script>
 {% endblock %}

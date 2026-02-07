@@ -2,6 +2,55 @@
 
 {% block title %}{% if teacher %}تعديل المدرس{% else %}إضافة مدرس جديد{% endif %}{% endblock %}
 
+{% block extra_css %}
+<style>
+    .subjects-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 10px;
+        padding: 15px;
+        background: #f9fafb;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+        max-height: 250px;
+        overflow-y: auto;
+    }
+    .subject-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .subject-checkbox:hover {
+        border-color: #3b82f6;
+    }
+    .subject-checkbox input:checked + span {
+        color: #2563eb;
+        font-weight: 600;
+    }
+    .subject-checkbox input:checked ~ span {
+        color: #2563eb;
+    }
+    .photo-preview {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 3px solid #e5e7eb;
+    }
+    .photo-upload-area {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="mb-4">
     <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary">
@@ -22,10 +71,12 @@
                 </h5>
             </div>
             <div class="card-body">
-                <form method="post">
+                <form method="post" enctype="multipart/form-data">
                     {% csrf_token %}
 
-                    <div class="row g-3">
+                    <!-- Basic Info -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-person me-2"></i>البيانات الأساسية</h6>
+                    <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
                             {{ form.full_name }}
@@ -37,12 +88,12 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">البريد الإلكتروني <span class="text-danger">*</span></label>
+                            <label class="form-label">البريد الإلكتروني <span class="text-muted">(اختياري)</span></label>
                             {{ form.email }}
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">التخصص <span class="text-danger">*</span></label>
+                            <label class="form-label">التخصص الرئيسي <span class="text-danger">*</span></label>
                             {{ form.specialization }}
                         </div>
 
@@ -55,6 +106,44 @@
                             <div class="form-check form-switch mt-4">
                                 {{ form.is_active }}
                                 <label class="form-check-label">مدرس نشط</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Subjects -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-book me-2"></i>المواد الدراسية</h6>
+                    <div class="mb-4">
+                        <p class="text-muted small mb-2">اختر المواد التي يدرسها المدرس (يمكن اختيار أكثر من مادة):</p>
+                        <div class="subjects-grid">
+                            {% for checkbox in form.subjects %}
+                            <label class="subject-checkbox">
+                                {{ checkbox.tag }}
+                                <span>{{ checkbox.choice_label }}</span>
+                            </label>
+                            {% empty %}
+                            <p class="text-muted text-center py-2 mb-0">
+                                لا توجد مواد متاحة. أضف المواد أولاً من لوحة الإدارة.
+                            </p>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Photo -->
+                    <h6 class="text-muted mb-3"><i class="bi bi-camera me-2"></i>صورة المدرس</h6>
+                    <div class="mb-4">
+                        <div class="photo-upload-area">
+                            {% if teacher and teacher.photo %}
+                            <img src="{{ teacher.photo.url }}" alt="صورة المدرس" class="photo-preview" id="photoPreview">
+                            {% else %}
+                            <img src="" alt="معاينة الصورة" class="photo-preview" id="photoPreview" style="display: none;">
+                            <div id="photoPlaceholder" class="d-flex align-items-center justify-content-center bg-light rounded-circle" 
+                                 style="width: 120px; height: 120px; border: 3px dashed #d1d5db;">
+                                <i class="bi bi-person-bounding-box" style="font-size: 2.5rem; color: #9ca3af;"></i>
+                            </div>
+                            {% endif %}
+                            <div>
+                                {{ form.photo }}
+                                <div class="form-text">صورة شخصية للمدرس (ستظهر في بطاقة الطالب) - اختياري</div>
                             </div>
                         </div>
                     </div>
@@ -73,4 +162,24 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Photo preview
+document.getElementById('id_photo')?.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = function(ev) {
+            const preview = document.getElementById('photoPreview');
+            preview.src = ev.target.result;
+            preview.style.display = 'block';
+            const placeholder = document.getElementById('photoPlaceholder');
+            if (placeholder) placeholder.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+    }
+});
+</script>
 {% endblock %}

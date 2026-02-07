@@ -1,5 +1,6 @@
 from django.db.models import Sum, Q
 from datetime import datetime
+from decimal import Decimal
 from .models import Payment
 from apps.teachers.models import Group
 
@@ -12,28 +13,42 @@ class SettlementService:
         حساب مستحقات المدرس لشهر معين
         """
         # الحصول على مجموعات المدرس
-        groups = Group.objects.filter(teacher_id=teacher_id)
-        
-        total_revenue = 0
+        groups = Group.objects.filter(teacher_id=teacher_id, is_active=True)
+
+        total_revenue = Decimal('0')
+        total_center_share = Decimal('0')
         breakdown = []
-        
+
         for group in groups:
             group_data = SettlementService.calculate_group_revenue(
                 group.group_id, year, month
             )
-            
-            total_revenue += group_data['revenue']
+
+            group_revenue = Decimal(str(group_data['revenue']))
+            group_center_percentage = group.center_percentage
+            group_center_share = group_revenue * (group_center_percentage / Decimal('100'))
+            group_teacher_share = group_revenue - group_center_share
+
+            total_revenue += group_revenue
+            total_center_share += group_center_share
+
             breakdown.append({
                 'group_name': group.group_name,
                 'students': group_data['students'],
-                'revenue': group_data['revenue']
+                'revenue': float(group_revenue),
+                'center_percentage': float(group_center_percentage),
+                'center_share': float(group_center_share),
+                'teacher_share': float(group_teacher_share)
             })
-        
-        # حساب الحصص
-        center_percentage = groups.first().center_percentage if groups.exists() else 30
-        center_share = total_revenue * (center_percentage / 100)
-        teacher_share = total_revenue - center_share
-        
+
+        teacher_share = total_revenue - total_center_share
+
+        # Calculate average center percentage for display
+        avg_center_percentage = Decimal('0')
+        if groups.exists():
+            total_percentage = sum(g.center_percentage for g in groups)
+            avg_center_percentage = total_percentage / groups.count()
+
         return {
             'success': True,
             'data': {
@@ -41,9 +56,9 @@ class SettlementService:
                 'year': year,
                 'month': month,
                 'total_revenue': round(float(total_revenue), 2),
-                'center_share': round(float(center_share), 2),
+                'center_share': round(float(total_center_share), 2),
                 'teacher_share': round(float(teacher_share), 2),
-                'center_percentage': float(center_percentage),
+                'center_percentage': float(avg_center_percentage),
                 'breakdown': breakdown
             }
         }
@@ -72,7 +87,7 @@ class SettlementService:
             month__lt=end_date
         ).select_related('student', 'group')
 
-        revenue = 0
+        revenue = Decimal('0')
         students = []
 
         for payment in payments:
@@ -90,7 +105,7 @@ class SettlementService:
                 financial_status_display = 'غير محدد'
 
             expected_fee = student.get_monthly_fee_for_group(group)
-            amount_paid = float(payment.amount_paid)
+            amount_paid = payment.amount_paid
 
             revenue += amount_paid
 
@@ -98,12 +113,12 @@ class SettlementService:
                 'name': student.full_name,
                 'financial_status': financial_status_display,
                 'expected_fee': float(expected_fee),
-                'amount_paid': amount_paid,
+                'amount_paid': float(amount_paid),
                 'payment_status': payment.get_status_display(),
                 'sessions_attended': payment.sessions_attended
             })
 
         return {
-            'revenue': revenue,
+            'revenue': float(revenue),
             'students': students
         }

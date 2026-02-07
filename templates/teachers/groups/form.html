@@ -39,7 +39,7 @@
                         <div class="col-md-6">
                             <label class="form-label">القاعة</label>
                             {{ form.room }}
-                            <small class="text-muted">اختياري - النظام يمنع التعارضات تلقائياً</small>
+                            <small class="text-muted">اختياري - النظام يمنع تعارض الأوقات تلقائياً (حسب المدة)</small>
                         </div>
 
                         <div class="col-md-6">
@@ -48,10 +48,44 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">وقت الحصة <span class="text-danger">*</span></label>
+                            <label class="form-label">وقت البداية <span class="text-danger">*</span></label>
                             {{ form.schedule_time }}
                         </div>
 
+                        <div class="col-md-6">
+                            <label class="form-label">مدة الحصة (بالدقيقة) <span class="text-danger">*</span></label>
+                            {{ form.duration_minutes }}
+                            <small class="text-muted">الافتراضي: 120 دقيقة (ساعتين)</small>
+                        </div>
+                    </div>
+
+                    <!-- Classification Section -->
+                    <h6 class="mt-4 mb-3 text-muted border-bottom pb-2">
+                        <i class="bi bi-tag me-2"></i>تصنيف المجموعة
+                    </h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">نوع الطلاب</label>
+                            {{ form.gender_type }}
+                            <small class="text-muted">ولاد فقط / بنات فقط / مختلط</small>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">المرحلة الدراسية</label>
+                            {{ form.education_stage }}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">السنة الدراسية</label>
+                            {{ form.education_year }}
+                        </div>
+                    </div>
+
+                    <!-- Financial Section -->
+                    <h6 class="mt-4 mb-3 text-muted border-bottom pb-2">
+                        <i class="bi bi-cash-stack me-2"></i>البيانات المالية
+                    </h6>
+                    <div class="row g-3">
                         <div class="col-md-6">
                             <label class="form-label">السعر الشهري <span class="text-danger">*</span></label>
                             {{ form.standard_fee }}

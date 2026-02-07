@@ -1,94 +1,438 @@
 {% extends 'base.html' %}
 
-{% block title %}القاعات{% endblock %}
+{% block title %}إدارة القاعات{% endblock %}
+{% block page_title %}إدارة القاعات{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Navigation Tabs */
+    .nav-tabs-custom {
+        background: #fff;
+        border-radius: 8px;
+        padding: 5px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        margin-bottom: 20px;
+    }
+
+    .nav-tabs-custom .nav-link {
+        color: #6b7280;
+        border-radius: 6px;
+        padding: 8px 16px;
+        margin: 0 2px;
+        transition: all 0.2s;
+        border: none;
+    }
+
+    .nav-tabs-custom .nav-link:hover {
+        background: #f3f4f6;
+        color: #1f2937;
+    }
+
+    .nav-tabs-custom .nav-link.active {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    /* Page Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .page-header h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    /* Stats Overview */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stat-card {
+        background: #fff;
+        border-radius: 8px;
+        padding: 18px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .stat-card .stat-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        margin-bottom: 10px;
+    }
+
+    .stat-card .stat-icon.blue { background: #dbeafe; color: #2563eb; }
+    .stat-card .stat-icon.green { background: #dcfce7; color: #16a34a; }
+    .stat-card .stat-icon.orange { background: #fef3c7; color: #d97706; }
+    .stat-card .stat-icon.red { background: #fee2e2; color: #dc2626; }
+
+    .stat-card .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    /* Room Cards Grid */
+    .rooms-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 15px;
+    }
+
+    .room-card {
+        background: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        transition: box-shadow 0.2s;
+    }
+
+    .room-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+
+    .room-card-header {
+        background: #3b82f6;
+        color: #fff;
+        padding: 18px;
+    }
+
+    .room-card-header .room-icon {
+        width: 45px;
+        height: 45px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        margin-bottom: 10px;
+    }
+
+    .room-card-header h3 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+
+    .room-card-header .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 20px;
+        font-size: 0.75rem;
+    }
+
+    .room-card-body {
+        padding: 18px;
+    }
+
+    .info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .info-row:last-child {
+        border-bottom: none;
+    }
+
+    .info-label {
+        color: #6b7280;
+        font-size: 0.85rem;
+    }
+
+    .info-value {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 0.9rem;
+    }
+
+    /* Capacity Bar */
+    .capacity-wrapper {
+        margin-top: 12px;
+    }
+
+    .capacity-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+        font-size: 0.85rem;
+    }
+
+    .capacity-bar-bg {
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .capacity-bar-fill {
+        height: 100%;
+        background: #10b981;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+
+    .capacity-bar-fill.warning { background: #f59e0b; }
+    .capacity-bar-fill.danger { background: #ef4444; }
+
+    .room-card-footer {
+        padding: 12px 18px;
+        background: #f9fafb;
+        display: flex;
+        gap: 8px;
+    }
+
+    .room-card-footer .btn {
+        flex: 1;
+        font-size: 0.85rem;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        color: #d1d5db;
+        margin-bottom: 15px;
+        display: block;
+    }
+
+    .empty-state h3 {
+        font-size: 1.1rem;
+        color: #6b7280;
+        margin-bottom: 10px;
+    }
+
+    .empty-state p {
+        color: #9ca3af;
+        font-size: 0.9rem;
+        margin-bottom: 20px;
+    }
+
+    @media (max-width: 768px) {
+        .rooms-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .page-header {
+            flex-direction: column;
+            gap: 15px;
+            align-items: stretch;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <!-- Navigation Tabs -->
-<div class="mb-4">
-    <ul class="nav nav-pills">
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'teachers:list' %}">
-                <i class="bi bi-person-workspace me-2"></i>المدرسين
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link active" href="{% url 'teachers:room_list' %}">
-                <i class="bi bi-door-open me-2"></i>القاعات
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" href="{% url 'teachers:group_list' %}">
-                <i class="bi bi-collection me-2"></i>المجموعات
-            </a>
-        </li>
-    </ul>
-</div>
+<ul class="nav nav-tabs-custom">
+    <li class="nav-item">
+        <a class="nav-link" href="{% url 'teachers:list' %}">
+            <i class="bi bi-person-badge me-1"></i>المدرسين
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link active" href="{% url 'teachers:room_list' %}">
+            <i class="bi bi-door-open me-1"></i>القاعات
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="{% url 'teachers:group_list' %}">
+            <i class="bi bi-collection me-1"></i>المجموعات
+        </a>
+    </li>
+</ul>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0"><i class="bi bi-door-open me-2"></i>إدارة القاعات</h4>
-    <a href="{% url 'teachers:room_create' %}" class="btn btn-success">
-        <i class="bi bi-plus-lg me-2"></i>إضافة قاعة
+<!-- Page Header -->
+<div class="page-header">
+    <h1><i class="bi bi-door-open me-2" style="color: #3b82f6;"></i>إدارة القاعات</h1>
+    <a href="{% url 'teachers:room_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus me-1"></i>إضافة قاعة
     </a>
 </div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>اسم القاعة</th>
-                        <th>السعة</th>
-                        <th>عدد المجموعات</th>
-                        <th>الحالة</th>
-                        <th>الإجراءات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for room in rooms %}
-                    <tr>
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="rounded bg-primary d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
-                                    <i class="bi bi-door-open text-white"></i>
-                                </div>
-                                <span class="fw-semibold">{{ room.name }}</span>
-                            </div>
-                        </td>
-                        <td>{{ room.capacity }} طالب</td>
-                        <td>
-                            <span class="badge bg-primary">{{ room.groups.count }} مجموعات</span>
-                        </td>
-                        <td>
-                            {% if room.is_active %}
-                            <span class="badge bg-success">نشط</span>
-                            {% else %}
-                            <span class="badge bg-secondary">غير نشط</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{% url 'teachers:room_update' room_id=room.room_id %}" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            <form method="post" action="{% url 'teachers:room_delete' room_id=room.room_id %}" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذه القاعة؟')">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                            <p class="mt-2 mb-0">لا توجد قاعات</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<!-- Stats Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon blue">
+            <i class="bi bi-door-open"></i>
         </div>
+        <div class="stat-value">{{ rooms|length }}</div>
+        <div class="stat-label">إجمالي القاعات</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green">
+            <i class="bi bi-check-circle"></i>
+        </div>
+        <div class="stat-value" id="totalGroups">0</div>
+        <div class="stat-label">المجموعات</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon orange">
+            <i class="bi bi-calendar-week"></i>
+        </div>
+        <div class="stat-value" id="totalSessions">0</div>
+        <div class="stat-label">الحصص أسبوعياً</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon red">
+            <i class="bi bi-people"></i>
+        </div>
+        <div class="stat-value" id="totalCapacity">0</div>
+        <div class="stat-label">السعة الكلية</div>
     </div>
 </div>
+
+<!-- Room Cards Grid -->
+{% if rooms %}
+<div class="rooms-grid">
+    {% for room in rooms %}
+    <div class="room-card">
+        <div class="room-card-header">
+            <div class="room-icon">
+                <i class="bi bi-door-open"></i>
+            </div>
+            <h3>{{ room.name }}</h3>
+            <div class="status-badge">
+                {% if room.is_active %}
+                <i class="bi bi-check-circle me-1"></i>نشط
+                {% else %}
+                <i class="bi bi-x-circle me-1"></i>غير نشط
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="room-card-body">
+            <div class="info-row">
+                <span class="info-label"><i class="bi bi-people me-1"></i>السعة</span>
+                <span class="info-value">{{ room.capacity }} طالب</span>
+            </div>
+
+            <div class="info-row">
+                <span class="info-label"><i class="bi bi-collection me-1"></i>المجموعات</span>
+                <span class="info-value">{{ room.groups.count }} مجموعة</span>
+            </div>
+
+            <div class="info-row">
+                <span class="info-label"><i class="bi bi-calendar3 me-1"></i>الحصص</span>
+                <span class="info-value" id="sessions-{{ room.room_id }}">-</span>
+            </div>
+
+            <div class="capacity-wrapper">
+                <div class="capacity-header">
+                    <span class="info-label">نسبة الاستخدام</span>
+                    <span class="info-value" id="occupancy-{{ room.room_id }}">0%</span>
+                </div>
+                <div class="capacity-bar-bg">
+                    <div class="capacity-bar-fill" id="capacity-bar-{{ room.room_id }}" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="room-card-footer">
+            <a href="{% url 'teachers:room_detail' room_id=room.room_id %}" class="btn btn-outline-primary btn-sm">
+                <i class="bi bi-eye me-1"></i>التفاصيل
+            </a>
+            <a href="{% url 'teachers:room_update' room_id=room.room_id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-pencil me-1"></i>تعديل
+            </a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-inbox"></i>
+    <h3>لا توجد قاعات</h3>
+    <p>ابدأ بإضافة قاعات جديدة للمركز</p>
+    <a href="{% url 'teachers:room_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus me-1"></i>إضافة قاعة
+    </a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Load room statistics from API
+document.addEventListener('DOMContentLoaded', function() {
+    let totalGroups = 0;
+    let totalCapacity = 0;
+    let totalSessions = 0;
+
+    {% for room in rooms %}
+    totalCapacity += {{ room.capacity }};
+    totalGroups += {{ room.groups.count }};
+
+    // Fetch room details
+    fetch('{% url "teachers:api_room_detail" room_id=room.room_id %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update sessions count
+                const sessionsEl = document.getElementById('sessions-{{ room.room_id }}');
+                if (sessionsEl) {
+                    sessionsEl.textContent = data.room.sessions_per_week + ' حصص';
+                    totalSessions += data.room.sessions_per_week;
+                }
+
+                // Update occupancy
+                const occupancyEl = document.getElementById('occupancy-{{ room.room_id }}');
+                const barEl = document.getElementById('capacity-bar-{{ room.room_id }}');
+
+                if (occupancyEl && barEl) {
+                    const rate = data.room.occupancy_rate;
+                    occupancyEl.textContent = rate.toFixed(1) + '%';
+                    barEl.style.width = rate + '%';
+
+                    barEl.className = 'capacity-bar-fill';
+                    if (rate > 90) {
+                        barEl.classList.add('danger');
+                    } else if (rate > 70) {
+                        barEl.classList.add('warning');
+                    }
+                }
+
+                // Update total sessions
+                document.getElementById('totalSessions').textContent = totalSessions;
+            }
+        })
+        .catch(error => console.error('Error loading room data:', error));
+    {% endfor %}
+
+    // Update overview statistics
+    document.getElementById('totalGroups').textContent = totalGroups;
+    document.getElementById('totalCapacity').textContent = totalCapacity;
+});
+</script>
 {% endblock %}

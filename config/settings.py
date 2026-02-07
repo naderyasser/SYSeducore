@@ -190,7 +190,7 @@ CORS_ALLOW_CREDENTIALS = True
 SESSION_COOKIE_AGE = 3600  # 1 hour
 SESSION_COOKIE_HTTPONLY = True
 SESSION_SAVE_EVERY_REQUEST = True
-SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 
 # CSRF Settings

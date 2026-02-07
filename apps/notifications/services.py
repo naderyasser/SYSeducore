@@ -11,6 +11,7 @@ from django.utils import timezone
 class WhatsAppService:
     """
     WhatsApp Service using UltraMsg API
+    يدعم الإرسال الفردي والجماعي
     """
     
     def __init__(self):
@@ -64,6 +65,135 @@ class WhatsAppService:
                 'success': False,
                 'error': f'خطأ في الاتصال: {str(e)}'
             }
+
+    def send_bulk_message(self, phone_numbers, message):
+        """
+        الإرسال الجماعي - إرسال رسالة إلى مجموعة أرقام
+        يمكن إرسال تقرير الحضور/الغياب أو التنبيهات إلى قائمة توزيع
+
+        Args:
+            phone_numbers: قائمة أرقام الهواتف
+            message: نص الرسالة
+
+        Returns:
+            Dictionary with results summary
+        """
+        results = {
+            'total': len(phone_numbers),
+            'success_count': 0,
+            'fail_count': 0,
+            'errors': []
+        }
+
+        for phone in phone_numbers:
+            result = self.send_message(phone, message)
+            if result.get('success'):
+                results['success_count'] += 1
+            else:
+                results['fail_count'] += 1
+                results['errors'].append({
+                    'phone': phone,
+                    'error': result.get('error', 'خطأ غير معروف')
+                })
+
+        return results
+
+    def send_to_group_chat(self, group_id, message):
+        """
+        الإرسال إلى مجموعة واتساب
+        Send message to a WhatsApp group chat
+
+        Args:
+            group_id: WhatsApp group ID
+            message: Message text
+        """
+        url = f'{self.base_url}/messages/chat'
+        data = {
+            'token': self.token,
+            'to': group_id,
+            'body': message
+        }
+
+        try:
+            response = requests.post(url, json=data, timeout=10)
+            result = response.json()
+
+            if result.get('status') == 'success':
+                return {
+                    'success': True,
+                    'message': 'تم إرسال الرسالة للمجموعة بنجاح'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': result.get('message', 'فشل إرسال الرسالة للمجموعة')
+                }
+        except requests.exceptions.RequestException as e:
+            return {
+                'success': False,
+                'error': f'خطأ في الاتصال: {str(e)}'
+            }
+
+    def send_bulk_attendance_report(self, group, session_date=None):
+        """
+        إرسال تقرير حضور/غياب جماعي لمجموعة كاملة
+        """
+        from apps.students.models import StudentGroupEnrollment
+        from apps.attendance.models import Attendance, Session
+
+        if not session_date:
+            session_date = timezone.now().date()
+
+        # Get session
+        try:
+            session = Session.objects.get(group=group, session_date=session_date)
+        except Session.DoesNotExist:
+            return {'success': False, 'error': 'لا توجد حصة لهذا التاريخ'}
+
+        # Get all enrollments
+        enrollments = StudentGroupEnrollment.objects.filter(
+            group=group, is_active=True
+        ).select_related('student')
+
+        phone_numbers = []
+        message_parts = [
+            f'📋 *تقرير الحضور - {group.group_name}*',
+            f'📅 التاريخ: {session_date.strftime("%Y/%m/%d")}',
+            f'👨‍🏫 المدرس: {group.teacher.full_name}',
+            '',
+        ]
+
+        present_count = 0
+        absent_students = []
+
+        for enrollment in enrollments:
+            student = enrollment.student
+            attendance = Attendance.objects.filter(
+                student=student, session=session
+            ).first()
+
+            if attendance:
+                message_parts.append(
+                    f'✅ {student.full_name} - حاضر ({attendance.scan_time.strftime("%I:%M %p")})'
+                )
+                present_count += 1
+            else:
+                message_parts.append(f'❌ {student.full_name} - غائب')
+                absent_students.append(student)
+
+            # Collect parent phones
+            if student.parent_phone:
+                phone_numbers.append(student.parent_phone)
+
+        message_parts.append('')
+        message_parts.append(f'📊 الإجمالي: {present_count} حاضر / {len(absent_students)} غائب')
+        message_parts.append('')
+        message_parts.append('_نظام الحضور الآلي_')
+
+        full_message = '\n'.join(message_parts)
+
+        # Send to all parents
+        return self.send_bulk_message(phone_numbers, full_message)
     
     def _format_phone_number(self, phone):
         """
