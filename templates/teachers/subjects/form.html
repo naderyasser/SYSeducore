@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ title }} - نظام إدارة المركز{% endblock %}
+
+{% block content %}
+<div class="top-header">
+    <h1 class="page-title">
+        <i class="bi bi-book"></i> {{ title }}
+    </h1>
+</div>
+
+<div class="content-area">
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <div class="card" style="max-width: 600px; margin: 0 auto;">
+        <div class="card-header">
+            <i class="bi bi-pencil-square"></i> معلومات المادة الدراسية
+        </div>
+        <div class="card-body">
+            <form method="POST" class="needs-validation">
+                {% csrf_token %}
+
+                <div class="mb-3">
+                    <label for="{{ form.name.id_for_label }}" class="form-label">
+                        <i class="bi bi-book"></i> اسم المادة الدراسية
+                    </label>
+                    {{ form.name }}
+                    {% if form.name.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.name.errors %}
+                        <i class="bi bi-exclamation-circle"></i> {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <small class="form-text text-muted">
+                        <i class="bi bi-info-circle"></i> أدخل اسم المادة الدراسية (مثال: الرياضيات، العربية، الإنجليزية)
+                    </small>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> 
+                        {% if subject %}تحديث{% else %}إضافة{% endif %}
+                    </button>
+                    <a href="{% url 'teachers:subject_list' %}" class="btn btn-secondary">
+                        <i class="bi bi-x-lg"></i> إلغاء
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if subject %}
+    <div class="mt-4" style="max-width: 600px; margin-left: auto; margin-right: auto;">
+        <div class="card border-danger">
+            <div class="card-header bg-danger-light text-dark">
+                <i class="bi bi-exclamation-triangle"></i> منطقة الخطر
+            </div>
+            <div class="card-body">
+                <p class="mb-3">
+                    <small>يمكنك حذف هذه المادة الدراسية، لكن تأكد من أنه لا يوجد مدرسين مرتبطين بها.</small>
+                </p>
+                <a href="{% url 'teachers:subject_delete' subject.id %}" class="btn btn-outline-danger btn-sm"
+                   onclick="return confirm('هل أنت متأكد؟ لا يمكن استرجاع البيانات.')">
+                    <i class="bi bi-trash"></i> حذف هذه المادة
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .form-label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+    }
+
+    .form-control {
+        border-radius: 6px;
+        border: 1px solid #d1d5db;
+        padding: 10px 14px;
+    }
+
+    .form-control:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .btn {
+        border-radius: 6px;
+        font-weight: 500;
+    }
+
+    .card {
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .bg-danger-light {
+        background-color: #fee2e2 !important;
+    }
+
+    .invalid-feedback {
+        color: #dc2626;
+        font-size: 0.875rem;
+        margin-top: 4px;
+    }
+
+    .form-text {
+        display: block;
+        margin-top: 6px;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+</style>
+{% endblock %}

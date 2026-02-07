@@ -5672,3 +5672,318 @@ Watching for file changes with StatReloader
 "GET /teachers/api/rooms/4/ HTTP/1.1" 200 2538
 "GET /teachers/api/rooms/5/ HTTP/1.1" 200 251
 "GET /static/icons/icon-192.png HTTP/1.1" 404 1981
+Watching for file changes with StatReloader
+"GET / HTTP/1.1" 302 0
+"GET /reports/ HTTP/1.1" 302 0
+"GET /accounts/login/?next=/reports/ HTTP/1.1" 200 5796
+Not Found: /favicon.ico
+"GET /favicon.ico HTTP/1.1" 404 3446
+"POST /accounts/login/ HTTP/1.1" 200 6012
+"POST /accounts/login/ HTTP/1.1" 302 0
+"GET /reports/ HTTP/1.1" 200 57229
+"GET /static/manifest.json HTTP/1.1" 200 756
+"GET /static/sw.js HTTP/1.1" 200 2247
+"GET /static/css/base.css HTTP/1.1" 200 3257
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /static/js/main.js HTTP/1.1" 200 6918
+"GET / HTTP/1.1" 302 0
+"GET /reports/ HTTP/1.1" 200 56964
+"GET /teachers/rooms/ HTTP/1.1" 200 47921
+"GET /teachers/api/rooms/2/ HTTP/1.1" 200 251
+"GET /teachers/api/rooms/6/ HTTP/1.1" 200 997
+"GET /teachers/api/rooms/8/ HTTP/1.1" 200 1737
+"GET /static/manifest.json HTTP/1.1" 304 0
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/api/rooms/7/ HTTP/1.1" 200 1082
+"GET /teachers/api/rooms/1/ HTTP/1.1" 200 1690
+"GET /teachers/api/rooms/3/ HTTP/1.1" 200 999
+"GET /teachers/api/rooms/4/ HTTP/1.1" 200 2538
+"GET /teachers/api/rooms/5/ HTTP/1.1" 200 251
+"GET /teachers/rooms/8/ HTTP/1.1" 200 28015
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/api/rooms/8/ HTTP/1.1" 200 1737
+"GET /teachers/groups/create/?room=8 HTTP/1.1" 200 21232
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/rooms/ HTTP/1.1" 200 47921
+"GET /teachers/api/rooms/2/ HTTP/1.1" 200 251
+"GET /teachers/api/rooms/6/ HTTP/1.1" 200 997
+"GET /teachers/api/rooms/7/ HTTP/1.1" 200 1082
+"GET /teachers/api/rooms/1/ HTTP/1.1" 200 1690
+"GET /static/manifest.json HTTP/1.1" 304 0
+"GET /teachers/api/rooms/3/ HTTP/1.1" 200 999
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/api/rooms/8/ HTTP/1.1" 200 1737
+"GET /teachers/api/rooms/5/ HTTP/1.1" 200 251
+"GET /teachers/api/rooms/4/ HTTP/1.1" 200 2538
+"GET /teachers/rooms/8/ HTTP/1.1" 200 28015
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/create/?room=8 HTTP/1.1" 200 21232
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+D:\Education-Management-System\config\settings.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\services.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\services.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\services.py changed, reloading.
+Watching for file changes with StatReloader
+"POST /teachers/groups/create/?room=8 HTTP/1.1" 200 21302
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/groups/create/?room=8 HTTP/1.1" 200 21302
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/ HTTP/1.1" 200 32663
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/ HTTP/1.1" 200 527284
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/ HTTP/1.1" 200 42008
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/update/ HTTP/1.1" 200 42841
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/ HTTP/1.1" 200 27141
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/create/ HTTP/1.1" 200 20707
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/ HTTP/1.1" 200 27141
+"GET /static/manifest.json HTTP/1.1" 304 0
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/ HTTP/1.1" 200 56964
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/attendance/ HTTP/1.1" 200 53823
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/ HTTP/1.1" 200 527284
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/ HTTP/1.1" 200 27141
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/6/edit/ HTTP/1.1" 200 20858
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/ HTTP/1.1" 200 56964
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/ HTTP/1.1" 200 27141
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/create/ HTTP/1.1" 200 20707
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+D:\Education-Management-System\apps\notifications\services.py changed, reloading.
+Watching for file changes with StatReloader
+"GET /students/ HTTP/1.1" 200 527284
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/ HTTP/1.1" 200 42008
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/update/ HTTP/1.1" 200 42841
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/ HTTP/1.1" 200 27141
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/rooms/ HTTP/1.1" 200 47921
+"GET /teachers/api/rooms/2/ HTTP/1.1" 200 251
+"GET /teachers/api/rooms/7/ HTTP/1.1" 200 1082
+"GET /teachers/api/rooms/8/ HTTP/1.1" 200 1737
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/api/rooms/1/ HTTP/1.1" 200 1690
+"GET /teachers/api/rooms/6/ HTTP/1.1" 200 997
+"GET /teachers/api/rooms/3/ HTTP/1.1" 200 999
+"GET /teachers/api/rooms/5/ HTTP/1.1" 200 251
+"GET /teachers/api/rooms/4/ HTTP/1.1" 200 2538
+D:\Education-Management-System\apps\teachers\forms.py changed, reloading.
+Watching for file changes with StatReloader
+"GET /teachers/groups/ HTTP/1.1" 200 32663
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/ HTTP/1.1" 200 32663
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/rooms/ HTTP/1.1" 200 47921
+"GET /teachers/api/rooms/7/ HTTP/1.1" 200 1082
+"GET /teachers/api/rooms/6/ HTTP/1.1" 200 997
+"GET /teachers/api/rooms/2/ HTTP/1.1" 200 251
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/api/rooms/5/ HTTP/1.1" 200 251
+"GET /teachers/api/rooms/3/ HTTP/1.1" 200 999
+"GET /teachers/api/rooms/8/ HTTP/1.1" 200 1737
+"GET /teachers/api/rooms/1/ HTTP/1.1" 200 1690
+"GET /teachers/api/rooms/4/ HTTP/1.1" 200 2538
+D:\Education-Management-System\apps\teachers\views.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\teachers\views.py changed, reloading.
+Watching for file changes with StatReloader
+"GET /reports/ HTTP/1.1" 200 56964
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+D:\Education-Management-System\apps\teachers\urls.py changed, reloading.
+Watching for file changes with StatReloader
+"GET /students/ HTTP/1.1" 200 527284
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/api/60/available-groups/ HTTP/1.1" 200 4635
+"GET /students/60/update/ HTTP/1.1" 200 42841
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /students/60/update/ HTTP/1.1" 302 0
+"GET /students/60/ HTTP/1.1" 200 42902
+"GET /static/manifest.json HTTP/1.1" 304 0
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/api/60/available-groups/ HTTP/1.1" 200 4635
+"GET /teachers/groups/ HTTP/1.1" 200 32815
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/1/edit/ HTTP/1.1" 200 21511
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/groups/1/edit/ HTTP/1.1" 302 0
+"GET /teachers/groups/ HTTP/1.1" 200 33123
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/ HTTP/1.1" 200 527446
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/api/60/available-groups/ HTTP/1.1" 200 4693
+"GET /teachers/subjects/ HTTP/1.1" 200 15175
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/subjects/create/ HTTP/1.1" 200 16033
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/subjects/create/ HTTP/1.1" 302 0
+"GET /teachers/subjects/ HTTP/1.1" 200 17750
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/subjects/create/ HTTP/1.1" 200 16033
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/subjects/create/ HTTP/1.1" 302 0
+"GET /teachers/subjects/ HTTP/1.1" 200 19340
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/ HTTP/1.1" 200 27299
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/6/edit/ HTTP/1.1" 200 21361
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/6/edit/ HTTP/1.1" 302 0
+"GET /teachers/6/ HTTP/1.1" 200 17103
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/payments/ HTTP/1.1" 200 64379
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/ HTTP/1.1" 200 57122
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/attendance/ HTTP/1.1" 200 53981
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/scanner/ HTTP/1.1" 200 58916
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 33
+"POST /attendance/api/process-code/ HTTP/1.1" 200 113
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 33
+Not Found: /favicon.ico
+"GET /favicon.ico HTTP/1.1" 404 3446
+"GET /students/ HTTP/1.1" 200 527446
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/scanner/ HTTP/1.1" 200 58916
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 33
+"POST /attendance/api/process-code/ HTTP/1.1" 200 188
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 33
+Not Found: /favicon.ico
+"GET /favicon.ico HTTP/1.1" 404 3446
+"GET /students/ HTTP/1.1" 200 527446
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/ HTTP/1.1" 200 42598
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/ HTTP/1.1" 200 32815
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/6/edit/ HTTP/1.1" 200 21533
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/groups/6/edit/ HTTP/1.1" 302 0
+"GET /teachers/groups/ HTTP/1.1" 200 33123
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/scanner/ HTTP/1.1" 200 58916
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 392
+"POST /attendance/api/process-code/ HTTP/1.1" 200 931
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 392
+Not Found: /favicon.ico
+"GET /favicon.ico HTTP/1.1" 404 3446
+"GET /teachers/groups/ HTTP/1.1" 200 32815
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /teachers/groups/6/edit/ HTTP/1.1" 200 21533
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /teachers/groups/6/edit/ HTTP/1.1" 302 0
+"GET /teachers/groups/ HTTP/1.1" 200 33123
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/scanner/ HTTP/1.1" 200 58916
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 392
+"POST /attendance/api/process-code/ HTTP/1.1" 200 168
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 392
+Not Found: /favicon.ico
+"GET /favicon.ico HTTP/1.1" 404 3446
+"GET /static/manifest.json HTTP/1.1" 304 0
+Not Found: /.well-known/appspecific/com.chrome.devtools.json
+"GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 3557
+"POST /attendance/api/process-code/ HTTP/1.1" 200 168
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 392
+D:\Education-Management-System\apps\teachers\urls.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\attendance\services.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\attendance\services.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\attendance\services.py changed, reloading.
+Watching for file changes with StatReloader
+"POST /attendance/api/process-code/ HTTP/1.1" 200 629
+"GET /attendance/api/today-stats/ HTTP/1.1" 200 72
+"GET /attendance/api/today-sessions/ HTTP/1.1" 200 392
+"GET /students/ HTTP/1.1" 200 527446
+"GET /static/manifest.json HTTP/1.1" 304 0
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/id-card/ HTTP/1.1" 200 33490
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /reports/ HTTP/1.1" 200 57933
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+D:\Education-Management-System\apps\notifications\views.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\urls.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\forms.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\admin.py changed, reloading.
+Watching for file changes with StatReloader
+D:\Education-Management-System\apps\notifications\models.py changed, reloading.
+Watching for file changes with StatReloader
+"GET /reports/ HTTP/1.1" 200 58162
+"GET /static/manifest.json HTTP/1.1" 304 0
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/ HTTP/1.1" 200 19103
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/send/ HTTP/1.1" 200 26755
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/ HTTP/1.1" 200 19103
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/bulk/ HTTP/1.1" 200 23586
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/ HTTP/1.1" 200 19103
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/history/ HTTP/1.1" 200 18545
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/ HTTP/1.1" 200 19103
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/send/ HTTP/1.1" 200 26755
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/ HTTP/1.1" 200 527675
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/update/ HTTP/1.1" 200 43259
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /students/60/update/ HTTP/1.1" 302 0
+"GET /students/60/ HTTP/1.1" 200 43663
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/ HTTP/1.1" 200 19103
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/send/ HTTP/1.1" 200 26755
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /notifications/whatsapp/send/ HTTP/1.1" 302 0
+"GET /notifications/whatsapp/ HTTP/1.1" 200 20406
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/bulk/ HTTP/1.1" 200 23586
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/ HTTP/1.1" 200 20092
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/send/ HTTP/1.1" 200 26755
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"POST /notifications/whatsapp/send/ HTTP/1.1" 302 0
+"GET /notifications/whatsapp/ HTTP/1.1" 200 21700
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /notifications/whatsapp/history/ HTTP/1.1" 200 25400
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914
+"GET /students/60/ HTTP/1.1" 200 43359
+"GET /static/icons/icon-192.png HTTP/1.1" 404 1914

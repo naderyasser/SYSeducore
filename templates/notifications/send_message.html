@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+
+{% block title %}إرسال رسالة واتساب{% endblock %}
+{% block page_title %}إرسال رسالة واتساب{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-pencil-fill"></i> إرسال رسالة واتساب
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="messageForm">
+                        {% csrf_token %}
+
+                        <!-- نوع المستقبل -->
+                        <div class="mb-3">
+                            <label for="{{ form.recipient_type.id_for_label }}" class="form-label">
+                                {{ form.recipient_type.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.recipient_type }}
+                            {% if form.recipient_type.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.recipient_type.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- اختيار الطالب -->
+                        <div class="mb-3" id="studentDiv">
+                            <label for="{{ form.student.id_for_label }}" class="form-label">
+                                {{ form.student.label }}
+                            </label>
+                            {{ form.student }}
+                            {% if form.student.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.student.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- اختيار المجموعة -->
+                        <div class="mb-3" id="groupDiv" style="display: none;">
+                            <label for="{{ form.group.id_for_label }}" class="form-label">
+                                {{ form.group.label }}
+                            </label>
+                            {{ form.group }}
+                            {% if form.group.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.group.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- رقم الهاتف المباشر -->
+                        <div class="mb-3" id="phoneDiv">
+                            <label for="{{ form.phone_number.id_for_label }}" class="form-label">
+                                {{ form.phone_number.label }}
+                            </label>
+                            {{ form.phone_number }}
+                            <small class="form-text text-muted">{{ form.phone_number.help_text }}</small>
+                            {% if form.phone_number.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.phone_number.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- قالب الرسالة -->
+                        <div class="mb-3">
+                            <label for="{{ form.message_template.id_for_label }}" class="form-label">
+                                {{ form.message_template.label }}
+                            </label>
+                            {{ form.message_template }}
+                            <small class="form-text text-muted">اختر قالب لملء نص الرسالة تلقائياً</small>
+                            {% if form.message_template.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.message_template.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- نص الرسالة -->
+                        <div class="mb-3">
+                            <label for="{{ form.message_text.id_for_label }}" class="form-label">
+                                {{ form.message_text.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.message_text }}
+                            <small class="form-text text-muted d-block mt-1">
+                                {{ form.message_text.help_text }}
+                            </small>
+                            <small class="form-text text-secondary" id="charCount">العدد: 0 حرف</small>
+                            {% if form.message_text.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.message_text.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- خيارات -->
+                        <div class="mb-3">
+                            {{ form.include_student_name }}
+                            <label for="{{ form.include_student_name.id_for_label }}" class="form-check-label">
+                                {{ form.include_student_name.label }}
+                            </label>
+                        </div>
+
+                        <!-- أزرار الإجراء -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-send-fill"></i> إرسال الرسالة
+                            </button>
+                            <a href="{% url 'notifications:whatsapp_dashboard' %}" class="btn btn-secondary">
+                                إلغاء
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- معلومات الرسالة -->
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h6 class="mb-0">ملاحظات إرسال الرسائل</h6>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li>تأكد من صحة رقم الهاتف قبل الإرسال</li>
+                        <li>الأرقام يجب أن تكون بصيغة دولية أو محلية (مثال: +966501234567)</li>
+                        <li>سيتم حفظ سجل لجميع الرسائل المرسلة</li>
+                        <li>قد تأخذ الرسالة بعض الوقت للوصول</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- الشريط الجانبي -->
+        <div class="col-lg-4">
+            <!-- معاينة الرسالة -->
+            <div class="card sticky-top" style="top: 20px;">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">معاينة الرسالة</h6>
+                </div>
+                <div class="card-body">
+                    <div id="messagePreview" class="alert alert-info">
+                        ستظهر معاينة الرسالة هنا...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const recipientTypeSelect = document.getElementById('id_recipient_type');
+    const messageTextarea = document.getElementById('id_message_text');
+    const charCount = document.getElementById('charCount');
+    const groupDiv = document.getElementById('groupDiv');
+    const studentDiv = document.getElementById('studentDiv');
+    const messagePreview = document.getElementById('messagePreview');
+
+    // تحديث عرض الحقول بناءً على نوع المستقبل
+    function updateFields() {
+        const selectedType = recipientTypeSelect.value;
+        
+        if (selectedType === 'group') {
+            groupDiv.style.display = 'block';
+            studentDiv.style.display = 'none';
+        } else {
+            groupDiv.style.display = 'none';
+            studentDiv.style.display = 'block';
+        }
+    }
+
+    // تحديث معاينة الرسالة وعد الأحرف
+    function updatePreview() {
+        const text = messageTextarea.value;
+        charCount.textContent = `العدد: ${text.length} حرف`;
+        messagePreview.textContent = text || 'ستظهر معاينة الرسالة هنا...';
+    }
+
+    recipientTypeSelect.addEventListener('change', updateFields);
+    messageTextarea.addEventListener('input', updatePreview);
+
+    // الحقل الأولي
+    updateFields();
+});
+</script>
+{% endblock %}

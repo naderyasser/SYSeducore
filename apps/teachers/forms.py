@@ -99,3 +99,31 @@ class GroupForm(forms.ModelForm):
         self.fields['room'].required = False
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
+
+class SubjectForm(forms.ModelForm):
+    """
+    Form للمواد الدراسية
+    موديل المواد الدراسية - إضافة، تعديل وحذف
+    """
+    class Meta:
+        model = Subject
+        fields = ['name']
+        widgets = {
+            'name': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'اسم المادة الدراسية',
+                'autofocus': 'autofocus'
+            }),
+        }
+
+    def clean_name(self):
+        """Validate that the name is unique"""
+        name = self.cleaned_data.get('name')
+        if name:
+            # Check if another subject with this name exists (excluding current edit)
+            queryset = Subject.objects.filter(name=name)
+            if self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            if queryset.exists():
+                raise forms.ValidationError('هذه المادة موجودة بالفعل')
+        return name

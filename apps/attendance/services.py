@@ -62,6 +62,19 @@ class AttendanceService:
             financial_status = '-'
             is_exempt = False
 
+        # Serialize current_payment to dict to avoid JSON serialization errors
+        current_payment_dict = None
+        if current_payment:
+            current_payment_dict = {
+                'payment_id': current_payment.payment_id,
+                'amount_due': float(current_payment.amount_due),
+                'amount_paid': float(current_payment.amount_paid),
+                'status': current_payment.status,
+                'status_display': current_payment.get_status_display(),
+                'sessions_attended': current_payment.sessions_attended,
+                'payment_date': current_payment.payment_date.isoformat() if current_payment.payment_date else None,
+            }
+        
         return {
             'has_paid_current_month': has_paid_current,
             'current_month_status': current_payment.get_status_display() if current_payment else 'لم يتم إنشاء سجل دفع',
@@ -69,7 +82,7 @@ class AttendanceService:
             'arrears_amount': float(arrears_amount),
             'financial_status': financial_status,
             'is_exempt': is_exempt,
-            'current_payment': current_payment,
+            'current_payment': current_payment_dict,
         }
 
     @staticmethod
@@ -213,9 +226,24 @@ class AttendanceService:
             'message': f'مرحباً {student.full_name} - {matching_group.group_name}',
             'sound': 'success',
             'status': time_check['status'],
-            'student': student,
-            'group': matching_group,
-            'attendance': attendance,
+            'student': {
+                'student_id': student.student_id,
+                'full_name': student.full_name,
+                'student_code': student.student_code,
+                'phone': student.phone,
+            },
+            'group': {
+                'group_id': matching_group.group_id,
+                'group_name': matching_group.group_name,
+                'schedule_day': matching_group.schedule_day,
+                'schedule_time': str(matching_group.schedule_time),
+            },
+            'attendance': {
+                'attendance_id': attendance.attendance_id,
+                'status': attendance.status,
+                'status_display': attendance.get_status_display(),
+                'scan_time': attendance.scan_time.isoformat(),
+            },
             'instant_status': instant_status,
         }
     

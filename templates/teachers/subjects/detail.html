@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ subject.name }} - نظام إدارة المركز{% endblock %}
+
+{% block content %}
+<div class="top-header">
+    <h1 class="page-title">
+        <i class="bi bi-book"></i> {{ subject.name }}
+    </h1>
+    <div class="user-info">
+        <a href="{% url 'teachers:subject_update' subject.id %}" class="btn btn-warning btn-sm">
+            <i class="bi bi-pencil"></i> تعديل
+        </a>
+    </div>
+</div>
+
+<div class="content-area">
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Subject Info Card -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon blue">
+                    <i class="bi bi-person-badge"></i>
+                </div>
+                <div class="stat-number">{{ teachers_count }}</div>
+                <div class="stat-label">عدد المدرسين</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subject Details -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="bi bi-info-circle"></i> بيانات المادة الدراسية
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">
+                            <i class="bi bi-book"></i> اسم المادة
+                        </label>
+                        <p class="h5">{{ subject.name }}</p>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label text-muted">
+                            <i class="bi bi-person-badge"></i> عدد المدرسين
+                        </label>
+                        <p class="h5">
+                            {% if teachers_count > 0 %}
+                            <span class="badge bg-primary">{{ teachers_count }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">لا يوجد</span>
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Teachers List -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-people"></i> المدرسين المتخصصين في هذه المادة
+        </div>
+        <div class="card-body">
+            {% if teachers %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 5%">#</th>
+                            <th style="width: 35%">اسم المدرس</th>
+                            <th style="width: 25%">رقم الهاتف</th>
+                            <th style="width: 20%">البريد الإلكتروني</th>
+                            <th style="width: 15%; text-align: center;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for teacher in teachers %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>
+                                <a href="{% url 'teachers:detail' teacher.teacher_id %}" class="text-decoration-none">
+                                    <strong>{{ teacher.full_name }}</strong>
+                                </a>
+                            </td>
+                            <td>
+                                <a href="tel:{{ teacher.phone }}" class="text-decoration-none">
+                                    <i class="bi bi-telephone"></i> {{ teacher.phone }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if teacher.email %}
+                                <a href="mailto:{{ teacher.email }}" class="text-decoration-none">
+                                    {{ teacher.email }}
+                                </a>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: center;">
+                                <a href="{% url 'teachers:detail' teacher.teacher_id %}" 
+                                   class="btn btn-sm btn-info" title="عرض التفاصيل">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> لا يوجد مدرسين متخصصين في هذه المادة حالياً
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Back Button -->
+    <div class="mt-4">
+        <a href="{% url 'teachers:subject_list' %}" class="btn btn-secondary">
+            <i class="bi bi-arrow-right"></i> العودة إلى قائمة المواد
+        </a>
+    </div>
+</div>
+
+<style>
+    .table-responsive {
+        border-radius: 8px;
+    }
+    
+    .table thead th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        color: #374151;
+        border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+    
+    .badge {
+        padding: 6px 12px;
+        font-weight: 500;
+    }
+    
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 0.875rem;
+    }
+
+    .form-label {
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+
+    .card {
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+</style>
+{% endblock %}
