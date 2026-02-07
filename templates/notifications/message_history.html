@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+
+{% block title %}سجل الرسائل{% endblock %}
+{% block page_title %}سجل رسائل الواتساب{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- الإحصائيات -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted mb-1">إجمالي الرسائل</p>
+                            <h3 class="mb-0">{{ stats.total }}</h3>
+                        </div>
+                        <i class="bi bi-chat" style="font-size: 2rem; color: #3b82f6; opacity: 0.1;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted mb-1">مرسلة</p>
+                            <h3 class="mb-0 text-success">{{ stats.sent }}</h3>
+                        </div>
+                        <i class="bi bi-check-circle" style="font-size: 2rem; color: #16a34a; opacity: 0.1;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted mb-1">فاشلة</p>
+                            <h3 class="mb-0 text-danger">{{ stats.failed }}</h3>
+                        </div>
+                        <i class="bi bi-x-circle" style="font-size: 2rem; color: #dc2626; opacity: 0.1;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted mb-1">قيد الانتظار</p>
+                            <h3 class="mb-0 text-warning">{{ stats.pending }}</h3>
+                        </div>
+                        <i class="bi bi-hourglass" style="font-size: 2rem; color: #f59e0b; opacity: 0.1;"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- البحث والتصفية -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <input type="text" name="search" class="form-control" placeholder="ابحث برقم أو نص..." value="{{ search_query }}">
+                </div>
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">-- اختر الحالة --</option>
+                        <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>مرسلة</option>
+                        <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>فاشلة</option>
+                        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>قيد الانتظار</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="type" class="form-select">
+                        <option value="">-- اختر النوع --</option>
+                        <option value="student" {% if type_filter == 'student' %}selected{% endif %}>رسالة للطالب</option>
+                        <option value="parent" {% if type_filter == 'parent' %}selected{% endif %}>رسالة لولي الأمر</option>
+                        <option value="group" {% if type_filter == 'group' %}selected{% endif %}>رسالة جماعية</option>
+                        <option value="custom" {% if type_filter == 'custom' %}selected{% endif %}>رسالة مخصصة</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> بحث
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- جدول الرسائل -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>رقم الهاتف</th>
+                        <th>النوع</th>
+                        <th>الحالة</th>
+                        <th>التاريخ</th>
+                        <th>المرسل</th>
+                        <th>الإجراء</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for message in messages %}
+                    <tr>
+                        <td>
+                            <code>{{ message.phone_number }}</code>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ message.get_message_type_display }}</span>
+                        </td>
+                        <td>
+                            {% if message.status == 'sent' %}
+                            <span class="badge bg-success">✓ مرسلة</span>
+                            {% elif message.status == 'failed' %}
+                            <span class="badge bg-danger">✗ فاشلة</span>
+                            {% elif message.status == 'pending' %}
+                            <span class="badge bg-warning text-dark">⏳ قيد الانتظار</span>
+                            {% elif message.status == 'delivered' %}
+                            <span class="badge bg-info">✓ مسلمة</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small>{{ message.created_at|date:"d/m/Y H:i:s" }}</small>
+                        </td>
+                        <td>
+                            <small>{{ message.sent_by.get_full_name|default:message.sent_by.username }}</small>
+                        </td>
+                        <td>
+                            {% if message.student %}
+                            <a href="{% url 'students:detail' message.student.student_id %}" class="btn btn-xs btn-outline-primary" title="عرض الطالب">
+                                <i class="bi bi-person"></i>
+                            </a>
+                            {% endif %}
+                            <button type="button" class="btn btn-xs btn-outline-info" data-bs-toggle="modal" data-bs-target="#messageModal{{ message.message_id }}" title="عرض الرسالة">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+
+                    <!-- Modal لعرض الرسالة -->
+                    <div class="modal fade" id="messageModal{{ message.message_id }}" tabindex="-1">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h6 class="modal-title">الرسالة</h6>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-2">
+                                        <strong>رقم الهاتف:</strong> {{ message.phone_number }}
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>النوع:</strong> {{ message.get_message_type_display }}
+                                    </div>
+                                    <div class="mb-2">
+                                        <strong>الحالة:</strong>
+                                        {% if message.status == 'sent' %}
+                                        <span class="badge bg-success">مرسلة</span>
+                                        {% elif message.status == 'failed' %}
+                                        <span class="badge bg-danger">فاشلة</span>
+                                        {% endif %}
+                                    </div>
+                                    <div class="mb-3">
+                                        <strong>التاريخ:</strong> {{ message.created_at|date:"d/m/Y H:i:s" }}
+                                    </div>
+                                    <div class="alert alert-light">
+                                        <p class="mb-0">{{ message.message_text }}</p>
+                                    </div>
+                                    {% if message.error_message %}
+                                    <div class="alert alert-danger">
+                                        <strong>رسالة الخطأ:</strong>
+                                        <p class="mb-0">{{ message.error_message }}</p>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            لا توجد رسائل
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

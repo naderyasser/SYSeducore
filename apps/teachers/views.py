@@ -1,8 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from .models import Teacher, Group, Room
-from .forms import TeacherForm, GroupForm, RoomForm
+from .models import Teacher, Group, Room, Subject
+from .forms import TeacherForm, GroupForm, RoomForm, SubjectForm
 
 
 # ==================== Teachers ====================
@@ -205,3 +205,97 @@ def group_delete(request, group_id):
         group.save()
         messages.success(request, 'تم حذف المجموعة بنجاح')
     return redirect('teachers:group_list')
+
+
+# ==================== Subjects ====================
+
+@login_required
+def subject_list(request):
+    """
+    عرض قائمة المواد الدراسية
+    """
+    subjects = Subject.objects.all().order_by('name')
+    # Count teachers for each subject
+    subjects_with_counts = []
+    for subject in subjects:
+        teachers_count = subject.teachers.count()
+        subjects_with_counts.append({
+            'subject': subject,
+            'teachers_count': teachers_count
+        })
+    return render(request, 'teachers/subjects/list.html', {
+        'subjects_with_counts': subjects_with_counts,
+        'total_subjects': subjects.count()
+    })
+
+
+@login_required
+def subject_create(request):
+    """
+    إضافة مادة دراسية جديدة
+    """
+    if request.method == 'POST':
+        form = SubjectForm(request.POST)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'تم إضافة المادة الدراسية بنجاح')
+            return redirect('teachers:subject_list')
+    else:
+        form = SubjectForm()
+    return render(request, 'teachers/subjects/form.html', {
+        'form': form,
+        'title': 'إضافة مادة دراسية جديدة'
+    })
+
+
+@login_required
+def subject_detail(request, subject_id):
+    """
+    عرض تفاصيل المادة الدراسية
+    """
+    subject = get_object_or_404(Subject, pk=subject_id)
+    teachers = subject.teachers.filter(is_active=True).order_by('full_name')
+    
+    return render(request, 'teachers/subjects/detail.html', {
+        'subject': subject,
+        'teachers': teachers,
+        'teachers_count': teachers.count()
+    })
+
+
+@login_required
+def subject_update(request, subject_id):
+    """
+    تعديل بيانات المادة الدراسية
+    """
+    subject = get_object_or_404(Subject, pk=subject_id)
+    if request.method == 'POST':
+        form = SubjectForm(request.POST, instance=subject)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'تم تحديث بيانات المادة الدراسية بنجاح')
+            return redirect('teachers:subject_detail', subject_id=subject_id)
+    else:
+        form = SubjectForm(instance=subject)
+    return render(request, 'teachers/subjects/form.html', {
+        'form': form,
+        'subject': subject,
+        'title': f'تعديل المادة: {subject.name}'
+    })
+
+
+@login_required
+def subject_delete(request, subject_id):
+    """
+    حذف المادة الدراسية
+    """
+    subject = get_object_or_404(Subject, pk=subject_id)
+    if request.method == 'POST':
+        subject_name = subject.name
+        subject.delete()
+        messages.success(request, f'تم حذف المادة ({subject_name}) بنجاح')
+        return redirect('teachers:subject_list')
+    return render(request, 'teachers/subjects/confirm_delete.html', {
+        'subject': subject
+    })
+

@@ -5,13 +5,13 @@ django-cors-headers==4.3.1
 django-filter==23.5
 
 # Database
-psycopg2-binary==2.9.9
+psycopg[binary]==3.2.13
 redis==5.0.1
 django-redis==5.4.0
 
 # Celery for background tasks
 celery==5.3.6
-django-celery-beat==2.5.0
+django-celery-beat==2.6.0
 
 # WhatsApp
 requests==2.31.0
@@ -21,7 +21,7 @@ django-ratelimit==4.1.0
 python-decouple==3.8
 
 # Other utilities
-Pillow==10.2.0
+Pillow==10.4.0
 python-barcode==0.15.1
 reportlab==4.0.9
 openpyxl==3.1.2

@@ -24,6 +24,13 @@ urlpatterns = [
     path('groups/<int:group_id>/edit/', views.group_update, name='group_update'),
     path('groups/<int:group_id>/delete/', views.group_delete, name='group_delete'),
 
+    # Subjects
+    path('subjects/', views.subject_list, name='subject_list'),
+    path('subjects/create/', views.subject_create, name='subject_create'),
+    path('subjects/<int:subject_id>/', views.subject_detail, name='subject_detail'),
+    path('subjects/<int:subject_id>/edit/', views.subject_update, name='subject_update'),
+    path('subjects/<int:subject_id>/delete/', views.subject_delete, name='subject_delete'),
+
     # API: Rooms
     path('api/rooms/', api_views.room_list_api, name='api_room_list'),
     path('api/rooms/<int:room_id>/', api_views.room_detail_api, name='api_room_detail'),

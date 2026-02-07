@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block title %}الإرسال الجماعي{% endblock %}
+{% block page_title %}الإرسال الجماعي عبر الواتساب{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-people-fill"></i> إرسال رسالة جماعية
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" id="bulkForm">
+                        {% csrf_token %}
+
+                        <!-- نوع الإرسال الجماعي -->
+                        <div class="mb-3">
+                            <label for="{{ form.bulk_type.id_for_label }}" class="form-label">
+                                {{ form.bulk_type.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.bulk_type }}
+                            {% if form.bulk_type.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.bulk_type.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- اختيار المجموعة -->
+                        <div class="mb-3" id="groupDiv">
+                            <label for="{{ form.group.id_for_label }}" class="form-label">
+                                {{ form.group.label }}
+                            </label>
+                            {{ form.group }}
+                            {% if form.group.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.group.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- دور المستقبلين (للمجموعات) -->
+                        <div class="mb-3" id="recipientRoleDiv">
+                            <label for="{{ form.recipient_role.id_for_label }}" class="form-label">
+                                {{ form.recipient_role.label }}
+                            </label>
+                            {{ form.recipient_role }}
+                            {% if form.recipient_role.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.recipient_role.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- قائمة الأرقام -->
+                        <div class="mb-3" id="phoneListDiv" style="display: none;">
+                            <label for="{{ form.phone_numbers.id_for_label }}" class="form-label">
+                                {{ form.phone_numbers.label }}
+                            </label>
+                            {{ form.phone_numbers }}
+                            <small class="form-text text-muted d-block mt-1">{{ form.phone_numbers.help_text }}</small>
+                            {% if form.phone_numbers.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.phone_numbers.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- قالب الرسالة -->
+                        <div class="mb-3">
+                            <label for="{{ form.message_template.id_for_label }}" class="form-label">
+                                {{ form.message_template.label }}
+                            </label>
+                            {{ form.message_template }}
+                            <small class="form-text text-muted">اختر قالب لملء نص الرسالة تلقائياً</small>
+                            {% if form.message_template.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.message_template.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- نص الرسالة -->
+                        <div class="mb-3">
+                            <label for="{{ form.message_text.id_for_label }}" class="form-label">
+                                {{ form.message_text.label }}
+                                <span class="text-danger">*</span>
+                            </label>
+                            {{ form.message_text }}
+                            <small class="form-text text-secondary" id="charCount">العدد: 0 حرف</small>
+                            {% if form.message_text.errors %}
+                                <div class="alert alert-danger mt-1">{{ form.message_text.errors }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- تحذير -->
+                        <div class="alert alert-warning" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <strong>تحذير:</strong> سيتم إرسال الرسالة إلى عدد من الأرقام. تأكد من صحة النص قبل الإرسال.
+                        </div>
+
+                        <!-- أزرار الإجراء -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-success" onclick="return confirm('هل أنت متأكد من إرسال هذه الرسالة جماعياً؟');">
+                                <i class="bi bi-send-fill"></i> إرسال للجميع
+                            </button>
+                            <a href="{% url 'notifications:whatsapp_dashboard' %}" class="btn btn-secondary">
+                                إلغاء
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- الشريط الجانبي -->
+        <div class="col-lg-4">
+            <!-- معاينة -->
+            <div class="card sticky-top" style="top: 20px;">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">معاينة الرسالة</h6>
+                </div>
+                <div class="card-body">
+                    <div id="messagePreview" class="alert alert-info">
+                        ستظهر معاينة الرسالة هنا...
+                    </div>
+                    <div id="recipientCount" class="alert alert-secondary">
+                        سيتم الإرسال إلى: عدد المستقبلين
+                    </div>
+                </div>
+            </div>
+
+            <!-- نصائح -->
+            <div class="card mt-3">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">نصائح مهمة</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small">
+                        <li>استخدم الأرقام بصيغة دولية للتأكد من الإرسال</li>
+                        <li>تجنب الرسائل الطويلة جداً</li>
+                        <li>استعمل الرموز والخطوط بحذر</li>
+                        <li>كل الرسائل محفوظة في السجل</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const bulkTypeSelect = document.getElementById('id_bulk_type');
+    const messageTextarea = document.getElementById('id_message_text');
+    const charCount = document.getElementById('charCount');
+    const groupDiv = document.getElementById('groupDiv');
+    const recipientRoleDiv = document.getElementById('recipientRoleDiv');
+    const phoneListDiv = document.getElementById('phoneListDiv');
+    const messagePreview = document.getElementById('messagePreview');
+
+    function updateFields() {
+        const selectedType = bulkTypeSelect.value;
+        
+        if (selectedType === 'group') {
+            groupDiv.style.display = 'block';
+            recipientRoleDiv.style.display = 'block';
+            phoneListDiv.style.display = 'none';
+        } else if (selectedType === 'custom_list') {
+            groupDiv.style.display = 'none';
+            recipientRoleDiv.style.display = 'none';
+            phoneListDiv.style.display = 'block';
+        } else {
+            groupDiv.style.display = 'block';
+            recipientRoleDiv.style.display = 'none';
+            phoneListDiv.style.display = 'none';
+        }
+    }
+
+    function updatePreview() {
+        const text = messageTextarea.value;
+        charCount.textContent = `العدد: ${text.length} حرف`;
+        messagePreview.textContent = text || 'ستظهر معاينة الرسالة هنا...';
+    }
+
+    bulkTypeSelect.addEventListener('change', updateFields);
+    messageTextarea.addEventListener('input', updatePreview);
+
+    updateFields();
+});
+</script>
+{% endblock %}

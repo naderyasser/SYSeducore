@@ -241,7 +241,11 @@ else:
     CELERY_BEAT_SCHEDULE = {}
 
 
-# WhatsApp Configuration (UltraMsg)
+# WhatsApp Configuration (WASender API)
+WASENDER_API_TOKEN = config('WASENDER_API_TOKEN', default='dc40a76959c63ba6acb5d8f2e3424d424e31b476150479ae2fdc5a72398671cc')
+WASENDER_API_URL = config('WASENDER_API_URL', default='https://wasenderapi.com/api/send-message')
+
+# Legacy UltraMsg Configuration (deprecated)
 ULTRAMSG_INSTANCE_ID = config('ULTRAMSG_INSTANCE_ID', default='')
 ULTRAMSG_TOKEN = config('ULTRAMSG_TOKEN', default='')
 

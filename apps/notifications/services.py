@@ -10,21 +10,20 @@ from django.utils import timezone
 
 class WhatsAppService:
     """
-    WhatsApp Service using UltraMsg API
+    WhatsApp Service using WASender API
     يدعم الإرسال الفردي والجماعي
     """
     
     def __init__(self):
-        self.instance_id = getattr(settings, 'ULTRAMSG_INSTANCE_ID', '')
-        self.token = getattr(settings, 'ULTRAMSG_TOKEN', '')
-        self.base_url = f'https://api.ultramsg.com/{self.instance_id}'
+        self.token = getattr(settings, 'WASENDER_API_TOKEN', '')
+        self.api_url = getattr(settings, 'WASENDER_API_URL', 'https://wasenderapi.com/api/send-message')
     
     def send_message(self, to, message):
         """
-        Send WhatsApp message
+        Send WhatsApp message via WASender API
         
         Args:
-            to: Phone number (with country code, e.g., 201234567890)
+            to: Phone number (with country code, e.g., 201234567890 or +201234567890)
             message: Message text
             
         Returns:
@@ -34,21 +33,21 @@ class WhatsAppService:
         phone = self._format_phone_number(to)
         
         # Prepare API request
-        url = f'{self.base_url}/messages/chat'
         headers = {
             'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.token}'
         }
         data = {
-            'token': self.token,
             'to': phone,
-            'body': message
+            'text': message
         }
         
         try:
-            response = requests.post(url, json=data, headers=headers, timeout=10)
+            response = requests.post(self.api_url, json=data, headers=headers, timeout=10)
             result = response.json()
             
-            if result.get('status') == 'success':
+            # WASender API returns success with status code 200 and success field
+            if response.status_code == 200 and result.get('success'):
                 return {
                     'success': True,
                     'message_id': result.get('message_id'),
@@ -57,7 +56,7 @@ class WhatsAppService:
             else:
                 return {
                     'success': False,
-                    'error': result.get('message', 'فشل إرسال الرسالة')
+                    'error': result.get('message', result.get('error', 'فشل إرسال الرسالة'))
                 }
                 
         except requests.exceptions.RequestException as e:
@@ -107,18 +106,20 @@ class WhatsAppService:
             group_id: WhatsApp group ID
             message: Message text
         """
-        url = f'{self.base_url}/messages/chat'
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {self.token}'
+        }
         data = {
-            'token': self.token,
             'to': group_id,
-            'body': message
+            'text': message
         }
 
         try:
-            response = requests.post(url, json=data, timeout=10)
+            response = requests.post(self.api_url, json=data, headers=headers, timeout=10)
             result = response.json()
 
-            if result.get('status') == 'success':
+            if response.status_code == 200 and result.get('success'):
                 return {
                     'success': True,
                     'message': 'تم إرسال الرسالة للمجموعة بنجاح'
@@ -126,7 +127,7 @@ class WhatsAppService:
             else:
                 return {
                     'success': False,
-                    'error': result.get('message', 'فشل إرسال الرسالة للمجموعة')
+                    'error': result.get('message', result.get('error', 'فشل إرسال الرسالة للمجموعة'))
                 }
         except requests.exceptions.RequestException as e:
             return {

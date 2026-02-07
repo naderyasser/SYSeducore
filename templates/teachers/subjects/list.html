@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+
+{% block title %}المواد الدراسية - نظام إدارة المركز{% endblock %}
+
+{% block content %}
+<div class="top-header">
+    <h1 class="page-title">
+        <i class="bi bi-book"></i> المواد الدراسية
+    </h1>
+    <div class="user-info">
+        <a href="{% url 'teachers:subject_create' %}" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus-lg"></i> إضافة مادة جديدة
+        </a>
+    </div>
+</div>
+
+<div class="content-area">
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> {{ message }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card">
+                <div class="stat-icon blue">
+                    <i class="bi bi-book"></i>
+                </div>
+                <div class="stat-number">{{ total_subjects }}</div>
+                <div class="stat-label">إجمالي المواد</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Subjects Table -->
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-list-ul"></i> قائمة المواد الدراسية
+        </div>
+        <div class="card-body">
+            {% if subjects_with_counts %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 5%">#</th>
+                            <th style="width: 50%">اسم المادة</th>
+                            <th style="width: 20%">عدد المدرسين</th>
+                            <th style="width: 25%; text-align: center;">الإجراءات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in subjects_with_counts %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>
+                                <a href="{% url 'teachers:subject_detail' item.subject.id %}" class="text-decoration-none">
+                                    <strong>{{ item.subject.name }}</strong>
+                                </a>
+                            </td>
+                            <td>
+                                {% if item.teachers_count > 0 %}
+                                    <span class="badge bg-primary">{{ item.teachers_count }} مدرس</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">لا يوجد مدرسين</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: center;">
+                                <a href="{% url 'teachers:subject_detail' item.subject.id %}" 
+                                   class="btn btn-sm btn-info" title="عرض التفاصيل">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                                <a href="{% url 'teachers:subject_update' item.subject.id %}" 
+                                   class="btn btn-sm btn-warning" title="تعديل">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'teachers:subject_delete' item.subject.id %}" 
+                                   class="btn btn-sm btn-danger" title="حذف"
+                                   onclick="return confirm('هل تريد حذف هذه المادة؟')">
+                                    <i class="bi bi-trash"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle"></i> لا توجد مواد دراسية حالياً
+                <a href="{% url 'teachers:subject_create' %}" class="alert-link">أضف مادة جديدة</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .table-responsive {
+        border-radius: 8px;
+    }
+    
+    .table thead th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+        color: #374151;
+        border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f9fafb;
+    }
+    
+    .badge {
+        padding: 6px 12px;
+        font-weight: 500;
+    }
+    
+    .btn-sm {
+        padding: 4px 8px;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}

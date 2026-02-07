@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+
+{% block title %}إدارة قوالب الرسائل{% endblock %}
+{% block page_title %}إدارة قوالب رسائل الواتساب{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <!-- نموذج إضافة قالب جديد -->
+        <div class="col-lg-5">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-plus-circle"></i> إضافة قالب جديد
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="create">
+
+                        <div class="mb-3">
+                            <label for="id_name" class="form-label">
+                                اسم القالب
+                                <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="id_name" name="name" class="form-control" placeholder="مثال: تقرير حضور يومي" required>
+                            <small class="form-text text-muted">أعطِ القالب اسماً واضحاً وسهل التذكر</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_description" class="form-label">الوصف</label>
+                            <textarea id="id_description" name="description" class="form-control" rows="2" placeholder="وصف اختياري للقالب"></textarea>
+                            <small class="form-text text-muted">مثال: يستخدم لإرسال تقارير الحضور اليومية</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="id_message_text" class="form-label">
+                                نص الرسالة
+                                <span class="text-danger">*</span>
+                            </label>
+                            <textarea id="id_message_text" name="message_text" class="form-control" rows="5" placeholder="اكتب نص قالب الرسالة هنا..." required></textarea>
+                            <small class="form-text text-muted d-block mt-1">يمكن استخدام هذا القالب لإرسال رسائل متعددة</small>
+                            <small class="form-text text-secondary" id="charCount">العدد: 0 حرف</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-check-circle"></i> حفظ القالب
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- قائمة القوالب -->
+        <div class="col-lg-7">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">القوالب المتاحة</h5>
+                </div>
+
+                {% if templates %}
+                <div class="list-group list-group-flush">
+                    {% for template in templates %}
+                    <div class="list-group-item">
+                        <div class="row align-items-start">
+                            <div class="col">
+                                <h6 class="mb-1">{{ template.name }}</h6>
+                                {% if template.description %}
+                                <small class="text-muted d-block">{{ template.description }}</small>
+                                {% endif %}
+                                <small class="text-secondary d-block mt-2 pre-wrap" style="white-space: pre-wrap; word-wrap: break-word; max-height: 80px; overflow: hidden;">{{ template.message_text }}</small>
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editModal{{ template.template_id }}" title="تعديل">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="post" style="display: inline;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="template_id" value="{{ template.template_id }}">
+                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('هل تريد حذف هذا القالب؟');" title="حذف">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="card-body text-center text-muted">
+                    <p>لا توجد قوالب متاحة حالياً</p>
+                    <small>قم بإنشاء قالب جديد للبدء</small>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- نصائح -->
+            <div class="card mt-3">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0">نصائح لإنشاء قوالب فعالة</h6>
+                </div>
+                <div class="card-body">
+                    <ul class="small mb-0">
+                        <li>استخدم أسماء واضحة وموصوفة للقوالب</li>
+                        <li>تجنب الرسائل الطويلة جداً</li>
+                        <li>استخدم الدعوة للإجراء البسيطة</li>
+                        <li>اختبر القالب قبل استخدامه في إرسال جماعي</li>
+                        <li>يمكن لجميع المستخدمين استخدام القوالب</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modals للتعديل -->
+{% for template in templates %}
+<div class="modal fade" id="editModal{{ template.template_id }}" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title">تعديل القالب: {{ template.name }}</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p><strong>الاسم:</strong> {{ template.name }}</p>
+                <p><strong>الوصف:</strong> {{ template.description|default:"بدون وصف" }}</p>
+                <div class="alert alert-light">
+                    <strong>النص:</strong>
+                    <p style="white-space: pre-wrap;">{{ template.message_text }}</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <p class="text-muted mb-0 text-start flex-grow-1">
+                    <small>تم الإنشاء: {{ template.created_at|date:"d/m/Y H:i" }}</small>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const messageTextarea = document.getElementById('id_message_text');
+    const charCount = document.getElementById('charCount');
+
+    if (messageTextarea) {
+        messageTextarea.addEventListener('input', function() {
+            charCount.textContent = `العدد: ${this.value.length} حرف`;
+        });
+    }
+});
+</script>
+{% endblock %}
