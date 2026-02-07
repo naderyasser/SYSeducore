@@ -14,27 +14,42 @@ class StudentGroupEnrollmentInline(admin.TabularInline):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ['student_code', 'full_name', 'get_groups', 'parent_phone', 'is_active']
-    list_filter = ['is_active', 'created_at']
+    list_display = ['student_code', 'full_name', 'gender', 'get_education', 'get_groups', 'student_phone', 'parent_phone', 'is_active']
+    list_filter = ['is_active', 'gender', 'education_stage', 'education_year', 'education_type', 'created_at']
     list_editable = ['is_active']  # تعديل سريع من القائمة
-    search_fields = ['student_code', 'full_name', 'parent_phone']
+    search_fields = ['student_code', 'full_name', 'parent_phone', 'student_phone']
     ordering = ['full_name']
     inlines = [StudentGroupEnrollmentInline]
     date_hierarchy = 'created_at'
 
     fieldsets = (
-        ('معلومات الطالب', {
-            'fields': ('full_name', 'student_code', 'parent_phone', 'is_active')
+        ('معلومات الطالب الأساسية', {
+            'fields': ('full_name', 'student_code', 'gender', 'is_active')
+        }),
+        ('المرحلة الدراسية', {
+            'fields': ('education_stage', 'education_year', 'education_type', 'school_name', 'grade'),
+        }),
+        ('أرقام التواصل (إجباري رقمين)', {
+            'fields': ('student_phone', 'parent_phone', 'parent_name'),
+        }),
+        ('معلومات إضافية', {
+            'fields': ('date_of_birth', 'address'),
+            'classes': ('collapse',)
         }),
         ('معلومات النظام', {
             'fields': ('created_at', 'updated_at'),
-            'classes': ('collapse',)  # قابلة للطي
+            'classes': ('collapse',)
         }),
     )
 
     readonly_fields = ['created_at', 'updated_at']
 
     actions = ['activate_students', 'deactivate_students', 'export_students']
+
+    def get_education(self, obj):
+        """عرض المرحلة الدراسية"""
+        return obj.get_education_display_full()
+    get_education.short_description = 'المرحلة الدراسية'
 
     def get_groups(self, obj):
         """عرض المجموعات المسجل فيها الطالب"""

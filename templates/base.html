@@ -3,6 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- PWA / Web App Support - أيقونة سطح المكتب بدون شريط المتصفح -->
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="المركز التعليمي">
+    <meta name="theme-color" content="#1a1c23">
+    <link rel="manifest" href="/static/manifest.json">
     <title>{% block title %}نظام إدارة المركز{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
@@ -367,9 +374,17 @@
                 <i class="bi bi-people"></i>
                 الطلاب
             </a>
-            <a href="{% url 'teachers:list' %}" class="{% if 'teachers' in request.path %}active{% endif %}">
+            <a href="{% url 'teachers:list' %}" class="{% if 'teachers' in request.path and 'rooms' not in request.path %}active{% endif %}">
                 <i class="bi bi-person-badge"></i>
                 المدرسين
+            </a>
+            <a href="{% url 'teachers:room_list' %}" class="{% if 'rooms' in request.path %}active{% endif %}">
+                <i class="bi bi-door-open"></i>
+                القاعات
+            </a>
+            <a href="{% url 'teachers:group_list' %}" class="{% if 'groups' in request.path %}active{% endif %}">
+                <i class="bi bi-collection"></i>
+                المجموعات
             </a>
             <a href="{% url 'payments:list' %}" class="{% if 'payments' in request.path %}active{% endif %}">
                 <i class="bi bi-credit-card"></i>
@@ -377,13 +392,21 @@
             </a>
 
             <div class="menu-header">التقارير</div>
+            <a href="{% url 'reports:dashboard' %}" class="{% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                <i class="bi bi-grid-1x2"></i>
+                لوحة التحكم
+            </a>
             <a href="{% url 'reports:attendance' %}" class="{% if 'attendance' in request.resolver_match.url_name %}active{% endif %}">
                 <i class="bi bi-clipboard-check"></i>
                 تقرير الحضور
             </a>
-            <a href="{% url 'reports:payments' %}" class="{% if request.resolver_match.url_name == 'payments' and 'reports' in request.path %}active{% endif %}">
+            <a href="{% url 'reports:payments' %}" class="{% if request.resolver_match.url_name == 'payments' %}active{% endif %}">
                 <i class="bi bi-receipt"></i>
                 تقرير المدفوعات
+            </a>
+            <a href="{% url 'reports:financial' %}" class="{% if request.resolver_match.url_name == 'financial' %}active{% endif %}">
+                <i class="bi bi-graph-up"></i>
+                التقرير المالي
             </a>
 
             {% if user.is_authenticated %}
@@ -435,6 +458,19 @@
     <script>
         function toggleSidebar() {
             document.getElementById('sidebar').classList.toggle('show');
+        }
+
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function() {
+                navigator.serviceWorker.register('/static/sw.js')
+                    .then(registration => {
+                        console.log('Service Worker registered:', registration);
+                    })
+                    .catch(error => {
+                        console.log('Service Worker registration failed:', error);
+                    });
+            });
         }
     </script>
     {% block extra_js %}{% endblock %}

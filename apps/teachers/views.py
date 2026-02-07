@@ -23,7 +23,7 @@ def teacher_detail(request, teacher_id):
 @login_required
 def teacher_create(request):
     if request.method == 'POST':
-        form = TeacherForm(request.POST)
+        form = TeacherForm(request.POST, request.FILES)
         if form.is_valid():
             form.save()
             messages.success(request, 'تم إضافة المدرس بنجاح')
@@ -37,7 +37,7 @@ def teacher_create(request):
 def teacher_update(request, teacher_id):
     teacher = get_object_or_404(Teacher, pk=teacher_id)
     if request.method == 'POST':
-        form = TeacherForm(request.POST, instance=teacher)
+        form = TeacherForm(request.POST, request.FILES, instance=teacher)
         if form.is_valid():
             form.save()
             messages.success(request, 'تم تحديث بيانات المدرس بنجاح')
@@ -76,6 +76,66 @@ def room_create(request):
     else:
         form = RoomForm()
     return render(request, 'teachers/rooms/form.html', {'form': form})
+
+
+@login_required
+def room_detail(request, room_id):
+    """
+    عرض تفاصيل القاعة مع جدولها وإحصائياتها
+    """
+    room = get_object_or_404(Room, pk=room_id)
+    groups = room.groups.filter(is_active=True).select_related('teacher')
+
+    # حساب الطلاب في كل مجموعة
+    groups_with_students = []
+    total_students = 0
+
+    for group in groups:
+        from apps.students.models import StudentGroupEnrollment
+        students_count = StudentGroupEnrollment.objects.filter(
+            group=group,
+            is_active=True
+        ).count()
+        total_students += students_count
+
+        groups_with_students.append({
+            'group': group,
+            'students_count': students_count
+        })
+
+    # جدول أسبوعي
+    from apps.teachers.models import Group
+    DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    DAYS_AR = {
+        'Saturday': 'السبت',
+        'Sunday': 'الأحد',
+        'Monday': 'الاثنين',
+        'Tuesday': 'الثلاثاء',
+        'Wednesday': 'الأربعاء',
+        'Thursday': 'الخميس',
+        'Friday': 'الجمعة'
+    }
+
+    weekly_schedule = {}
+    for day in DAYS:
+        day_groups = groups.filter(schedule_day=day).order_by('schedule_time')
+        if day_groups.exists():
+            weekly_schedule[day] = {
+                'ar_name': DAYS_AR.get(day, day),
+                'groups': list(day_groups)
+            }
+
+    context = {
+        'room': room,
+        'groups_with_students': groups_with_students,
+        'total_students': total_students,
+        'capacity_available': room.capacity - total_students,
+        'occupancy_rate': (total_students / room.capacity * 100) if room.capacity > 0 else 0,
+        'weekly_schedule': weekly_schedule,
+        'DAYS': DAYS
+    }
+
+    return render(request, 'teachers/rooms/detail.html', context)
 
 
 @login_required

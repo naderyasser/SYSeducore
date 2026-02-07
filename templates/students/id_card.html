@@ -1,0 +1,469 @@
+{% extends 'base.html' %}
+
+{% block title %}بطاقة الطالب - {{ student.full_name }}{% endblock %}
+{% block page_title %}بطاقة الطالب{% endblock %}
+
+{% block extra_css %}
+<style>
+    .id-card-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .id-card {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #1e40af 100%);
+        border-radius: 20px;
+        padding: 40px 30px;
+        color: #fff;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        position: relative;
+        overflow: hidden;
+        margin-bottom: 30px;
+    }
+
+    .id-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+        animation: rotate 30s linear infinite;
+    }
+
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .card-header-section {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .card-logo {
+        width: 80px;
+        height: 80px;
+        background: rgba(255,255,255,0.2);
+        border-radius: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        font-size: 2.5rem;
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(255,255,255,0.3);
+    }
+
+    .card-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin: 0;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .card-subtitle {
+        font-size: 1rem;
+        opacity: 0.9;
+        margin-top: 5px;
+    }
+
+    .card-body-section {
+        position: relative;
+        z-index: 1;
+        background: rgba(255,255,255,0.95);
+        border-radius: 16px;
+        padding: 30px;
+        color: #1f2937;
+    }
+
+    .student-header {
+        text-align: center;
+        margin-bottom: 25px;
+        padding-bottom: 20px;
+        border-bottom: 2px dashed #e5e7eb;
+    }
+
+    .student-name {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 10px;
+    }
+
+    .student-code-badge {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: #fff;
+        padding: 8px 25px;
+        border-radius: 25px;
+        font-weight: 700;
+        font-size: 1.3rem;
+        display: inline-block;
+        letter-spacing: 3px;
+        font-family: monospace;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+
+    .info-item {
+        background: #f8fafc;
+        padding: 15px;
+        border-radius: 12px;
+        text-align: center;
+        border: 1px solid #e2e8f0;
+    }
+
+    .info-item.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .info-item .label {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-bottom: 5px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .info-item .value {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .barcode-section {
+        text-align: center;
+        padding: 20px;
+        background: #f8fafc;
+        border-radius: 12px;
+        border: 2px dashed #cbd5e1;
+        margin-bottom: 20px;
+    }
+
+    .barcode-section img {
+        max-width: 300px;
+        width: 100%;
+        height: 80px;
+        object-fit: contain;
+        border: 2px solid #1e293b;
+        border-radius: 8px;
+        padding: 8px;
+        background: #fff;
+    }
+
+    .barcode-label {
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-top: 10px;
+    }
+
+    .groups-section {
+        margin-top: 20px;
+    }
+
+    .groups-section h6 {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 12px;
+        text-align: center;
+    }
+
+    .group-item {
+        background: #eff6ff;
+        padding: 12px 15px;
+        border-radius: 10px;
+        margin-bottom: 8px;
+        border-right: 4px solid #3b82f6;
+    }
+
+    .group-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .group-name {
+        font-weight: 600;
+        color: #1e40af;
+        margin-bottom: 4px;
+    }
+
+    .group-details {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .card-footer-section {
+        position: relative;
+        z-index: 1;
+        text-align: center;
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .card-footer-section p {
+        font-size: 0.8rem;
+        margin: 0;
+        opacity: 0.9;
+    }
+
+    .actions-section {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .actions-section .btn {
+        padding: 12px 24px;
+        font-weight: 500;
+    }
+
+    .back-card {
+        background: #fff;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        margin-top: 20px;
+    }
+
+    .back-card h6 {
+        color: #1e293b;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .back-card ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .back-card li {
+        padding: 10px 0;
+        border-bottom: 1px solid #f1f5f9;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .back-card li:last-child {
+        border-bottom: none;
+    }
+
+    .back-card li i {
+        color: #3b82f6;
+    }
+
+    @media print {
+        body {
+            background: #fff;
+            padding: 0;
+        }
+
+        .sidebar, .top-header, .actions-section, .back-card {
+            display: none !important;
+        }
+
+        .main-wrapper {
+            margin: 0;
+        }
+
+        .id-card {
+            box-shadow: none;
+            page-break-inside: avoid;
+            margin: 0;
+        }
+
+        .id-card::before {
+            display: none;
+        }
+    }
+
+    @media (max-width: 576px) {
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .id-card {
+            padding: 25px 20px;
+        }
+
+        .student-name {
+            font-size: 1.3rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="id-card-container">
+    <!-- Actions -->
+    <div class="actions-section mb-4">
+        <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-right me-1"></i>العودة
+        </a>
+        <button class="btn btn-primary" onclick="window.print()">
+            <i class="bi bi-printer me-1"></i>طباعة البطاقة
+        </button>
+        <a href="{% url 'students:update' student_id=student.student_id %}" class="btn btn-outline-primary">
+            <i class="bi bi-pencil me-1"></i>تعديل البيانات
+        </a>
+    </div>
+
+    <!-- Front of ID Card -->
+    <div class="id-card">
+        <div class="card-header-section">
+            <div class="card-logo">
+                <i class="bi bi-mortarboard-fill"></i>
+            </div>
+            <h1 class="card-title">بطاقة الطالب</h1>
+            <p class="card-subtitle">المركز التعليمي</p>
+        </div>
+
+        <div class="card-body-section">
+            <div class="student-header">
+                <h2 class="student-name">{{ student.full_name }}</h2>
+                <div class="student-code-badge">{{ student.student_code }}</div>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="label">النوع</div>
+                    <div class="value">{% if student.gender == 'male' %}ولد{% elif student.gender == 'female' %}بنت{% else %}-{% endif %}</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">المرحلة</div>
+                    <div class="value">
+                        {% if student.education_stage %}
+                        {{ student.get_education_stage_display }}{% if student.education_year %} - {{ student.education_year }}{% endif %}
+                        {% else %}-{% endif %}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="label">رقم الطالب</div>
+                    <div class="value">{{ student.student_phone|default:"-" }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">رقم ولي الأمر</div>
+                    <div class="value">{{ student.parent_phone }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="label">تاريخ التسجيل</div>
+                    <div class="value">{{ student.created_at|date:"Y-m-d" }}</div>
+                </div>
+                {% if student.school_name %}
+                <div class="info-item">
+                    <div class="label">المدرسة</div>
+                    <div class="value">{{ student.school_name }}</div>
+                </div>
+                {% endif %}
+                {% if student.parent_name %}
+                <div class="info-item">
+                    <div class="label">ولي الأمر</div>
+                    <div class="value">{{ student.parent_name }}</div>
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="barcode-section">
+                <img src="data:image/png;base64,{{ barcode_base64 }}" alt="Student Barcode">
+                <div class="barcode-label">
+                    <i class="bi bi-upc-scan me-1"></i>
+                    امسح للتسجيل
+                </div>
+            </div>
+
+            {% if enrollments %}
+            <div class="groups-section">
+                <h6><i class="bi bi-collection me-1"></i>المجموعات المسجل فيها</h6>
+                {% for enrollment in enrollments %}
+                <div class="group-item">
+                    <div class="group-name">{{ enrollment.group.group_name }}</div>
+                    <div class="group-details">
+                        <i class="bi bi-person me-1"></i>{{ enrollment.group.teacher.full_name|default:"-" }}
+                        <span class="mx-2">|</span>
+                        <i class="bi bi-calendar3 me-1"></i>{{ enrollment.group.get_schedule_day_display }}
+                        <span class="mx-2">|</span>
+                        <i class="bi bi-clock me-1"></i>{{ enrollment.group.schedule_time|date:"H:i" }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card-footer-section">
+            <p>هذه البطاقة خاصة بالمركز التعليمي</p>
+            <p style="margin-top: 5px;">تاريخ الإصدار: {{ today|date:"Y-m-d" }}</p>
+        </div>
+    </div>
+
+    <!-- Back of Card - Teachers -->
+    <div class="back-card">
+        <h6><i class="bi bi-people me-2"></i>المدرسين</h6>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px;">
+            {% for enrollment in enrollments %}
+            {% if enrollment.group.teacher %}
+            <div style="text-align: center; padding: 15px; background: #f8fafc; border-radius: 12px;">
+                {% if enrollment.group.teacher.photo %}
+                <img src="{{ enrollment.group.teacher.photo.url }}" alt="{{ enrollment.group.teacher.full_name }}" 
+                     style="width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 3px solid #3b82f6; margin-bottom: 10px;">
+                {% else %}
+                <div style="width: 70px; height: 70px; border-radius: 50%; background: #dbeafe; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; font-size: 1.5rem; color: #2563eb;">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                {% endif %}
+                <div style="font-weight: 600; font-size: 0.85rem; color: #1e293b;">{{ enrollment.group.teacher.full_name }}</div>
+                <div style="font-size: 0.75rem; color: #64748b;">{{ enrollment.group.teacher.specialization }}</div>
+                <div style="font-size: 0.72rem; color: #3b82f6; margin-top: 4px;">{{ enrollment.group.group_name }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        <h6 class="mt-4"><i class="bi bi-info-circle me-2"></i>تعليمات استخدام البطاقة</h6>
+        <ul>
+            <li>
+                <i class="bi bi-check-circle-fill"></i>
+                يرجى إبراز هذه البطاقة عند دخول المركز
+            </li>
+            <li>
+                <i class="bi bi-check-circle-fill"></i>
+                يتم مسح الباركود لتسجيل الحضور والانصراف
+            </li>
+            <li>
+                <i class="bi bi-check-circle-fill"></i>
+                في حالة فقدان البطاقة يرجى الإبلاغ فوراً
+            </li>
+            <li>
+                <i class="bi bi-check-circle-fill"></i>
+                البطاقة شخصية ولا يجوز استخدامها من قبل آخرين
+            </li>
+        </ul>
+
+        <h6 class="mt-4"><i class="bi bi-telephone me-2"></i>للتواصل</h6>
+        <ul>
+            <li>
+                <i class="bi bi-geo-alt-fill"></i>
+                العنوان: [عنوان المركز]
+            </li>
+            <li>
+                <i class="bi bi-phone-fill"></i>
+                الهاتف: [رقم الهاتف]
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

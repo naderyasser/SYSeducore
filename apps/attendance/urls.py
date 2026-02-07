@@ -10,6 +10,15 @@ urlpatterns = [
     # API: معالجة كود الطالب (النظام الجديد)
     path('api/process-code/', views.process_student_code, name='process_student_code'),
 
+    # API: إحصائيات اليوم
+    path('api/today-stats/', views.today_stats, name='today_stats'),
+
+    # API: حصص اليوم
+    path('api/today-sessions/', views.today_sessions, name='today_sessions'),
+
+    # API: تصدير التقارير
+    path('api/export-report/', views.export_report, name='export_report'),
+
     # تفاصيل الحصة
     path('session/<int:session_id>/', views.session_detail, name='session_detail'),
 

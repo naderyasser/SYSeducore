@@ -9,11 +9,68 @@ class AttendanceService:
     """
     خدمة تسجيل الحضور - النظام الثابت
     الخوارزمية: 4 خطوات صارمة بدون تعقيدات
+    + الكشف الفوري: بمجرد مسح الكود، تظهر حالة الطالب فوراً
     """
 
     # ثوابت النظام
     STRICT_GRACE_PERIOD_MINUTES = 10  # قاعدة الـ 10 دقائق الصارمة
     EARLY_ARRIVAL_LIMIT_MINUTES = 30  # السماح بالوصول قبل 30 دقيقة
+
+    @staticmethod
+    def get_instant_status(student, group):
+        """
+        الكشف الفوري - Instant Status
+        بمجرد مسح الكود، تظهر حالة الطالب فوراً:
+        - هل دفع الشهر الجديد؟
+        - هل عليه متأخرات؟
+        """
+        current_month = timezone.now().date().replace(day=1)
+
+        # Check current month payment
+        current_payment = None
+        has_paid_current = False
+        try:
+            current_payment = Payment.objects.get(
+                student=student,
+                group=group,
+                month=current_month
+            )
+            has_paid_current = current_payment.status == 'paid'
+        except Payment.DoesNotExist:
+            has_paid_current = False
+
+        # Check arrears (unpaid previous months)
+        arrears = Payment.objects.filter(
+            student=student,
+            group=group,
+            month__lt=current_month,
+            status__in=['unpaid', 'partial']
+        )
+        has_arrears = arrears.exists()
+        arrears_amount = sum(
+            (p.amount_due - p.amount_paid) for p in arrears
+        )
+
+        # Get enrollment info
+        try:
+            enrollment = StudentGroupEnrollment.objects.get(
+                student=student, group=group, is_active=True
+            )
+            financial_status = enrollment.get_financial_status_display()
+            is_exempt = enrollment.financial_status == 'exempt'
+        except StudentGroupEnrollment.DoesNotExist:
+            financial_status = '-'
+            is_exempt = False
+
+        return {
+            'has_paid_current_month': has_paid_current,
+            'current_month_status': current_payment.get_status_display() if current_payment else 'لم يتم إنشاء سجل دفع',
+            'has_arrears': has_arrears,
+            'arrears_amount': float(arrears_amount),
+            'financial_status': financial_status,
+            'is_exempt': is_exempt,
+            'current_payment': current_payment,
+        }
 
     @staticmethod
     def process_scan(student_code, supervisor):
@@ -25,6 +82,7 @@ class AttendanceService:
         2. مطابقة الجدول (الوقت واليوم الحاليين)
         3. قاعدة 10 دقائق صارمة (>10 = BLOCK)
         4. فحص مالي
+        + الكشف الفوري للحالة المالية
         """
         # ========================================
         # الخطوة 1: التعريف - جلب الطالب
@@ -56,7 +114,7 @@ class AttendanceService:
         matching_group = None
         enrollment = None
 
-        # البحث عن المجموعة التي موعدها الآن (نفس اليوم فقط)
+        # البحث عن المجموعة التي موعدها الآن (نفس اليوم + في نطاق مدة الحصة)
         for enr in enrollments:
             group = enr.group
 
@@ -77,18 +135,27 @@ class AttendanceService:
             }
 
         # ========================================
+        # الكشف الفوري - Instant Status
+        # ========================================
+        instant_status = AttendanceService.get_instant_status(student, matching_group)
+
+        # ========================================
         # الخطوة 3: قاعدة الـ 10 دقائق الصارمة
         # ========================================
         time_check = AttendanceService.check_strict_time(
             current_time,
-            matching_group.schedule_time
+            matching_group.schedule_time,
+            matching_group.duration_minutes
         )
 
         if not time_check['allowed']:
             return {
                 'success': False,
                 'message': time_check['reason'],
-                'sound': 'error'
+                'sound': 'error',
+                'instant_status': instant_status,
+                'student_name': student.full_name,
+                'group_name': matching_group.group_name,
             }
 
         # ========================================
@@ -103,7 +170,11 @@ class AttendanceService:
             return {
                 'success': False,
                 'message': financial_check['reason'],
-                'sound': 'error'
+                'sound': 'error',
+                'instant_status': instant_status,
+                'student_name': student.full_name,
+                'group_name': matching_group.group_name,
+                'can_override': True,  # يمكن للإدارة التجاوز (استثناء إداري)
             }
 
         # ========================================
@@ -121,7 +192,8 @@ class AttendanceService:
             return {
                 'success': False,
                 'message': 'تم تسجيل الحضور مسبقاً',
-                'sound': 'error'
+                'sound': 'error',
+                'instant_status': instant_status,
             }
 
         # تسجيل الحضور
@@ -143,13 +215,15 @@ class AttendanceService:
             'status': time_check['status'],
             'student': student,
             'group': matching_group,
-            'attendance': attendance
+            'attendance': attendance,
+            'instant_status': instant_status,
         }
     
     @staticmethod
     def get_current_day_name():
         """
         الحصول على اسم اليوم الحالي بالإنجليزي
+        Python's weekday(): Monday=0, Tuesday=1, ..., Sunday=6
         """
         days_map = {
             0: 'Monday',
@@ -161,10 +235,10 @@ class AttendanceService:
             6: 'Sunday',
         }
         today = timezone.now().weekday()
-        return days_map.get(today)
+        return days_map.get(today, '')
 
     @staticmethod
-    def check_strict_time(scan_time, schedule_time):
+    def check_strict_time(scan_time, schedule_time, duration_minutes=120):
         """
         الخطوة 3: قاعدة الـ 10 دقائق الصارمة
 
@@ -173,16 +247,25 @@ class AttendanceService:
         - ≤10 دقائق: قبول (حاضر)
         - >10 دقائق: رفض كامل (BLOCK)
         - لا يوجد "تأخير"، فقط قبول أو رفض
+        - يراعي مدة الحصة (بعد انتهاء الحصة = رفض)
         """
         # تحويل schedule_time إلى datetime
         today = timezone.now().date()
         session_start = timezone.make_aware(
             datetime.combine(today, schedule_time)
         )
+        session_end = session_start + timedelta(minutes=duration_minutes)
 
         # حساب الفرق بالدقائق
         diff = scan_time - session_start
         diff_minutes = diff.total_seconds() / 60
+
+        # رفض إذا وصل بعد انتهاء الحصة
+        if scan_time > session_end:
+            return {
+                'allowed': False,
+                'reason': f'الحصة انتهت. كانت من {schedule_time.strftime("%I:%M %p")} إلى {session_end.strftime("%I:%M %p")}'
+            }
 
         # السماح بالوصول المبكر (30 دقيقة قبل الموعد)
         if diff_minutes < -AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES:

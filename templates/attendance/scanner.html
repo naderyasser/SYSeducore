@@ -1,131 +1,320 @@
 {% extends 'base.html' %}
 
 {% block title %}تسجيل الحضور{% endblock %}
+{% block page_title %}تسجيل الحضور{% endblock %}
 
 {% block extra_css %}
 <style>
-    .attendance-container {
-        max-width: 700px;
+    /* Scanner Container */
+    .scanner-container {
+        max-width: 1400px;
         margin: 0 auto;
     }
 
-    .code-entry-card {
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-        border-radius: 16px;
-        padding: 2rem;
-        color: white;
-        text-align: center;
-        margin-bottom: 1.5rem;
+    /* Top Stats Row */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+        margin-bottom: 25px;
     }
 
-    .code-entry-card h2 {
+    .stat-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+    }
+
+    .stat-card .stat-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+
+    .stat-card .stat-icon.blue { background: #dbeafe; color: #2563eb; }
+    .stat-card .stat-icon.green { background: #dcfce7; color: #16a34a; }
+    .stat-card .stat-icon.orange { background: #fef3c7; color: #d97706; }
+    .stat-card .stat-icon.red { background: #fee2e2; color: #dc2626; }
+
+    .stat-card .stat-info {
+        flex: 1;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-bottom: 4px;
+    }
+
+    .stat-card .stat-value {
+        font-size: 1.75rem;
         font-weight: 700;
-        margin-bottom: 0.5rem;
+        color: #1f2937;
     }
 
-    .code-entry-card p {
+    .stat-card .stat-change {
+        font-size: 0.75rem;
+        margin-top: 4px;
+    }
+
+    .stat-card .stat-change.positive { color: #10b981; }
+    .stat-card .stat-change.negative { color: #ef4444; }
+
+    /* Main Content Grid */
+    .scanner-grid {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 25px;
+    }
+
+    @media (max-width: 1024px) {
+        .scanner-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* Scan Input Section */
+    .scan-input-section {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-radius: 16px;
+        padding: 30px;
+        color: #fff;
+        text-align: center;
+        margin-bottom: 25px;
+    }
+
+    .scan-input-section h2 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .scan-input-section p {
         opacity: 0.9;
-        margin-bottom: 1.5rem;
+        margin-bottom: 25px;
+        font-size: 0.95rem;
+    }
+
+    .input-modes {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+
+    .input-mode-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: #fff;
+        padding: 12px 24px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .input-mode-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .input-mode-btn.active {
+        background: #fff;
+        color: #2563eb;
+        border-color: #fff;
     }
 
     .code-input-wrapper {
-        position: relative;
-        max-width: 300px;
+        max-width: 350px;
         margin: 0 auto;
     }
 
     .code-input {
         width: 100%;
-        padding: 1.25rem;
-        font-size: 2rem;
+        padding: 18px;
+        font-size: 2.25rem;
         font-weight: 700;
         text-align: center;
         border: none;
         border-radius: 12px;
-        letter-spacing: 8px;
-        background: white;
+        letter-spacing: 10px;
+        background: #fff;
         color: #1e293b;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     }
 
     .code-input:focus {
         outline: none;
-        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.3);
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4);
     }
 
-    .code-input::placeholder {
-        color: #94a3b8;
-        font-size: 1rem;
-        letter-spacing: normal;
-    }
-
-    .input-hint {
-        margin-top: 1rem;
-        font-size: 0.875rem;
-        opacity: 0.8;
-    }
-
-    .input-hint i {
-        margin-left: 0.25rem;
-    }
-
-    .rules-card {
-        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-        border: none;
-        border-radius: 12px;
-    }
-
-    .rules-card .card-body {
-        padding: 1.25rem;
-    }
-
-    .rules-card h5 {
-        color: #92400e;
-        font-weight: 600;
-        margin-bottom: 1rem;
-    }
-
-    .rules-card h5 i {
-        margin-left: 0.5rem;
-    }
-
-    .rule-item {
+    .input-status {
         display: flex;
-        align-items: flex-start;
-        margin-bottom: 0.75rem;
-        color: #78350f;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 15px;
+        font-size: 0.9rem;
+        opacity: 0.9;
     }
 
-    .rule-item:last-child {
-        margin-bottom: 0;
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        background: #4ade80;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
     }
 
-    .rule-item i {
-        margin-left: 0.75rem;
-        margin-top: 0.25rem;
-        flex-shrink: 0;
+    /* Camera Scanner */
+    .camera-scanner {
+        display: none;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
     }
 
-    .rule-item strong {
-        color: #92400e;
+    .camera-scanner.active {
+        display: block;
+    }
+
+    .camera-container {
+        position: relative;
+        background: #000;
+        border-radius: 12px;
+        overflow: hidden;
+        aspect-ratio: 16/9;
+    }
+
+    #cameraPreview {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .camera-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+    }
+
+    .scan-frame {
+        width: 70%;
+        height: 60%;
+        border: 3px solid rgba(255, 255, 255, 0.8);
+        border-radius: 16px;
+        position: relative;
+    }
+
+    .scan-frame::before,
+    .scan-frame::after {
+        content: '';
+        position: absolute;
+        width: 40px;
+        height: 40px;
+        border: 4px solid #3b82f6;
+    }
+
+    .scan-frame::before {
+        top: -4px;
+        left: -4px;
+        border-right: none;
+        border-bottom: none;
+        border-radius: 16px 0 0 0;
+    }
+
+    .scan-frame::after {
+        bottom: -4px;
+        right: -4px;
+        border-left: none;
+        border-top: none;
+        border-radius: 0 0 16px 0;
+    }
+
+    .scan-line {
+        position: absolute;
+        top: 0;
+        left: 10%;
+        right: 10%;
+        height: 3px;
+        background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+        animation: scanMove 2s ease-in-out infinite;
+    }
+
+    @keyframes scanMove {
+        0%, 100% { top: 0; }
+        50% { top: calc(100% - 3px); }
+    }
+
+    .camera-controls {
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        margin-top: 15px;
+    }
+
+    .camera-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        color: #fff;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+    }
+
+    .camera-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .camera-btn.danger {
+        background: #ef4444;
+        border-color: #ef4444;
+    }
+
+    /* Result Display */
+    .result-display {
+        display: none;
+        margin-bottom: 25px;
+    }
+
+    .result-display.show {
+        display: block;
     }
 
     .result-card {
-        border-radius: 12px;
-        padding: 1.5rem;
-        text-align: center;
-        animation: slideDown 0.3s ease-out;
-        margin-bottom: 1.5rem;
-    }
-
-    @keyframes slideDown {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     }
 
     .result-card.success {
@@ -138,277 +327,1324 @@
         border: 2px solid #ef4444;
     }
 
+    .result-card.warning {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: 2px solid #f59e0b;
+    }
+
+    .result-header {
+        padding: 20px;
+        text-align: center;
+    }
+
     .result-icon {
-        font-size: 3rem;
-        margin-bottom: 0.75rem;
+        font-size: 3.5rem;
+        margin-bottom: 10px;
+    }
+
+    .result-card.success .result-icon { color: #10b981; }
+    .result-card.error .result-icon { color: #ef4444; }
+    .result-card.warning .result-icon { color: #f59e0b; }
+
+    .result-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 5px;
     }
 
     .result-message {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: #1e293b;
+        color: #64748b;
+        font-size: 1rem;
     }
 
     .result-details {
-        font-size: 0.875rem;
+        padding: 20px;
+        background: rgba(255, 255, 255, 0.5);
+    }
+
+    .detail-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 12px 0;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .detail-row:last-child {
+        border-bottom: none;
+    }
+
+    .detail-label {
         color: #64748b;
-        margin-top: 0.5rem;
+        font-size: 0.9rem;
     }
 
-    .history-card .card-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-    }
-
-    .history-card .card-header h5 {
-        margin: 0;
+    .detail-value {
         font-weight: 600;
+        color: #1e293b;
+        font-size: 0.95rem;
     }
 
-    .history-card .card-header h5 i {
-        margin-left: 0.5rem;
-        color: var(--primary-color);
+    .detail-value.highlight {
+        color: #2563eb;
     }
 
-    .history-item {
+    /* Quick Actions */
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+        margin-bottom: 25px;
+    }
+
+    .quick-action-btn {
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 15px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .quick-action-btn:hover {
+        border-color: #3b82f6;
+        background: #f9fafb;
+        transform: translateY(-2px);
+    }
+
+    .quick-action-btn i {
+        font-size: 1.5rem;
+        color: #3b82f6;
+    }
+
+    .quick-action-btn span {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #374151;
+    }
+
+    /* Today's Sessions */
+    .today-sessions {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .section-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 0.875rem 1rem;
-        border-radius: 8px;
-        margin-bottom: 0.5rem;
-        transition: background 0.2s ease;
+        margin-bottom: 15px;
     }
 
-    .history-item:last-child {
+    .section-header h5 {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .section-header h5 i {
+        color: #3b82f6;
+        margin-left: 8px;
+    }
+
+    .session-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 15px;
+        background: #f9fafb;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        transition: all 0.2s;
+    }
+
+    .session-item:hover {
+        background: #f3f4f6;
+    }
+
+    .session-item:last-child {
         margin-bottom: 0;
     }
 
-    .history-item.success {
-        background: #f0fdf4;
-        border-right: 3px solid #10b981;
-    }
-
-    .history-item.error {
-        background: #fef2f2;
-        border-right: 3px solid #ef4444;
-    }
-
-    .history-item-code {
+    .session-info h6 {
+        font-size: 0.95rem;
         font-weight: 600;
-        font-size: 1.125rem;
-        color: #1e293b;
+        color: #1f2937;
+        margin-bottom: 4px;
     }
 
-    .history-item-message {
-        color: #64748b;
-        font-size: 0.875rem;
+    .session-info p {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
     }
 
-    .history-item-time {
-        color: #94a3b8;
-        font-size: 0.75rem;
+    .session-status {
+        text-align: left;
     }
 
-    .empty-history {
-        text-align: center;
-        padding: 2rem;
-        color: #94a3b8;
+    .session-status .count {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #3b82f6;
     }
 
-    .empty-history i {
-        font-size: 2.5rem;
-        margin-bottom: 0.75rem;
-        display: block;
+    .session-status .label {
+        font-size: 0.7rem;
+        color: #9ca3af;
     }
 
-    .status-badge {
-        display: inline-flex;
+    /* Recent Scans */
+    .recent-scans {
+        background: #fff;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        max-height: 500px;
+        overflow-y: auto;
+    }
+
+    .scan-item {
+        display: flex;
         align-items: center;
-        padding: 0.375rem 0.75rem;
-        background: rgba(255, 255, 255, 0.2);
-        border-radius: 20px;
-        font-size: 0.875rem;
+        gap: 15px;
+        padding: 15px;
+        background: #f9fafb;
+        border-radius: 10px;
+        margin-bottom: 10px;
+        border-right: 4px solid #d1d5db;
+        transition: all 0.2s;
     }
 
-    .status-badge .dot {
-        width: 8px;
-        height: 8px;
-        background: #4ade80;
-        border-radius: 50%;
-        margin-left: 0.5rem;
-        animation: pulse 2s infinite;
+    .scan-item:hover {
+        background: #f3f4f6;
     }
 
+    .scan-item.success {
+        border-right-color: #10b981;
+        background: #f0fdf4;
+    }
+
+    .scan-item.error {
+        border-right-color: #ef4444;
+        background: #fef2f2;
+    }
+
+    .scan-item-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .scan-item.success .scan-item-icon {
+        background: #d1fae5;
+        color: #10b981;
+    }
+
+    .scan-item.error .scan-item-icon {
+        background: #fee2e2;
+        color: #ef4444;
+    }
+
+    .scan-item-info {
+        flex: 1;
+    }
+
+    .scan-item-info h6 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 2px;
+    }
+
+    .scan-item-info p {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .scan-item-time {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        text-align: left;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 40px 20px;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 10px;
+        display: block;
+        opacity: 0.5;
+    }
+
+    .empty-state p {
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    /* Rules Card */
+    .rules-card {
+        background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+        border: none;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 25px;
+    }
+
+    .rules-card h5 {
+        color: #92400e;
+        font-weight: 600;
+        margin-bottom: 15px;
+        font-size: 1rem;
+    }
+
+    .rules-card h5 i {
+        margin-left: 8px;
+    }
+
+    .rule-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 12px;
+        color: #78350f;
+    }
+
+    .rule-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .rule-item i {
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    .rule-item strong {
+        color: #92400e;
+    }
+
+    /* Animations */
     @keyframes pulse {
         0%, 100% { opacity: 1; }
         50% { opacity: 0.5; }
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateY(-20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .result-card {
+        animation: slideIn 0.3s ease-out;
+    }
+
+    /* Filter Tabs */
+    .filter-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+    }
+
+    .filter-tab {
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: #f3f4f6;
+        color: #6b7280;
+        border: none;
+    }
+
+    .filter-tab:hover {
+        background: #e5e7eb;
+    }
+
+    .filter-tab.active {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    .filter-tab .count {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.7rem;
+        margin-right: 4px;
+    }
+
+    /* Action Buttons */
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 15px;
+    }
+
+    .action-btn {
+        flex: 1;
+        padding: 10px 16px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+    }
+
+    .action-btn.primary {
+        background: #3b82f6;
+        color: #fff;
+    }
+
+    .action-btn.primary:hover {
+        background: #2563eb;
+    }
+
+    .action-btn.secondary {
+        background: #e5e7eb;
+        color: #374151;
+    }
+
+    .action-btn.secondary:hover {
+        background: #d1d5db;
+    }
+
+    /* Mobile Adjustments */
+    @media (max-width: 768px) {
+        .stats-row {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .scan-input-section {
+            padding: 20px;
+        }
+
+        .scan-input-section h2 {
+            font-size: 1.4rem;
+        }
+
+        .code-input {
+            font-size: 1.75rem;
+            letter-spacing: 5px;
+        }
+
+        .input-modes {
+            flex-direction: column;
+        }
+
+        .quick-actions {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    /* Export Modal */
+    .modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-overlay.show {
+        display: flex;
+    }
+
+    .modal-content {
+        background: #fff;
+        border-radius: 16px;
+        padding: 30px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+
+    .modal-header h5 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: #9ca3af;
+        cursor: pointer;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 6px;
+    }
+
+    .modal-close:hover {
+        background: #f3f4f6;
+    }
+
+    .modal-body {
+        margin-bottom: 20px;
+    }
+
+    .modal-footer {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="attendance-container">
-    <!-- Code Entry Section -->
-    <div class="code-entry-card">
-        <h2><i class="bi bi-person-check"></i> تسجيل حضور الطلاب</h2>
-        <p>أدخل كود الطالب المميز (الرقم الذي يعطيه الأدمن لكل طالب)</p>
-
-        <div class="code-input-wrapper">
-            <input
-                type="text"
-                id="studentCodeInput"
-                class="code-input"
-                placeholder="مثال: 1001"
-                autofocus
-                autocomplete="off"
-                inputmode="numeric"
-            >
-        </div>
-
-        <div class="input-hint">
-            <i class="bi bi-keyboard"></i>
-            اضغط Enter بعد إدخال الكود
-        </div>
-
-        <div class="status-badge mt-3">
-            <span class="dot"></span>
-            جاهز للإدخال
-        </div>
-    </div>
-
-    <!-- Result Section -->
-    <div id="resultSection" style="display: none;">
-        <div class="result-card" id="resultCard">
-            <div class="result-icon" id="resultIcon"></div>
-            <div class="result-message" id="resultMessage"></div>
-            <div class="result-details" id="resultDetails"></div>
-        </div>
-    </div>
-
-    <!-- Rules Section -->
-    <div class="card rules-card mb-4">
-        <div class="card-body">
-            <h5><i class="bi bi-exclamation-triangle"></i> قواعد الحضور</h5>
-            <div class="rule-item">
-                <i class="bi bi-clock"></i>
-                <span><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</span>
+<div class="scanner-container">
+    <!-- Stats Row -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon blue">
+                <i class="bi bi-people"></i>
             </div>
-            <div class="rule-item">
-                <i class="bi bi-cash-coin"></i>
-                <span><strong>الشهر الأول:</strong> يجب الدفع أولاً قبل الدخول</span>
+            <div class="stat-info">
+                <div class="stat-label">الحضور اليوم</div>
+                <div class="stat-value" id="todayPresent">0</div>
+                <div class="stat-change positive" id="todayPresentChange">+0 عن الأمس</div>
             </div>
-            <div class="rule-item">
-                <i class="bi bi-calendar-check"></i>
-                <span><strong>الشهور التالية:</strong> حصتين سماح قبل الدفع</span>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon green">
+                <i class="bi bi-check-circle"></i>
+            </div>
+            <div class="stat-info">
+                <div class="stat-label">نسبة الحضور</div>
+                <div class="stat-value" id="attendanceRate">0%</div>
+                <div class="stat-change" id="attendanceRateLabel">-</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon orange">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div class="stat-info">
+                <div class="stat-label">آخر مسح</div>
+                <div class="stat-value" style="font-size: 1.25rem;" id="lastScanTime">--:--</div>
+                <div class="stat-change" id="lastScanName">لا يوجد</div>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon red">
+                <i class="bi bi-calendar-event"></i>
+            </div>
+            <div class="stat-info">
+                <div class="stat-label">الحصص اليوم</div>
+                <div class="stat-value" id="todaySessions">0</div>
+                <div class="stat-change">حصة نشطة</div>
             </div>
         </div>
     </div>
 
-    <!-- History Section -->
-    <div class="card history-card">
-        <div class="card-header">
-            <h5><i class="bi bi-clock-history"></i> آخر عمليات التسجيل</h5>
-        </div>
-        <div class="card-body" id="scansList">
-            <div class="empty-history">
-                <i class="bi bi-inbox"></i>
-                <p>لا توجد عمليات تسجيل بعد</p>
+    <div class="scanner-grid">
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Scan Input Section -->
+            <div class="scan-input-section">
+                <h2><i class="bi bi-qr-code-scan"></i> تسجيل حضور الطلاب</h2>
+                <p>اختر طريقة الإدخال: أدخل كود الطالب يدوياً أو امسح الباركود بالكاميرا</p>
+
+                <div class="input-modes">
+                    <button class="input-mode-btn active" id="manualModeBtn" onclick="switchMode('manual')">
+                        <i class="bi bi-keyboard"></i>
+                        إدخال يدوي
+                    </button>
+                    <button class="input-mode-btn" id="cameraModeBtn" onclick="switchMode('camera')">
+                        <i class="bi bi-camera"></i>
+                        الكاميرا
+                    </button>
+                </div>
+
+                <!-- Manual Input -->
+                <div class="code-input-wrapper" id="manualInput">
+                    <input
+                        type="text"
+                        id="studentCodeInput"
+                        class="code-input"
+                        placeholder="كود الطالب"
+                        autofocus
+                        autocomplete="off"
+                        inputmode="numeric"
+                        maxlength="6"
+                    >
+                    <div class="input-status">
+                        <span class="status-dot"></span>
+                        <span>جاهز للإدخال - اضغط Enter</span>
+                    </div>
+                </div>
+
+                <!-- Camera Scanner -->
+                <div class="camera-scanner" id="cameraScanner">
+                    <div class="camera-container">
+                        <video id="cameraPreview" autoplay playsinline></video>
+                        <div class="camera-overlay">
+                            <div class="scan-frame">
+                                <div class="scan-line"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="camera-controls">
+                        <button class="camera-btn" id="startCameraBtn" onclick="startCamera()">
+                            <i class="bi bi-play-fill"></i>
+                            تشغيل الكاميرا
+                        </button>
+                        <button class="camera-btn danger" id="stopCameraBtn" onclick="stopCamera()" style="display: none;">
+                            <i class="bi bi-stop-fill"></i>
+                            إيقاف الكاميرا
+                        </button>
+                    </div>
+                    <p style="margin-top: 15px; font-size: 0.85rem; opacity: 0.9;">
+                        <i class="bi bi-info-circle"></i>
+                        وجه الكاميرا نحو باركود الطالب
+                    </p>
+                </div>
             </div>
+
+            <!-- Result Display -->
+            <div class="result-display" id="resultDisplay">
+                <div class="result-card" id="resultCard">
+                    <div class="result-header">
+                        <div class="result-icon" id="resultIcon"></div>
+                        <div class="result-title" id="resultTitle"></div>
+                        <div class="result-message" id="resultMessage"></div>
+                    </div>
+                    <div class="result-details" id="resultDetails"></div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <button class="quick-action-btn" onclick="showTodaySessions()">
+                    <i class="bi bi-calendar-day"></i>
+                    <span>حصص اليوم</span>
+                </button>
+                <button class="quick-action-btn" onclick="exportTodayReport()">
+                    <i class="bi bi-download"></i>
+                    <span>تصدير تقرير</span>
+                </button>
+                <button class="quick-action-btn" onclick="refreshStats()">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>تحديث</span>
+                </button>
+                <button class="quick-action-btn" onclick="showRules()">
+                    <i class="bi bi-info-circle"></i>
+                    <span>القواعد</span>
+                </button>
+            </div>
+
+            <!-- Today's Sessions -->
+            <div class="today-sessions" id="todaySessionsSection">
+                <div class="section-header">
+                    <h5><i class="bi bi-calendar-event"></i> حصص اليوم</h5>
+                    <button class="btn btn-sm btn-light" onclick="refreshSessions()">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                <div id="sessionsList">
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>لا توجد حصص مجدولة اليوم</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar-content">
+            <!-- Rules Card -->
+            <div class="rules-card">
+                <h5><i class="bi bi-exclamation-triangle"></i> قواعد الحضور</h5>
+                <div class="rule-item">
+                    <i class="bi bi-clock"></i>
+                    <span><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</span>
+                </div>
+                <div class="rule-item">
+                    <i class="bi bi-cash-coin"></i>
+                    <span><strong>الشهر الأول:</strong> يجب الدفع أولاً قبل الدخول</span>
+                </div>
+                <div class="rule-item">
+                    <i class="bi bi-calendar-check"></i>
+                    <span><strong>الشهور التالية:</strong> حصتين سماح قبل الدفع</span>
+                </div>
+            </div>
+
+            <!-- Recent Scans -->
+            <div class="recent-scans">
+                <div class="section-header">
+                    <h5><i class="bi bi-clock-history"></i> آخر عمليات التسجيل</h5>
+                </div>
+
+                <div class="filter-tabs">
+                    <button class="filter-tab active" onclick="filterScans('all')" id="filterAll">
+                        الكل <span class="count" id="countAll">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterScans('success')" id="filterSuccess">
+                        النجاح <span class="count" id="countSuccess">0</span>
+                    </button>
+                    <button class="filter-tab" onclick="filterScans('error')" id="filterError">
+                        الفشل <span class="count" id="countError">0</span>
+                    </button>
+                </div>
+
+                <div id="scansList">
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>لا توجد عمليات تسجيل بعد</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="exportModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h5><i class="bi bi-download"></i> تصدير تقرير الحضور</h5>
+            <button class="modal-close" onclick="closeExportModal()">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div class="mb-3">
+                <label class="form-label">التاريخ</label>
+                <input type="date" class="form-control" id="exportDate" value="{{ today|default:'' }}">
+            </div>
+            <div class="mb-3">
+                <label class="form-label">نوع التقرير</label>
+                <select class="form-select" id="exportType">
+                    <option value="summary">ملخص الحضور</option>
+                    <option value="detailed">تفاصيل كاملة</option>
+                    <option value="students">قائمة الطلاب</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeExportModal()">إلغاء</button>
+            <button class="btn btn-primary" onclick="performExport()">
+                <i class="bi bi-download"></i>
+                تصدير
+            </button>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<!-- QuaggaJS for Barcode Scanning -->
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
 <script>
+// Global State
+let scansHistory = [];
+let cameraStream = null;
+let isCameraRunning = false;
+let currentFilter = 'all';
+let todayStats = { present: 0, total: 0 };
+
+// DOM Elements
+const input = document.getElementById('studentCodeInput');
+const resultDisplay = document.getElementById('resultDisplay');
+const resultCard = document.getElementById('resultCard');
+const resultIcon = document.getElementById('resultIcon');
+const resultTitle = document.getElementById('resultTitle');
+const resultMessage = document.getElementById('resultMessage');
+const resultDetails = document.getElementById('resultDetails');
+const scansList = document.getElementById('scansList');
+
+// Initialize
 document.addEventListener('DOMContentLoaded', function() {
-    const input = document.getElementById('studentCodeInput');
-    const resultSection = document.getElementById('resultSection');
-    const resultCard = document.getElementById('resultCard');
-    const resultIcon = document.getElementById('resultIcon');
-    const resultMessage = document.getElementById('resultMessage');
-    const resultDetails = document.getElementById('resultDetails');
-    const scansList = document.getElementById('scansList');
+    initializeApp();
+});
 
-    let scansHistory = [];
+async function initializeApp() {
+    // Focus input
+    input.focus();
 
-    input.addEventListener('keypress', async function(e) {
-        if (e.key === 'Enter') {
-            const code = input.value.trim();
-            if (!code) return;
+    // Setup event listeners
+    input.addEventListener('keypress', handleKeyPress);
+    input.addEventListener('input', handleInput);
 
-            try {
-                const response = await fetch('{% url "attendance:process_student_code" %}', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    body: JSON.stringify({ student_code: code })
-                });
+    // Load initial data
+    await loadTodayStats();
+    await loadTodaySessions();
 
-                const data = await response.json();
-                showResult(data, code);
-                input.value = '';
-                input.focus();
+    // Update time
+    updateClock();
+    setInterval(updateClock, 60000);
+}
 
-            } catch (error) {
-                showResult({
-                    success: false,
-                    message: 'خطأ في الاتصال بالخادم'
-                }, code);
-            }
+// Handle Input
+function handleInput(e) {
+    // Only allow numbers
+    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+}
+
+// Handle Key Press
+async function handleKeyPress(e) {
+    if (e.key === 'Enter') {
+        const code = input.value.trim();
+        if (!code) return;
+
+        await processStudentCode(code);
+        input.value = '';
+        input.focus();
+    }
+}
+
+// Process Student Code
+async function processStudentCode(code) {
+    showLoading();
+
+    try {
+        const response = await fetch('{% url "attendance:process_student_code" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ student_code: code })
+        });
+
+        const data = await response.json();
+        displayResult(data, code);
+
+        // Update stats
+        await loadTodayStats();
+        await loadTodaySessions();
+
+        // Play sound
+        playSound(data.success ? 'success' : 'error');
+
+    } catch (error) {
+        displayResult({
+            success: false,
+            message: 'خطأ في الاتصال بالخادم',
+            student: null,
+            group: null
+        }, code);
+        playSound('error');
+    }
+}
+
+// Display Result
+function displayResult(data, code) {
+    resultDisplay.classList.add('show');
+
+    if (data.success) {
+        resultCard.className = 'result-card success';
+        resultIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+        resultTitle.textContent = 'تم تسجيل الحضور بنجاح';
+
+        let details = `
+            <div class="detail-row">
+                <span class="detail-label">كود الطالب</span>
+                <span class="detail-value highlight">${code}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">اسم الطالب</span>
+                <span class="detail-value">${data.student?.name || '-'}</span>
+            </div>
+        `;
+
+        if (data.group) {
+            details += `
+                <div class="detail-row">
+                    <span class="detail-label">المجموعة</span>
+                    <span class="detail-value">${data.group.name}</span>
+                </div>
+            `;
         }
+
+        if (data.attendance) {
+            const scanTime = new Date(data.attendance.scan_time);
+            details += `
+                <div class="detail-row">
+                    <span class="detail-label">وقت التسجيل</span>
+                    <span class="detail-value">${scanTime.toLocaleTimeString('ar-EG')}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">الحالة</span>
+                    <span class="detail-value">${getStatusText(data.attendance.status)}</span>
+                </div>
+            `;
+        }
+
+        resultDetails.innerHTML = details;
+        resultMessage.textContent = data.message || 'مرحباً!';
+
+    } else {
+        resultCard.className = 'result-card error';
+        resultIcon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
+        resultTitle.textContent = 'فشل تسجيل الحضور';
+        resultMessage.textContent = data.message || 'حدث خطأ ما';
+        resultDetails.innerHTML = `
+            <div class="detail-row">
+                <span class="detail-label">الكود المدخل</span>
+                <span class="detail-value highlight">${code}</span>
+            </div>
+        `;
+    }
+
+    // Add to history
+    addToHistory(data, code);
+
+    // Auto hide after 5 seconds
+    setTimeout(() => {
+        resultDisplay.classList.remove('show');
+    }, 5000);
+}
+
+// Get Status Text
+function getStatusText(status) {
+    const statusMap = {
+        'present': '<span class="badge bg-success">حاضر</span>',
+        'late': '<span class="badge bg-warning">متأخر</span>',
+        'absent': '<span class="badge bg-danger">غائب</span>'
+    };
+    return statusMap[status] || status;
+}
+
+// Show Loading
+function showLoading() {
+    resultDisplay.classList.add('show');
+    resultCard.className = 'result-card';
+    resultCard.style.background = '#f3f4f6';
+    resultIcon.innerHTML = '<div class="spinner-border text-primary" role="status"><span class="visually-hidden">جاري التحميل...</span></div>';
+    resultTitle.textContent = 'جاري المعالجة...';
+    resultMessage.textContent = 'الرجاء الانتظار';
+    resultDetails.innerHTML = '';
+}
+
+// Add to History
+function addToHistory(data, code) {
+    const scan = {
+        code: code,
+        success: data.success,
+        message: data.message,
+        student: data.student?.name || '-',
+        time: new Date().toLocaleTimeString('ar-EG'),
+        timestamp: Date.now()
+    };
+
+    scansHistory.unshift(scan);
+
+    // Keep only last 50
+    if (scansHistory.length > 50) {
+        scansHistory.pop();
+    }
+
+    renderScansList();
+    updateCounts();
+}
+
+// Render Scans List
+function renderScansList() {
+    const filtered = currentFilter === 'all'
+        ? scansHistory
+        : scansHistory.filter(s => s.success === (currentFilter === 'success'));
+
+    if (filtered.length === 0) {
+        scansList.innerHTML = `
+            <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <p>لا توجد عمليات ${currentFilter === 'all' ? '' : (currentFilter === 'success' ? 'ناجحة' : 'فاشلة')}</p>
+            </div>
+        `;
+        return;
+    }
+
+    scansList.innerHTML = filtered.slice(0, 20).map(scan => `
+        <div class="scan-item ${scan.success ? 'success' : 'error'}">
+            <div class="scan-item-icon">
+                <i class="bi bi-${scan.success ? 'check' : 'x'}-circle-fill"></i>
+            </div>
+            <div class="scan-item-info">
+                <h6>${scan.student}</h6>
+                <p>${scan.message}</p>
+            </div>
+            <div class="scan-item-time">${scan.time}</div>
+        </div>
+    `).join('');
+}
+
+// Update Counts
+function updateCounts() {
+    const all = scansHistory.length;
+    const success = scansHistory.filter(s => s.success).length;
+    const error = scansHistory.filter(s => !s.success).length;
+
+    document.getElementById('countAll').textContent = all;
+    document.getElementById('countSuccess').textContent = success;
+    document.getElementById('countError').textContent = error;
+}
+
+// Filter Scans
+function filterScans(filter) {
+    currentFilter = filter;
+
+    // Update tabs
+    document.querySelectorAll('.filter-tab').forEach(tab => {
+        tab.classList.remove('active');
     });
+    document.getElementById('filter' + filter.charAt(0).toUpperCase() + filter.slice(1)).classList.add('active');
 
-    function showResult(data, code) {
-        resultSection.style.display = 'block';
-        resultCard.className = 'result-card ' + (data.success ? 'success' : 'error');
-        resultIcon.innerHTML = data.success
-            ? '<i class="bi bi-check-circle-fill text-success"></i>'
-            : '<i class="bi bi-x-circle-fill text-danger"></i>';
-        resultMessage.textContent = data.message;
-        resultDetails.textContent = data.success ? `كود الطالب: ${code}` : '';
+    renderScansList();
+}
 
-        addToHistory(code, data.success, data.message);
+// Load Today Stats
+async function loadTodayStats() {
+    try {
+        const response = await fetch('{% url "attendance:today_stats" %}');
+        const data = await response.json();
 
-        setTimeout(() => {
-            resultSection.style.display = 'none';
-        }, 5000);
+        if (data.success) {
+            document.getElementById('todayPresent').textContent = data.present || 0;
+            document.getElementById('todaySessions').textContent = data.sessions || 0;
+
+            const rate = data.total > 0 ? Math.round((data.present / data.total) * 100) : 0;
+            document.getElementById('attendanceRate').textContent = rate + '%';
+
+            const change = data.change || 0;
+            const changeEl = document.getElementById('todayPresentChange');
+            changeEl.textContent = (change >= 0 ? '+' : '') + change + ' عن الأمس';
+            changeEl.className = 'stat-change ' + (change >= 0 ? 'positive' : 'negative');
+        }
+    } catch (error) {
+        console.error('Error loading stats:', error);
     }
+}
 
-    function addToHistory(code, success, message) {
-        const time = new Date().toLocaleTimeString('ar-EG');
-        scansHistory.unshift({ code, success, message, time });
+// Load Today Sessions
+async function loadTodaySessions() {
+    try {
+        const response = await fetch('{% url "attendance:today_sessions" %}');
+        const data = await response.json();
 
-        if (scansHistory.length > 10) scansHistory.pop();
+        const sessionsList = document.getElementById('sessionsList');
 
-        renderHistory();
-    }
-
-    function renderHistory() {
-        if (scansHistory.length === 0) {
-            scansList.innerHTML = `
-                <div class="empty-history">
+        if (!data.success || !data.sessions || data.sessions.length === 0) {
+            sessionsList.innerHTML = `
+                <div class="empty-state">
                     <i class="bi bi-inbox"></i>
-                    <p>لا توجد عمليات تسجيل بعد</p>
+                    <p>لا توجد حصص مجدولة اليوم</p>
                 </div>
             `;
             return;
         }
 
-        scansList.innerHTML = scansHistory.map(scan => `
-            <div class="history-item ${scan.success ? 'success' : 'error'}">
-                <div>
-                    <div class="history-item-code">${scan.code}</div>
-                    <div class="history-item-message">${scan.message}</div>
+        sessionsList.innerHTML = data.sessions.map(session => `
+            <div class="session-item">
+                <div class="session-info">
+                    <h6>${session.group_name}</h6>
+                    <p>
+                        <i class="bi bi-clock"></i> ${session.time}
+                        <span style="margin: 0 8px;">•</span>
+                        <i class="bi bi-person"></i> ${session.teacher_name || '-'}
+                    </p>
                 </div>
-                <div class="history-item-time">${scan.time}</div>
+                <div class="session-status">
+                    <div class="count">${session.attendees || 0}</div>
+                    <div class="label">حاضر</div>
+                </div>
             </div>
         `).join('');
+
+    } catch (error) {
+        console.error('Error loading sessions:', error);
     }
-});
+}
+
+// Switch Mode
+function switchMode(mode) {
+    const manualBtn = document.getElementById('manualModeBtn');
+    const cameraBtn = document.getElementById('cameraModeBtn');
+    const manualInput = document.getElementById('manualInput');
+    const cameraScanner = document.getElementById('cameraScanner');
+
+    if (mode === 'manual') {
+        manualBtn.classList.add('active');
+        cameraBtn.classList.remove('active');
+        manualInput.style.display = 'block';
+        cameraScanner.classList.remove('active');
+        input.focus();
+        stopCamera();
+    } else {
+        cameraBtn.classList.add('active');
+        manualBtn.classList.remove('active');
+        manualInput.style.display = 'none';
+        cameraScanner.classList.add('active');
+    }
+}
+
+// Camera Functions
+async function startCamera() {
+    try {
+        // Check if Barcode Detection API is available
+        if ('BarcodeDetector' in window) {
+            startCameraWithAPI();
+        } else {
+            // Fallback to QuaggaJS
+            startCameraWithQuagga();
+        }
+
+        document.getElementById('startCameraBtn').style.display = 'none';
+        document.getElementById('stopCameraBtn').style.display = 'flex';
+        isCameraRunning = true;
+
+    } catch (error) {
+        console.error('Error starting camera:', error);
+        alert('تعذر تشغيل الكاميرا. يرجى التأكد من إعدادات الكاميرا.');
+    }
+}
+
+function startCameraWithAPI() {
+    const video = document.getElementById('cameraPreview');
+
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+            cameraStream = stream;
+            video.srcObject = stream;
+
+            // Start barcode detection
+            detectBarcodeAPI();
+        })
+        .catch(error => {
+            console.error('Error accessing camera:', error);
+            throw error;
+        });
+}
+
+async function detectBarcodeAPI() {
+    if (!isCameraRunning || !cameraStream) return;
+
+    const video = document.getElementById('cameraPreview');
+    const barcodeDetector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128'] });
+
+    try {
+        const barcodes = await barcodeDetector.detect(video);
+
+        if (barcodes.length > 0) {
+            const code = barcodes[0].rawValue;
+            await processStudentCode(code);
+        }
+    } catch (error) {
+        console.error('Barcode detection error:', error);
+    }
+
+    // Continue detection
+    if (isCameraRunning) {
+        requestAnimationFrame(detectBarcodeAPI);
+    }
+}
+
+function startCameraWithQuagga() {
+    Quagga.init({
+        inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: document.querySelector('#cameraPreview'),
+            constraints: {
+                facingMode: "environment"
+            }
+        },
+        decoder: {
+            readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader"]
+        }
+    }, function(err) {
+        if (err) {
+            console.error('Quagga initialization error:', err);
+            return;
+        }
+        Quagga.start();
+    });
+
+    Quagga.onDetected(async function(result) {
+        const code = result.codeResult.code;
+        await processStudentCode(code);
+    });
+}
+
+function stopCamera() {
+    isCameraRunning = false;
+
+    if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+    }
+
+    if (typeof Quagga !== 'undefined') {
+        try {
+            Quagga.stop();
+        } catch (e) {}
+    }
+
+    const video = document.getElementById('cameraPreview');
+    video.srcObject = null;
+
+    document.getElementById('startCameraBtn').style.display = 'flex';
+    document.getElementById('stopCameraBtn').style.display = 'none';
+}
+
+// Play Sound
+function playSound(type) {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+
+    if (type === 'success') {
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.1;
+
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 150);
+
+        setTimeout(() => {
+            const osc2 = audioContext.createOscillator();
+            const gain2 = audioContext.createGain();
+            osc2.connect(gain2);
+            gain2.connect(audioContext.destination);
+            osc2.frequency.value = 1000;
+            osc2.type = 'sine';
+            gain2.gain.value = 0.1;
+            osc2.start();
+            setTimeout(() => osc2.stop(), 150);
+        }, 200);
+    } else {
+        oscillator.frequency.value = 200;
+        oscillator.type = 'sawtooth';
+        gainNode.gain.value = 0.1;
+
+        oscillator.start();
+        setTimeout(() => oscillator.stop(), 300);
+    }
+}
+
+// Refresh Functions
+async function refreshStats() {
+    await loadTodayStats();
+    await loadTodaySessions();
+}
+
+async function refreshSessions() {
+    await loadTodaySessions();
+}
+
+// Update Clock
+function updateClock() {
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    document.getElementById('lastScanTime').textContent = timeStr;
+}
+
+// Quick Actions
+function showTodaySessions() {
+    document.getElementById('todaySessionsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function showRules() {
+    alert(`قواعد الحضور:
+
+• قاعدة الـ 10 دقائق: التأخر أكثر من 10 دقائق = ممنوع الدخول
+
+• الشهر الأول: يجب الدفع أولاً قبل الدخول
+
+• الشهور التالية: حصتين سماح قبل الدفع`);
+}
+
+function exportTodayReport() {
+    document.getElementById('exportModal').classList.add('show');
+    document.getElementById('exportDate').valueAsDate = new Date();
+}
+
+function closeExportModal() {
+    document.getElementById('exportModal').classList.remove('show');
+}
+
+async function performExport() {
+    const date = document.getElementById('exportDate').value;
+    const type = document.getElementById('exportType').value;
+
+    try {
+        const response = await fetch('{% url "attendance:export_report" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ date, type })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            // Download file
+            const blob = new Blob([data.content], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `attendance_${date}.csv`;
+            link.click();
+
+            closeExportModal();
+        } else {
+            alert(data.message || 'فشل التصدير');
+        }
+    } catch (error) {
+        alert('خطأ في الاتصال');
+    }
+}
 </script>
 {% endblock %}

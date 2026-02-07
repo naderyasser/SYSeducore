@@ -3,197 +3,1003 @@
 {% block title %}لوحة التحكم{% endblock %}
 {% block page_title %}لوحة التحكم{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Dashboard Header */
+    .dashboard-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 16px;
+        padding: 30px;
+        color: #fff;
+        margin-bottom: 30px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .dashboard-header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+        animation: rotate 20s linear infinite;
+    }
+
+    .dashboard-header-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .dashboard-header h2 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin: 0 0 10px 0;
+    }
+
+    .dashboard-header p {
+        opacity: 0.9;
+        margin: 0;
+    }
+
+    .date-badge {
+        background: rgba(255,255,255,0.2);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* Stats Cards */
+    .stat-card-modern {
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid #f0f0f0;
+    }
+
+    .stat-card-modern:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(0,0,0,0.1);
+    }
+
+    .stat-card-modern::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+    }
+
+    .stat-card-modern.blue::before { background: linear-gradient(90deg, #3b82f6, #06b6d4); }
+    .stat-card-modern.green::before { background: linear-gradient(90deg, #10b981, #34d399); }
+    .stat-card-modern.orange::before { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+    .stat-card-modern.purple::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+    .stat-card-modern.red::before { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+    .stat-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15px;
+    }
+
+    .stat-icon-wrapper {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+    }
+
+    .stat-card-modern.blue .stat-icon-wrapper { background: linear-gradient(135deg, #dbeafe, #bfdbfe); color: #2563eb; }
+    .stat-card-modern.green .stat-icon-wrapper { background: linear-gradient(135deg, #d1fae5, #a7f3d0); color: #059669; }
+    .stat-card-modern.orange .stat-icon-wrapper { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #d97706; }
+    .stat-card-modern.purple .stat-icon-wrapper { background: linear-gradient(135deg, #ede9fe, #ddd6fe); color: #7c3aed; }
+    .stat-card-modern.red .stat-icon-wrapper { background: linear-gradient(135deg, #fee2e2, #fecaca); color: #dc2626; }
+
+    .stat-trend {
+        font-size: 0.75rem;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-weight: 500;
+    }
+
+    .stat-trend.up {
+        background: #d1fae5;
+        color: #059669;
+    }
+
+    .stat-value-modern {
+        font-size: 2.2rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 5px;
+        line-height: 1;
+    }
+
+    .stat-label-modern {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    /* Chart Cards */
+    .chart-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        overflow: hidden;
+        border: 1px solid #f0f0f0;
+    }
+
+    .chart-card-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .chart-card-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #1f2937;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .chart-card-body {
+        padding: 24px;
+    }
+
+    /* Activity List */
+    .activity-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .activity-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 15px;
+        padding: 15px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .activity-item:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+
+    .activity-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        flex-shrink: 0;
+    }
+
+    .activity-icon.present { background: #d1fae5; color: #059669; }
+    .activity-icon.late { background: #fef3c7; color: #d97706; }
+    .activity-icon.absent { background: #fee2e2; color: #dc2626; }
+    .activity-icon.payment { background: #dbeafe; color: #2563eb; }
+
+    .activity-content {
+        flex: 1;
+    }
+
+    .activity-title {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 3px;
+    }
+
+    .activity-meta {
+        font-size: 0.85rem;
+        color: #9ca3af;
+    }
+
+    .activity-time {
+        font-size: 0.8rem;
+        color: #9ca3af;
+        white-space: nowrap;
+    }
+
+    /* Progress Bars */
+    .progress-modern {
+        height: 8px;
+        background: #f3f4f6;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .progress-bar-modern {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.6s ease;
+    }
+
+    /* Group Stats */
+    .group-stat-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .group-stat-item:last-child {
+        border-bottom: none;
+    }
+
+    .group-info {
+        flex: 1;
+    }
+
+    .group-name {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 2px;
+    }
+
+    .group-teacher {
+        font-size: 0.85rem;
+        color: #9ca3af;
+    }
+
+    .group-capacity {
+        text-align: center;
+        min-width: 60px;
+    }
+
+    .capacity-number {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .capacity-label {
+        font-size: 0.75rem;
+        color: #9ca3af;
+    }
+
+    /* Quick Actions */
+    .quick-action-card {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border: 2px dashed #e2e8f0;
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        text-decoration: none;
+        color: inherit;
+        display: block;
+    }
+
+    .quick-action-card:hover {
+        border-color: #3b82f6;
+        background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .quick-action-icon {
+        width: 60px;
+        height: 60px;
+        background: #fff;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 15px;
+        font-size: 1.5rem;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+
+    .quick-action-title {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 5px;
+    }
+
+    .quick-action-desc {
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    /* Canvas containers */
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+
+    .chart-container-small {
+        position: relative;
+        height: 200px;
+    }
+
+    /* Schedule Widget */
+    .schedule-widget {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        overflow: hidden;
+        border: 1px solid #f0f0f0;
+    }
+
+    .schedule-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 14px 20px;
+        border-bottom: 1px solid #f3f4f6;
+        transition: background 0.2s;
+    }
+
+    .schedule-item:hover {
+        background: #f9fafb;
+    }
+
+    .schedule-item:last-child {
+        border-bottom: none;
+    }
+
+    .schedule-time-block {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: #fff;
+        border-radius: 10px;
+        padding: 8px 12px;
+        text-align: center;
+        min-width: 80px;
+        flex-shrink: 0;
+    }
+
+    .schedule-time-block .time-start {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+
+    .schedule-time-block .time-end {
+        font-size: 0.75rem;
+        opacity: 0.8;
+    }
+
+    .schedule-details {
+        flex: 1;
+    }
+
+    .schedule-group-name {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 3px;
+    }
+
+    .schedule-meta {
+        font-size: 0.82rem;
+        color: #6b7280;
+    }
+
+    .schedule-badges {
+        display: flex;
+        gap: 5px;
+        flex-wrap: wrap;
+    }
+
+    /* Activity Log */
+    .activity-log-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+
+    .activity-log-item:last-child {
+        border-bottom: none;
+    }
+
+    .activity-log-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+
+    .activity-log-icon.create { background: #d1fae5; color: #059669; }
+    .activity-log-icon.update { background: #dbeafe; color: #2563eb; }
+    .activity-log-icon.delete { background: #fee2e2; color: #dc2626; }
+    .activity-log-icon.scan { background: #fef3c7; color: #d97706; }
+    .activity-log-icon.payment { background: #ede9fe; color: #7c3aed; }
+</style>
+{% endblock %}
+
 {% block content %}
-<!-- Stats Cards -->
+<!-- Dashboard Header -->
+<div class="dashboard-header">
+    <div class="dashboard-header-content d-flex justify-content-between align-items-center flex-wrap gap-3">
+        <div>
+            <h2><i class="bi bi-grid-1x2-fill me-2"></i>نظرة عامة على المركز</h2>
+            <p>متابعة إحصائيات الطلاب والحضور والمدفوعات</p>
+        </div>
+        <div class="date-badge">
+            <i class="bi bi-calendar3"></i>
+            <span id="currentDate"></span>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
 <div class="row g-3 mb-4">
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon blue">
-                <i class="bi bi-people-fill"></i>
+    <div class="col-6 col-md-3">
+        <a href="{% url 'students:create' %}" class="quick-action-card">
+            <div class="quick-action-icon text-primary">
+                <i class="bi bi-person-plus"></i>
             </div>
-            <div class="stat-number">{{ total_students }}</div>
-            <div class="stat-label">إجمالي الطلاب</div>
-        </div>
+            <div class="quick-action-title">طالب جديد</div>
+            <div class="quick-action-desc">إضافة طالب للنظام</div>
+        </a>
     </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon green">
-                <i class="bi bi-person-badge"></i>
+    <div class="col-6 col-md-3">
+        <a href="{% url 'attendance:scanner' %}" class="quick-action-card">
+            <div class="quick-action-icon text-success">
+                <i class="bi bi-upc-scan"></i>
             </div>
-            <div class="stat-number">{{ total_teachers }}</div>
-            <div class="stat-label">المدرسين</div>
-        </div>
+            <div class="quick-action-title">تسجيل حضور</div>
+            <div class="quick-action-desc">مسح الباركود</div>
+        </a>
     </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon yellow">
+    <div class="col-6 col-md-3">
+        <a href="{% url 'payments:list' %}" class="quick-action-card">
+            <div class="quick-action-icon text-warning">
+                <i class="bi bi-cash-stack"></i>
+            </div>
+            <div class="quick-action-title">تسجيل دفع</div>
+            <div class="quick-action-desc">سداد مصروفات</div>
+        </a>
+    </div>
+    <div class="col-6 col-md-3">
+        <a href="{% url 'teachers:group_list' %}" class="quick-action-card">
+            <div class="quick-action-icon text-purple" style="color: #8b5cf6;">
                 <i class="bi bi-collection"></i>
             </div>
-            <div class="stat-number">{{ total_groups }}</div>
-            <div class="stat-label">المجموعات</div>
-        </div>
-    </div>
-    <div class="col-md-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon blue">
-                <i class="bi bi-calendar-check"></i>
-            </div>
-            <div class="stat-number">{{ today_attendances }}</div>
-            <div class="stat-label">حضور اليوم</div>
-        </div>
+            <div class="quick-action-title">المجموعات</div>
+            <div class="quick-action-desc">إدارة المجموعات</div>
+        </a>
     </div>
 </div>
 
-<!-- Financial Summary -->
+<!-- Main Stats Row -->
 <div class="row g-3 mb-4">
-    <div class="col-md-6">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-label mb-2">المستحق هذا الشهر</div>
-                    <div class="stat-number">{{ month_total_due|floatformat:0 }} ج.م</div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card-modern blue">
+            <div class="stat-card-header">
+                <div class="stat-icon-wrapper">
+                    <i class="bi bi-people-fill"></i>
                 </div>
-                <div class="stat-icon yellow">
-                    <i class="bi bi-cash-stack"></i>
-                </div>
+                {% if new_students_this_month > 0 %}
+                <span class="stat-trend up">+{{ new_students_this_month }} هذا الشهر</span>
+                {% endif %}
             </div>
+            <div class="stat-value-modern">{{ total_students }}</div>
+            <div class="stat-label-modern">إجمالي الطلاب</div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between align-items-start">
-                <div>
-                    <div class="stat-label mb-2">المحصل هذا الشهر</div>
-                    <div class="stat-number text-success">{{ month_total_paid|floatformat:0 }} ج.م</div>
-                </div>
-                <div class="stat-icon green">
-                    <i class="bi bi-wallet2"></i>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card-modern green">
+            <div class="stat-card-header">
+                <div class="stat-icon-wrapper">
+                    <i class="bi bi-person-badge"></i>
                 </div>
             </div>
+            <div class="stat-value-modern">{{ total_teachers }}</div>
+            <div class="stat-label-modern">المدرسين</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card-modern orange">
+            <div class="stat-card-header">
+                <div class="stat-icon-wrapper">
+                    <i class="bi bi-collection"></i>
+                </div>
+            </div>
+            <div class="stat-value-modern">{{ total_groups }}</div>
+            <div class="stat-label-modern">المجموعات</div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="stat-card-modern purple">
+            <div class="stat-card-header">
+                <div class="stat-icon-wrapper">
+                    <i class="bi bi-calendar-check"></i>
+                </div>
+            </div>
+            <div class="stat-value-modern">{{ today_sessions }}</div>
+            <div class="stat-label-modern">حصص اليوم</div>
         </div>
     </div>
 </div>
 
-<!-- Attendance Stats -->
+<!-- Attendance & Financial Row -->
 <div class="row g-3 mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>إحصائيات الحضور (آخر 7 أيام)</span>
+    <!-- Today's Attendance -->
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-calendar-check text-success"></i>
+                    حضور اليوم
+                </div>
+                <span class="badge bg-light text-dark">{{ today_total }} طالب</span>
             </div>
-            <div class="card-body">
-                <div class="row text-center">
+            <div class="chart-card-body">
+                <div class="chart-container-small">
+                    <canvas id="todayAttendanceChart"></canvas>
+                </div>
+                <div class="row text-center mt-3">
                     <div class="col-4">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-success">{{ present_count }}</div>
-                            <div class="text-muted">حاضر</div>
-                        </div>
+                        <div class="text-success fs-4 fw-bold">{{ today_present }}</div>
+                        <small class="text-muted">حاضر</small>
                     </div>
                     <div class="col-4">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-warning">{{ late_count }}</div>
-                            <div class="text-muted">متأخر</div>
-                        </div>
+                        <div class="text-warning fs-4 fw-bold">{{ today_late }}</div>
+                        <small class="text-muted">متأخر</small>
                     </div>
                     <div class="col-4">
-                        <div class="p-3">
-                            <div class="fs-3 fw-bold text-danger">{{ absent_count }}</div>
-                            <div class="text-muted">غائب</div>
-                        </div>
+                        <div class="text-danger fs-4 fw-bold">{{ today_absent }}</div>
+                        <small class="text-muted">غائب</small>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Week Attendance Trend -->
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-graph-up text-primary"></i>
+                    trend الحضور (آخر 7 أيام)
+                </div>
+            </div>
+            <div class="chart-card-body">
+                <div class="chart-container">
+                    <canvas id="weekAttendanceChart"></canvas>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Financial & Groups Row -->
+<div class="row g-3 mb-4">
+    <!-- Financial Summary -->
+    <div class="col-lg-8">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-cash-stack text-warning"></i>
+                    الملخص المالي
+                </div>
+                <div class="d-flex gap-2">
+                    <span class="badge bg-success">{{ paid_count }} مدفوع</span>
+                    <span class="badge bg-warning">{{ partial_count }} جزئي</span>
+                    <span class="badge bg-danger">{{ unpaid_count }} غير مدفوع</span>
+                </div>
+            </div>
+            <div class="chart-card-body">
+                <div class="row mb-4">
+                    <div class="col-md-4 text-center border-start">
+                        <div class="text-muted mb-1">المستحق</div>
+                        <div class="fs-3 fw-bold">{{ month_total_due|floatformat:0 }} ج.م</div>
+                    </div>
+                    <div class="col-md-4 text-center border-start">
+                        <div class="text-muted mb-1">المحصل</div>
+                        <div class="fs-3 fw-bold text-success">{{ month_total_paid|floatformat:0 }} ج.م</div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="text-muted mb-1">المتبقي</div>
+                        <div class="fs-3 fw-bold text-danger">{{ month_remaining|floatformat:0 }} ج.م</div>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="revenueChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Groups Capacity -->
+    <div class="col-lg-4">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-building text-info"></i>
+                    إشغال المجموعات
+                </div>
+            </div>
+            <div class="chart-card-body">
+                {% for group in groups_stats %}
+                <div class="group-stat-item">
+                    <div class="group-info">
+                        <div class="group-name">{{ group.name }}</div>
+                        <div class="group-teacher">
+                            <i class="bi bi-person me-1"></i>{{ group.teacher }}
+                        </div>
+                    </div>
+                    <div class="flex-fill mx-3">
+                        <div class="progress-modern">
+                            <div class="progress-bar-modern 
+                                {% if group.utilization >= 90 %}bg-danger
+                                {% elif group.utilization >= 70 %}bg-warning
+                                {% else %}bg-success{% endif %}" 
+                                style="width: {{ group.utilization }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ group.enrolled }}/{{ group.capacity }}</small>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">لا توجد مجموعات</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's Schedule & Activity Log -->
+<div class="row g-3 mb-4">
+    <!-- Schedule Widget -->
+    <div class="col-lg-7">
+        <div class="schedule-widget">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-calendar-day text-primary"></i>
+                    جدول اليوم
+                </div>
+                <span class="badge bg-primary">{{ today_schedule|length }} حصة</span>
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                {% for item in today_schedule %}
+                <div class="schedule-item">
+                    <div class="schedule-time-block">
+                        <div class="time-start">{{ item.time_start }}</div>
+                        <div class="time-end">→ {{ item.time_end }}</div>
+                    </div>
+                    <div class="schedule-details">
+                        <div class="schedule-group-name">{{ item.group_name }}</div>
+                        <div class="schedule-meta">
+                            <i class="bi bi-person me-1"></i>{{ item.teacher }}
+                            <span class="mx-1">|</span>
+                            <i class="bi bi-door-open me-1"></i>{{ item.room }}
+                        </div>
+                    </div>
+                    <div class="schedule-badges">
+                        <span class="badge bg-light text-dark">{{ item.duration }} د</span>
+                        {% if item.gender_type == 'male' %}
+                        <span class="badge bg-primary">بنين</span>
+                        {% elif item.gender_type == 'female' %}
+                        <span class="badge bg-info">بنات</span>
+                        {% else %}
+                        <span class="badge bg-secondary">مختلط</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x" style="font-size: 2.5rem;"></i>
+                    <p class="mt-2 mb-0">لا توجد حصص مجدولة اليوم</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="col-lg-5">
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-journal-text text-warning"></i>
+                    سجل النشاطات
+                </div>
+            </div>
+            <div class="chart-card-body" style="max-height: 400px; overflow-y: auto;">
+                {% for activity in recent_activities %}
+                <div class="activity-log-item">
+                    <div class="activity-log-icon 
+                        {% if 'create' in activity.action %}create
+                        {% elif 'update' in activity.action %}update
+                        {% elif 'delete' in activity.action %}delete
+                        {% elif 'scan' in activity.action %}scan
+                        {% elif 'payment' in activity.action %}payment
+                        {% else %}update{% endif %}">
+                        {% if 'create' in activity.action %}
+                        <i class="bi bi-plus-lg"></i>
+                        {% elif 'update' in activity.action %}
+                        <i class="bi bi-pencil"></i>
+                        {% elif 'delete' in activity.action %}
+                        <i class="bi bi-trash"></i>
+                        {% elif 'scan' in activity.action %}
+                        <i class="bi bi-upc-scan"></i>
+                        {% elif 'payment' in activity.action %}
+                        <i class="bi bi-cash"></i>
+                        {% else %}
+                        <i class="bi bi-activity"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex-1">
+                        <div style="font-size: 0.88rem; color: #1f2937;">{{ activity.description }}</div>
+                        <div style="font-size: 0.78rem; color: #9ca3af;">
+                            <i class="bi bi-person me-1"></i>{{ activity.user.username|default:"النظام" }}
+                            <span class="mx-1">·</span>
+                            {{ activity.created_at|timesince }} مضت
+                        </div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-journal" style="font-size: 2rem;"></i>
+                    <p class="mt-2 mb-0">لا توجد نشاطات حديثة</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity Row -->
 <div class="row g-3">
     <!-- Recent Attendance -->
     <div class="col-lg-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>آخر تسجيلات الحضور</span>
-                <a href="{% url 'reports:attendance' %}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>الطالب</th>
-                                <th>المجموعة</th>
-                                <th>الحالة</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for att in recent_attendances %}
-                            <tr>
-                                <td>{{ att.student.full_name }}</td>
-                                <td>{{ att.session.group.group_name }}</td>
-                                <td>
-                                    {% if att.status == 'present' %}
-                                    <span class="badge bg-success">حاضر</span>
-                                    {% elif att.status == 'late' %}
-                                    <span class="badge bg-warning">متأخر</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">غائب</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center text-muted py-4">لا توجد تسجيلات</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-clock-history text-primary"></i>
+                    آخر تسجيلات الحضور
                 </div>
+                <a href="{% url 'reports:attendance' %}" class="btn btn-sm btn-outline-primary">
+                    عرض الكل <i class="bi bi-arrow-left me-1"></i>
+                </a>
+            </div>
+            <div class="chart-card-body">
+                <ul class="activity-list">
+                    {% for att in recent_attendances %}
+                    <li class="activity-item">
+                        <div class="activity-icon {{ att.status }}">
+                            {% if att.status == 'present' %}
+                            <i class="bi bi-check-lg"></i>
+                            {% elif att.status == 'late' %}
+                            <i class="bi bi-clock"></i>
+                            {% else %}
+                            <i class="bi bi-x-lg"></i>
+                            {% endif %}
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-title">{{ att.student.full_name }}</div>
+                            <div class="activity-meta">
+                                <i class="bi bi-collection me-1"></i>{{ att.session.group.group_name }}
+                            </div>
+                        </div>
+                        <div class="activity-time">
+                            {{ att.scan_time|time:"H:i" }}
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="text-center py-4 text-muted">
+                        <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>
+                        <p class="mt-2 mb-0">لا توجد تسجيلات</p>
+                    </li>
+                    {% endfor %}
+                </ul>
             </div>
         </div>
     </div>
 
     <!-- Pending Payments -->
     <div class="col-lg-6">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span>المدفوعات المعلقة</span>
-                <a href="{% url 'payments:list' %}" class="btn btn-sm btn-outline-primary">عرض الكل</a>
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-hover mb-0">
-                        <thead>
-                            <tr>
-                                <th>الطالب</th>
-                                <th>المجموعة</th>
-                                <th>المبلغ</th>
-                                <th>الحالة</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for payment in pending_payments %}
-                            <tr>
-                                <td>{{ payment.student.full_name }}</td>
-                                <td>{{ payment.group.group_name }}</td>
-                                <td>{{ payment.amount_due|floatformat:0 }} ج.م</td>
-                                <td>
-                                    {% if payment.status == 'unpaid' %}
-                                    <span class="badge bg-danger">غير مدفوع</span>
-                                    {% else %}
-                                    <span class="badge bg-warning">جزئي</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="4" class="text-center text-muted py-4">لا توجد مدفوعات معلقة</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+        <div class="chart-card">
+            <div class="chart-card-header">
+                <div class="chart-card-title">
+                    <i class="bi bi-exclamation-triangle text-danger"></i>
+                    المدفوعات المعلقة
                 </div>
+                <a href="{% url 'payments:list' %}" class="btn btn-sm btn-outline-danger">
+                    عرض الكل <i class="bi bi-arrow-left me-1"></i>
+                </a>
+            </div>
+            <div class="chart-card-body">
+                <ul class="activity-list">
+                    {% for payment in pending_payments %}
+                    <li class="activity-item">
+                        <div class="activity-icon payment">
+                            <i class="bi bi-cash"></i>
+                        </div>
+                        <div class="activity-content">
+                            <div class="activity-title">{{ payment.student.full_name }}</div>
+                            <div class="activity-meta">
+                                <i class="bi bi-collection me-1"></i>{{ payment.group.group_name }}
+                                <span class="mx-1">|</span>
+                                <strong>{{ payment.amount_due|floatformat:0 }} ج.م</strong>
+                            </div>
+                        </div>
+                        <div class="activity-time">
+                            {% if payment.status == 'unpaid' %}
+                            <span class="badge bg-danger">غير مدفوع</span>
+                            {% else %}
+                            <span class="badge bg-warning">جزئي</span>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% empty %}
+                    <li class="text-center py-4 text-muted">
+                        <i class="bi bi-check-circle" style="font-size: 2rem; color: #10b981;"></i>
+                        <p class="mt-2 mb-0">لا توجد مدفوعات معلقة</p>
+                    </li>
+                    {% endfor %}
+                </ul>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Set current date
+document.getElementById('currentDate').textContent = new Date().toLocaleDateString('ar-EG', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+});
+
+// Today's Attendance Doughnut Chart
+const todayAttendanceCtx = document.getElementById('todayAttendanceChart').getContext('2d');
+new Chart(todayAttendanceCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['حاضر', 'متأخر', 'غائب'],
+        datasets: [{
+            data: [{{ today_present }}, {{ today_late }}, {{ today_absent }}],
+            backgroundColor: ['#10b981', '#f59e0b', '#ef4444'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '70%',
+        plugins: {
+            legend: {
+                display: false
+            }
+        }
+    }
+});
+
+// Week Attendance Trend Chart
+const weekData = {{ week_attendance_json|safe }};
+const weekAttendanceCtx = document.getElementById('weekAttendanceChart').getContext('2d');
+new Chart(weekAttendanceCtx, {
+    type: 'bar',
+    data: {
+        labels: weekData.map(d => d.date),
+        datasets: [
+            {
+                label: 'حاضر',
+                data: weekData.map(d => d.present),
+                backgroundColor: '#10b981',
+                borderRadius: 4
+            },
+            {
+                label: 'متأخر',
+                data: weekData.map(d => d.late),
+                backgroundColor: '#f59e0b',
+                borderRadius: 4
+            },
+            {
+                label: 'غائب',
+                data: weekData.map(d => d.absent),
+                backgroundColor: '#ef4444',
+                borderRadius: 4
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            x: {
+                stacked: true,
+                grid: { display: false }
+            },
+            y: {
+                stacked: true,
+                beginAtZero: true
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+
+// Revenue Chart
+const revenueData = {{ months_revenue_json|safe }};
+const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+new Chart(revenueCtx, {
+    type: 'line',
+    data: {
+        labels: revenueData.map(d => d.month),
+        datasets: [
+            {
+                label: 'المستحق',
+                data: revenueData.map(d => d.due),
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                fill: true,
+                tension: 0.4
+            },
+            {
+                label: 'المحصل',
+                data: revenueData.map(d => d.paid),
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                fill: true,
+                tension: 0.4
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return value + ' ج.م';
+                    }
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'bottom'
+            }
+        }
+    }
+});
+</script>
 {% endblock %}

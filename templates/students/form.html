@@ -1,95 +1,573 @@
 {% extends 'base.html' %}
 
 {% block title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %}{% endblock %}
+{% block page_title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        max-width: 900px;
+        margin: 0 auto;
+    }
+
+    .form-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        overflow: hidden;
+    }
+
+    .form-header {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: #fff;
+        padding: 25px 30px;
+    }
+
+    .form-header h5 {
+        margin: 0;
+        font-size: 1.3rem;
+        font-weight: 600;
+    }
+
+    .form-header p {
+        margin: 5px 0 0 0;
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .form-body {
+        padding: 30px;
+    }
+
+    .form-section {
+        margin-bottom: 30px;
+    }
+
+    .form-section h6 {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e5e7eb;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .form-section h6 i {
+        color: #3b82f6;
+    }
+
+    .info-box {
+        background: #eff6ff;
+        border-right: 4px solid #3b82f6;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .info-box i {
+        color: #2563eb;
+        font-size: 1.2rem;
+        margin-left: 10px;
+    }
+
+    .info-box p {
+        margin: 0;
+        font-size: 0.9rem;
+        color: #1e40af;
+    }
+
+    .code-preview {
+        background: #f9fafb;
+        border: 2px dashed #d1d5db;
+        border-radius: 8px;
+        padding: 15px;
+        text-align: center;
+        margin-top: 10px;
+    }
+
+    .code-preview .code-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #3b82f6;
+        font-family: monospace;
+    }
+
+    .code-preview .code-label {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin-bottom: 5px;
+    }
+
+    .groups-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 15px;
+        max-height: 300px;
+        overflow-y: auto;
+        padding: 15px;
+        background: #f9fafb;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+    }
+
+    .group-checkbox {
+        display: flex;
+        align-items: flex-start;
+        padding: 12px;
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .group-checkbox:hover {
+        border-color: #3b82f6;
+    }
+
+    .group-checkbox input[type="checkbox"] {
+        margin-top: 3px;
+        margin-left: 12px;
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+
+    .group-checkbox-content {
+        flex: 1;
+    }
+
+    .group-checkbox-content .group-name {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 0.9rem;
+        margin-bottom: 4px;
+    }
+
+    .group-checkbox-content .group-info {
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+
+    .barcode-preview-container {
+        text-align: center;
+        padding: 20px;
+        background: #f9fafb;
+        border-radius: 8px;
+        margin-top: 20px;
+    }
+
+    .barcode-preview-container img {
+        max-width: 150px;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        padding: 10px;
+        background: #fff;
+    }
+
+    @media (max-width: 768px) {
+        .form-body {
+            padding: 20px;
+        }
+
+        .groups-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
-        <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
+<div class="form-container">
+    <a href="{% url 'students:list' %}" class="btn btn-outline-secondary mb-3">
+        <i class="bi bi-arrow-right me-1"></i>العودة للقائمة
     </a>
-</div>
 
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">
-                    {% if student %}
-                    <i class="bi bi-pencil me-2"></i>تعديل الطالب - {{ student.full_name }}
-                    {% else %}
-                    <i class="bi bi-person-plus me-2"></i>إضافة طالب جديد
-                    {% endif %}
-                </h5>
-            </div>
-            <div class="card-body">
-                <form method="post">
-                    {% csrf_token %}
+    <div class="form-card">
+        <div class="form-header">
+            <h5>
+                {% if student %}
+                <i class="bi bi-pencil me-2"></i>تعديل بيانات الطالب
+                {% else %}
+                <i class="bi bi-person-plus me-2"></i>إضافة طالب جديد
+                {% endif %}
+            </h5>
+            <p>
+                {% if student %}
+                قم بتحديث بيانات الطالب والمجموعات المسجل فيها
+                {% else %}
+                قم بملء بيانات الطالب واختيار المجموعات المطلوبة
+                {% endif %}
+            </p>
+        </div>
+
+        <div class="form-body">
+            <form method="post" id="studentForm">
+                {% csrf_token %}
+
+                <!-- Info Box -->
+                <div class="info-box">
+                    <i class="bi bi-info-circle"></i>
+                    <p>
+                        {% if student %}
+                        البيانات المميزة بـ <span class="text-danger">*</span> إجبارية.
+                        {% else %}
+                        عند ترك كود الطالب فارغاً، سيتم توليده تلقائياً (آخر كود + 1).
+                        {% endif %}
+                    </p>
+                </div>
+
+                <!-- Student Information -->
+                <div class="form-section">
+                    <h6><i class="bi bi-person me-2"></i>البيانات الشخصية</h6>
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="student_code" class="form-label">كود الطالب <span class="text-danger">*</span></label>
+                            <label for="id_student_code" class="form-label">
+                                كود الطالب
+                                {% if not student %}
+                                <span class="text-muted" style="font-size: 0.8rem;">(يترك فارغ للتوليد التلقائي)</span>
+                                {% endif %}
+                            </label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-hash"></i></span>
-                                <input type="text" name="student_code" id="student_code" class="form-control"
-                                    value="{{ student.student_code|default:'' }}" required placeholder="مثال: 1001">
+                                <input type="text" name="student_code" id="id_student_code" class="form-control"
+                                    value="{{ form.student_code.value|default:'' }}"
+                                    placeholder="سيولد تلقائياً">
+                                {% if not student %}
+                                <button type="button" class="btn btn-outline-secondary" onclick="generateCode()">
+                                    <i class="bi bi-magic"></i> توليد
+                                </button>
+                                {% endif %}
                             </div>
-                            <small class="text-muted">رقم مميز لكل طالب يستخدم لتسجيل الحضور</small>
+                            <div id="codePreview" class="code-preview" style="display: none;">
+                                <div class="code-label">الكود المتوقع:</div>
+                                <div class="code-value" id="previewCodeValue">-</div>
+                            </div>
                         </div>
 
                         <div class="col-md-6">
-                            <label for="full_name" class="form-label">الاسم الكامل <span class="text-danger">*</span></label>
+                            <label for="id_full_name" class="form-label">
+                                الاسم الكامل <span class="text-danger">*</span>
+                            </label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-person"></i></span>
-                                <input type="text" name="full_name" id="full_name" class="form-control"
-                                    value="{{ student.full_name|default:'' }}" required placeholder="اسم الطالب">
+                                <input type="text" name="full_name" id="id_full_name" class="form-control"
+                                    value="{{ form.full_name.value|default:'' }}"
+                                    required placeholder="اسم الطالب الكامل">
                             </div>
                         </div>
 
                         <div class="col-md-6">
-                            <label for="parent_phone" class="form-label">رقم ولي الأمر <span class="text-danger">*</span></label>
+                            <label for="id_gender" class="form-label">
+                                النوع <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-gender-ambiguous"></i></span>
+                                <select name="gender" id="id_gender" class="form-select" required>
+                                    <option value="">-- اختر النوع --</option>
+                                    <option value="male" {% if form.gender.value == 'male' %}selected{% endif %}>ولد</option>
+                                    <option value="female" {% if form.gender.value == 'female' %}selected{% endif %}>بنت</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Education Info -->
+                <div class="form-section">
+                    <h6><i class="bi bi-mortarboard me-2"></i>البيانات الدراسية</h6>
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="id_education_stage" class="form-label">المرحلة الدراسية</label>
+                            <select name="education_stage" id="id_education_stage" class="form-select">
+                                <option value="">-- اختر المرحلة --</option>
+                                <option value="primary" {% if form.education_stage.value == 'primary' %}selected{% endif %}>ابتدائي</option>
+                                <option value="preparatory" {% if form.education_stage.value == 'preparatory' %}selected{% endif %}>إعدادي</option>
+                                <option value="secondary" {% if form.education_stage.value == 'secondary' %}selected{% endif %}>ثانوي</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_education_year" class="form-label">السنة الدراسية</label>
+                            <select name="education_year" id="id_education_year" class="form-select">
+                                <option value="">-- اختر السنة --</option>
+                                <option value="1" {% if form.education_year.value == '1' or form.education_year.value == 1 %}selected{% endif %}>الأولى</option>
+                                <option value="2" {% if form.education_year.value == '2' or form.education_year.value == 2 %}selected{% endif %}>الثانية</option>
+                                <option value="3" {% if form.education_year.value == '3' or form.education_year.value == 3 %}selected{% endif %}>الثالثة</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label for="id_education_type" class="form-label">نوع التعليم</label>
+                            <select name="education_type" id="id_education_type" class="form-select">
+                                <option value="">-- اختر النوع --</option>
+                                <option value="general" {% if form.education_type.value == 'general' %}selected{% endif %}>عام</option>
+                                <option value="languages" {% if form.education_type.value == 'languages' %}selected{% endif %}>لغات</option>
+                                <option value="experimental" {% if form.education_type.value == 'experimental' %}selected{% endif %}>تجريبي</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_school_name" class="form-label">اسم المدرسة</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-building"></i></span>
+                                <input type="text" name="school_name" id="id_school_name" class="form-control"
+                                    value="{{ form.school_name.value|default:'' }}"
+                                    placeholder="اسم المدرسة">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_grade" class="form-label">الصف الدراسي (تفصيل)</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-mortarboard"></i></span>
+                                <input type="text" name="grade" id="id_grade" class="form-control"
+                                    value="{{ form.grade.value|default:'' }}"
+                                    placeholder="مثال: الصف الثالث الثانوي">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contact Info -->
+                <div class="form-section">
+                    <h6><i class="bi bi-telephone me-2"></i>بيانات التواصل</h6>
+                    <div class="info-box">
+                        <i class="bi bi-info-circle"></i>
+                        <p>رقمين التواصل إجباريين: رقم الطالب + رقم ولي الأمر (للأولاد = الأب، للبنات = الأم/الأخت)</p>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="id_student_phone" class="form-label">
+                                رقم هاتف الطالب <span class="text-danger">*</span>
+                            </label>
                             <div class="input-group">
                                 <span class="input-group-text"><i class="bi bi-phone"></i></span>
-                                <input type="text" name="parent_phone" id="parent_phone" class="form-control"
-                                    value="{{ student.parent_phone|default:'' }}" required placeholder="01xxxxxxxxx">
+                                <input type="tel" name="student_phone" id="id_student_phone" class="form-control"
+                                    value="{{ form.student_phone.value|default:'' }}"
+                                    required placeholder="01xxxxxxxxx">
                             </div>
                         </div>
 
                         <div class="col-md-6">
-                            <label for="groups" class="form-label">المجموعات</label>
-                            <select name="groups" id="groups" class="form-select" multiple style="height: 120px;">
-                                {% for group in groups %}
-                                <option value="{{ group.group_id }}"
-                                    {% if student and group in student.groups.all %}selected{% endif %}>
-                                    {{ group.group_name }} - {{ group.teacher.full_name }}
-                                </option>
-                                {% endfor %}
-                            </select>
-                            <small class="text-muted">اضغط Ctrl للاختيار المتعدد</small>
+                            <label for="id_parent_phone" class="form-label">
+                                رقم هاتف ولي الأمر <span class="text-danger">*</span>
+                            </label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-phone"></i></span>
+                                <input type="tel" name="parent_phone" id="id_parent_phone" class="form-control"
+                                    value="{{ form.parent_phone.value|default:'' }}"
+                                    required placeholder="01xxxxxxxxx">
+                            </div>
+                            <div class="form-text" id="parentPhoneHint">مثال: 01012345678</div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_parent_name" class="form-label">اسم ولي الأمر</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-person-badge"></i></span>
+                                <input type="text" name="parent_name" id="id_parent_name" class="form-control"
+                                    value="{{ form.parent_name.value|default:'' }}"
+                                    placeholder="اسم ولي الأمر">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label for="id_date_of_birth" class="form-label">تاريخ الميلاد</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-calendar"></i></span>
+                                <input type="date" name="date_of_birth" id="id_date_of_birth" class="form-control"
+                                    value="{{ form.date_of_birth.value|default:''|date:'Y-m-d' }}">
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-check form-switch" style="margin-top: 35px;">
+                                <input type="checkbox" name="is_active" class="form-check-input" id="id_is_active"
+                                    {% if not student or student.is_active %}checked{% endif %}>
+                                <label for="id_is_active" class="form-check-label">
+                                    <i class="bi bi-check-circle me-1"></i>طالب نشط
+                                </label>
+                            </div>
                         </div>
 
                         <div class="col-12">
-                            <div class="form-check form-switch">
-                                <input type="checkbox" name="is_active" class="form-check-input" id="isActive"
-                                    {% if not student or student.is_active %}checked{% endif %}>
-                                <label for="isActive" class="form-check-label">طالب نشط</label>
+                            <label for="id_address" class="form-label">العنوان</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="bi bi-geo-alt"></i></span>
+                                <textarea name="address" id="id_address" class="form-control" rows="2"
+                                    placeholder="عنوان السكن">{{ form.address.value|default:'' }}</textarea>
                             </div>
                         </div>
                     </div>
+                </div>
+                <div class="form-section">
+                    <h6><i class="bi bi-collection me-2"></i>المجموعات</h6>
 
-                    <div class="border-top mt-4 pt-4">
-                        <div class="d-flex gap-2 justify-content-end">
-                            <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
-                                <i class="bi bi-x me-2"></i>إلغاء
-                            </a>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="bi bi-check-lg me-2"></i>
-                                {% if student %}حفظ التغييرات{% else %}إضافة الطالب{% endif %}
-                            </button>
-                        </div>
+                    {% if groups %}
+                    <p class="text-muted mb-3">اختر المجموعات التي سيشترك فيها الطالب:</p>
+
+                    <div class="groups-grid">
+                        {% for group in groups %}
+                        <label class="group-checkbox">
+                            <input type="checkbox" name="groups" value="{{ group.group_id }}"
+                                {% if student and group.group_id in current_group_ids %}checked{% endif %}>
+                            <div class="group-checkbox-content">
+                                <div class="group-name">{{ group.group_name }}</div>
+                                <div class="group-info">
+                                    <i class="bi bi-person me-1"></i>{{ group.teacher.full_name|default:"-" }}
+                                    <span style="margin: 0 5px;">|</span>
+                                    <i class="bi bi-calendar3 me-1"></i>{{ group.get_schedule_day_display }}
+                                    <span style="margin: 0 5px;">|</span>
+                                    <i class="bi bi-clock me-1"></i>{{ group.schedule_time|date:"H:i" }}
+                                </div>
+                            </div>
+                        </label>
+                        {% endfor %}
                     </div>
-                </form>
-            </div>
+                    {% else %}
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        لا توجد مجموعات متاحة حالياً. قم بإضافة مجموعات أولاً من صفحة المجموعات.
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Barcode Preview (for new students) -->
+                {% if not student %}
+                <div class="form-section">
+                    <h6><i class="bi bi-upc me-2"></i>معاينة الباركود</h6>
+                    <div class="barcode-preview-container" id="barcodePreview">
+                        <p class="text-muted">سيتم إنشاء الباركود تلقائياً بعد حفظ الطالب</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Actions -->
+                <div class="border-top pt-4 mt-4">
+                    <div class="d-flex gap-2 justify-content-end">
+                        <a href="{% url 'students:list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x me-1"></i>إلغاء
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i>
+                            {% if student %}حفظ التغييرات{% else %}إضافة الطالب{% endif %}
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Generate next code
+function generateCode() {
+    fetch('{% url "students:next_code" %}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('id_student_code').value = data.next_code;
+                document.getElementById('previewCodeValue').textContent = data.next_code;
+                document.getElementById('codePreview').style.display = 'block';
+
+                // Show code preview
+                showCodePreview(data.next_code);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+}
+
+// Show code preview
+function showCodePreview(code) {
+    const container = document.getElementById('barcodePreview');
+    container.innerHTML = `
+        <div style="padding: 20px; background: #fff; border: 1px dashed #ccc; border-radius: 8px;">
+            <div style="font-size: 2rem; font-weight: bold; font-family: monospace; letter-spacing: 3px;">${code}</div>
+            <p class="text-muted mt-2 mb-0">الكود الذي سيتم إنشاؤه</p>
+        </div>
+    `;
+}
+
+// Auto-generate code preview on page load for new students
+{% if not student %}
+document.addEventListener('DOMContentLoaded', function() {
+    generateCode();
+});
+{% endif %}
+
+// Update parent phone hint based on gender
+document.getElementById('id_gender').addEventListener('change', function() {
+    const hint = document.getElementById('parentPhoneHint');
+    if (this.value === 'male') {
+        hint.textContent = 'رقم هاتف الأب';
+    } else if (this.value === 'female') {
+        hint.textContent = 'رقم هاتف الأم أو الأخت';
+    } else {
+        hint.textContent = 'مثال: 01012345678';
+    }
+});
+
+// Form validation
+document.getElementById('studentForm').addEventListener('submit', function(e) {
+    const fullName = document.getElementById('id_full_name').value.trim();
+    const parentPhone = document.getElementById('id_parent_phone').value.trim();
+    const studentPhone = document.getElementById('id_student_phone').value.trim();
+    const gender = document.getElementById('id_gender').value;
+
+    if (!fullName) {
+        e.preventDefault();
+        alert('الرجاء إدخال اسم الطالب الكامل');
+        document.getElementById('id_full_name').focus();
+        return false;
+    }
+
+    if (!gender) {
+        e.preventDefault();
+        alert('الرجاء اختيار النوع (ولد/بنت)');
+        document.getElementById('id_gender').focus();
+        return false;
+    }
+
+    if (!studentPhone) {
+        e.preventDefault();
+        alert('الرجاء إدخال رقم هاتف الطالب');
+        document.getElementById('id_student_phone').focus();
+        return false;
+    }
+
+    if (!parentPhone) {
+        e.preventDefault();
+        alert('الرجاء إدخال رقم هاتف ولي الأمر');
+        document.getElementById('id_parent_phone').focus();
+        return false;
+    }
+
+    // Validate Egyptian phone number
+    const phoneRegex = /^01\d{9}$/;
+    const parentPhoneDigits = parentPhone.replace(/\D/g, '');
+    if (!phoneRegex.test(parentPhoneDigits)) {
+        e.preventDefault();
+        alert('الرجاء إدخال رقم هاتف ولي أمر مصري صحيح (مثال: 01012345678)');
+        document.getElementById('id_parent_phone').focus();
+        return false;
+    }
+
+    const studentPhoneDigits = studentPhone.replace(/\D/g, '');
+    if (!phoneRegex.test(studentPhoneDigits)) {
+        e.preventDefault();
+        alert('الرجاء إدخال رقم هاتف طالب مصري صحيح (مثال: 01012345678)');
+        document.getElementById('id_student_phone').focus();
+        return false;
+    }
+});
+</script>
 {% endblock %}

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Session, Attendance
+from .models import Session, Attendance, ActivityLog
 
 
 @admin.register(Session)
@@ -109,3 +109,20 @@ class AttendanceAdmin(admin.ModelAdmin):
         queryset.delete()
         self.message_user(request, f'تم حذف {count} سجل حضور', level='WARNING')
     delete_attendances.short_description = "🗑️ حذف السجلات"
+
+
+@admin.register(ActivityLog)
+class ActivityLogAdmin(admin.ModelAdmin):
+    """إدارة سجلات النشاط - من قام بكل عملية"""
+    list_display = ['user', 'action', 'description', 'target_model', 'ip_address', 'created_at']
+    list_filter = ['action', 'user', 'created_at']
+    search_fields = ['description', 'user__username', 'user__first_name']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    readonly_fields = ['user', 'action', 'description', 'target_model', 'target_id', 'ip_address', 'created_at']
+
+    def has_add_permission(self, request):
+        return False  # Logs are created programmatically only
+
+    def has_change_permission(self, request, obj=None):
+        return False  # Read-only
