@@ -2,6 +2,59 @@
 
 {% block title %}{% if group %}تعديل المجموعة{% else %}إضافة مجموعة جديدة{% endif %}{% endblock %}
 
+{% block extra_css %}
+<style>
+    .multi-day-selector {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .day-checkbox {
+        position: relative;
+    }
+
+    .day-checkbox input {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .day-checkbox label {
+        display: block;
+        padding: 12px;
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+
+    .day-checkbox input:checked + label {
+        background: #667eea;
+        color: #fff;
+        border-color: #667eea;
+    }
+
+    .selected-days-info {
+        background: #e0e7ff;
+        color: #4338ca;
+        padding: 10px 15px;
+        border-radius: 8px;
+        margin-top: 10px;
+        font-size: 0.9rem;
+        display: none;
+    }
+
+    .selected-days-info.show {
+        display: block;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="mb-4">
     <a href="{% url 'teachers:group_list' %}" class="btn btn-outline-secondary">
@@ -42,9 +95,43 @@
                             <small class="text-muted">اختياري - النظام يمنع تعارض الأوقات تلقائياً (حسب المدة)</small>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <label class="form-label">يوم الحصة <span class="text-danger">*</span></label>
-                            {{ form.schedule_day }}
+                            <div class="multi-day-selector" id="daySelector">
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Saturday" value="Saturday" name="schedule_days">
+                                    <label for="day_Saturday">السبت</label>
+                                </div>
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Sunday" value="Sunday" name="schedule_days">
+                                    <label for="day_Sunday">الأحد</label>
+                                </div>
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Monday" value="Monday" name="schedule_days">
+                                    <label for="day_Monday">الاثنين</label>
+                                </div>
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Tuesday" value="Tuesday" name="schedule_days">
+                                    <label for="day_Tuesday">الثلاثاء</label>
+                                </div>
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Wednesday" value="Wednesday" name="schedule_days">
+                                    <label for="day_Wednesday">الأربعاء</label>
+                                </div>
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Thursday" value="Thursday" name="schedule_days">
+                                    <label for="day_Thursday">الخميس</label>
+                                </div>
+                                <div class="day-checkbox">
+                                    <input type="checkbox" id="day_Friday" value="Friday" name="schedule_days">
+                                    <label for="day_Friday">الجمعة</label>
+                                </div>
+                            </div>
+                            <div class="selected-days-info" id="selectedDaysInfo">
+                                <i class="bi bi-info-circle me-2"></i>
+                                <span id="selectedDaysText">لم يتم اختيار أي يوم</span>
+                            </div>
+                            <input type="hidden" name="schedule_day" id="schedule_day_hidden" value="">
                         </div>
 
                         <div class="col-md-6">
@@ -118,4 +205,86 @@
         </div>
     </div>
 </div>
+
+<script>
+// Handle multi-day selection
+const dayCheckboxes = document.querySelectorAll('input[name="schedule_days"]');
+const selectedDaysInfo = document.getElementById('selectedDaysInfo');
+const selectedDaysText = document.getElementById('selectedDaysText');
+const scheduleDayHidden = document.getElementById('schedule_day_hidden');
+const form = document.querySelector('form');
+
+// Map day values to Arabic names
+const dayNamesAr = {
+    'Saturday': 'السبت',
+    'Sunday': 'الأحد',
+    'Monday': 'الاثنين',
+    'Tuesday': 'الثلاثاء',
+    'Wednesday': 'الأربعاء',
+    'Thursday': 'الخميس',
+    'Friday': 'الجمعة'
+};
+
+// Update selected days info when checkboxes change
+dayCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', updateSelectedDaysInfo);
+});
+
+function updateSelectedDaysInfo() {
+    const selectedDays = Array.from(dayCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+
+    if (selectedDays.length > 0) {
+        const arabicNames = selectedDays.map(day => dayNamesAr[day]);
+        selectedDaysText.textContent = `تم اختيار: ${arabicNames.join('، ')}`;
+        selectedDaysInfo.classList.add('show');
+    } else {
+        selectedDaysText.textContent = 'لم يتم اختيار أي يوم';
+        selectedDaysInfo.classList.remove('show');
+    }
+}
+
+// Handle form submission to create multiple groups
+form.addEventListener('submit', function(e) {
+    const selectedDays = Array.from(dayCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+
+    if (selectedDays.length === 0) {
+        e.preventDefault();
+        alert('يرجى اختيار يوم واحد على الأقل');
+        return;
+    }
+
+    // Set the first selected day to the hidden field
+    scheduleDayHidden.value = selectedDays[0];
+
+    // Store all selected days for the backend to process
+    const schedulesInput = document.createElement('input');
+    schedulesInput.type = 'hidden';
+    schedulesInput.name = 'schedule_days';
+    schedulesInput.value = JSON.stringify(selectedDays);
+    form.appendChild(schedulesInput);
+});
+
+// If editing existing group, pre-select the day and disable others
+{% if group and group.schedule_day %}
+(function() {
+    const currentDay = '{{ group.schedule_day }}';
+    const checkbox = document.querySelector(`input[value="${currentDay}"]`);
+    if (checkbox) {
+        checkbox.checked = true;
+        // Disable other checkboxes when editing
+        dayCheckboxes.forEach(cb => {
+            if (cb.value !== currentDay) {
+                cb.disabled = true;
+                cb.parentElement.style.opacity = '0.5';
+            }
+        });
+        updateSelectedDaysInfo();
+    }
+})();
+{% endif %}
+</script>
 {% endblock %}

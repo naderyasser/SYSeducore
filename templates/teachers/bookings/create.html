@@ -1,0 +1,536 @@
+{% extends 'base.html' %}
+
+{% block title %}إنشاء حجز جديد{% endblock %}
+{% block page_title %}إنشاء حجز - موعد جديد{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        padding: 30px;
+        margin-bottom: 30px;
+    }
+
+    .form-header {
+        border-bottom: 2px solid #f3f4f6;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+    }
+
+    .form-header h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .form-header p {
+        color: #6b7280;
+        margin: 8px 0 0 0;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 24px;
+        margin-bottom: 24px;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-group label {
+        display: block;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 1rem;
+        transition: all 0.3s;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+    }
+
+    .schedule-builder {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .schedule-builder-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+
+    .schedule-builder-header h3 {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .schedules-list {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .schedule-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: #fff;
+        padding: 16px;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+    }
+
+    .schedule-day {
+        flex: 1;
+    }
+
+    .schedule-time {
+        flex-shrink: 0;
+    }
+
+    .schedule-remove {
+        flex-shrink: 0;
+        background: #fee2e2;
+        color: #dc2626;
+        border: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .schedule-remove:hover {
+        background: #dc2626;
+        color: #fff;
+    }
+
+    .add-schedule-btn {
+        width: 100%;
+        padding: 12px;
+        background: #fff;
+        border: 2px dashed #667eea;
+        border-radius: 10px;
+        color: #667eea;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .add-schedule-btn:hover {
+        background: #667eea;
+        color: #fff;
+    }
+
+    .student-selector {
+        background: #f0fdf4;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+        border: 1px solid #bbf7d0;
+    }
+
+    .student-selector h3 {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #065f46;
+        margin: 0 0 16px 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .btn-submit {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+        border: none;
+        padding: 16px 32px;
+        border-radius: 12px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        width: 100%;
+    }
+
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-add-schedule {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        width: 100%;
+    }
+
+    .btn-add-schedule:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .schedule-input-area .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        outline: none;
+    }
+
+    .day-selector {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+        gap: 10px;
+    }
+
+    .day-checkbox {
+        position: relative;
+    }
+
+    .day-checkbox input {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+    }
+
+    .day-checkbox label {
+        display: block;
+        padding: 12px;
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+
+    .day-checkbox input:checked + label {
+        background: #667eea;
+        color: #fff;
+        border-color: #667eea;
+    }
+
+    .selected-days-summary {
+        background: #667eea;
+        color: #fff;
+        padding: 12px 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        font-weight: 500;
+    }
+
+    @media (max-width: 768px) {
+        .form-container {
+            padding: 20px;
+        }
+
+        .form-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="form-header">
+        <h2><i class="bi bi-calendar-plus me-2"></i>إنشاء موعد جديد</h2>
+        <p>قم بملء البيانات لإنشاء موعد جديد وتسجيل الطلاب</p>
+    </div>
+
+    <form method="post" id="bookingForm">
+        {% csrf_token %}
+
+        <!-- Basic Info -->
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="group_name">اسم المجموعة *</label>
+                <input type="text" name="group_name" id="group_name" class="form-control" placeholder="مثلا: مجموعة رياضيات - مستوى أول" required>
+            </div>
+
+            <div class="form-group">
+                <label for="subject">المادة الدراسية *</label>
+                <select name="subject" id="subject" class="form-control" required>
+                    <option value="">اختر المادة</option>
+                    {% for subject in subjects %}
+                    <option value="{{ subject.subject_id }}">{{ subject.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="subject_name">أو اسم مادة جديدة</label>
+                <input type="text" name="subject_name" id="subject_name" class="form-control" placeholder="إذا لم تجد المادة">
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="room">القاعة</label>
+                <select name="room" id="room" class="form-control">
+                    <option value="">بدون قاعة</option>
+                    {% for room in rooms %}
+                    <option value="{{ room.room_id }}">{{ room.name }} ({{ room.capacity }} طالب)</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="duration_minutes">المدة الحصة (دقيقة)</label>
+                <input type="number" name="duration_minutes" id="duration_minutes" class="form-control" value="120" min="30" step="15" required>
+            </div>
+
+            <div class="form-group">
+                <label for="standard_fee">المصرف الأساسي</label>
+                <input type="number" name="standard_fee" id="standard_fee" class="form-control" placeholder="0.00" step="0.01" required>
+            </div>
+        </div>
+
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="gender_type">نوع المجموعة</label>
+                <select name="gender_type" id="gender_type" class="form-control">
+                    <option value="mixed">مختلط</option>
+                    <option value="male">بنين</option>
+                    <option value="female">بنات</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="education_stage">المرحلة الدراسية</label>
+                <select name="education_stage" id="education_stage" class="form-control">
+                    <option value="">اختر المرحلة</option>
+                    <option value="primary">ابتدائي</option>
+                    <option value="preparatory">اعدادي</option>
+                    <option value="secondary">ثانوي</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="education_year">الصف الدراسي</label>
+                <select name="education_year" id="education_year" class="form-control">
+                    <option value="">اختر الصف</option>
+                    <option value="1">الصف الأول</option>
+                    <option value="2">الصف الثاني</option>
+                    <option value="3">الصف الثالث</option>
+                    <option value="4">الصف الرابع</option>
+                    <option value="5">الصف الخامس</option>
+                    <option value="6">الصف السادس</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Multi-day Schedule Builder -->
+        <div class="schedule-builder">
+            <div class="schedule-builder-header">
+                <h3><i class="bi bi-calendar-week me-2"></i>المواعيد (الأيام والأوقات)</h3>
+                <small style="color: #6b7280;">يمكنك تحديد موعد واحد أو عدة مواعدة</small>
+            </div>
+
+            <div class="selected-days-summary" id="daysSummary" style="display: none;">
+                <i class="bi bi-info-circle me-2"></i>
+                <span id="daysSummaryText">لم يتم تحديد أي يوم</span>
+            </div>
+
+            <div class="schedules-list" id="schedulesList">
+                <!-- Schedules will be added here dynamically -->
+            </div>
+
+            <div class="schedule-input-area" style="background: #fff; padding: 20px; border-radius: 12px; border: 2px dashed #667eea; margin-bottom: 16px;">
+                <h4 style="margin: 0 0 16px 0; color: #1f2937; font-size: 1rem; font-weight: 600;">
+                    <i class="bi bi-plus-circle me-2" style="color: #667eea;"></i>إضافة موعد جديد
+                </h4>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label style="font-weight: 600; color: #374151; margin-bottom: 8px; display: block;">اختر الأيام</label>
+                    <div class="day-selector">
+                        {% for day_value, day_name in week_days %}
+                        <div class="day-checkbox">
+                            <input type="checkbox" id="day_{{ day_value }}" value="{{ day_value }}" class="day-checkbox-input">
+                            <label for="day_{{ day_value }}">{{ day_name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 16px;">
+                    <label for="schedule_time" style="font-weight: 600; color: #374151; margin-bottom: 8px; display: block;">الوقت</label>
+                    <input type="time" id="schedule_time" class="form-control" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 1rem;">
+                </div>
+
+                <button type="button" class="btn-add-schedule" onclick="addSchedule()">
+                    <i class="bi bi-plus-circle me-2"></i>إضافة للمواعيد
+                </button>
+            </div>
+        </div>
+
+        <!-- Student Enrollment -->
+        <div class="student-selector">
+            <h3>
+                <i class="bi bi-person-plus me-2"></i>
+                تسجيل طالب
+            </h3>
+            <div class="form-group" style="margin-bottom: 12px;">
+                <label for="student_id">الطالب</label>
+                <select name="student_id" id="student_id" class="form-control">
+                    <option value="">اختر طالب (اختياري)</option>
+                    {% for student in students %}
+                    <option value="{{ student.student_id }}">{{ student.full_name }} - {{ student.student_code }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin: 0;">
+                <label for="financial_status">الحالة المالية</label>
+                <select name="financial_status" id="financial_status" class="form-control">
+                    <option value="normal">عادي</option>
+                    <option value="symbolic">رمزي</option>
+                    <option value="exempt">معفي</option>
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" class="btn-submit">
+            <i class="bi bi-check-circle me-2"></i>إنشاء الحجز
+        </button>
+    </form>
+</div>
+
+<input type="hidden" name="schedules" id="schedulesInput">
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let schedules = [];
+
+function addSchedule() {
+    const selectedDays = [];
+    document.querySelectorAll('.day-checkbox-input:checked').forEach(cb => {
+        selectedDays.push(cb.value);
+    });
+
+    if (selectedDays.length === 0) {
+        alert('يرجى اختيار يوم واحد على الأقل');
+        return;
+    }
+
+    const time = document.getElementById('schedule_time').value;
+    if (!time) {
+        alert('يرجى تحديد الوقت');
+        return;
+    }
+
+    // Add schedule for each selected day
+    selectedDays.forEach(day => {
+        schedules.push({
+            day: day,
+            time: time
+        });
+    });
+
+    // Reset form
+    document.querySelectorAll('.day-checkbox-input').forEach(cb => cb.checked = false);
+    document.getElementById('schedule_time').value = '';
+
+    updateSchedulesList();
+    updateDaysSummary();
+}
+
+function updateSchedulesList() {
+    const container = document.getElementById('schedulesList');
+    container.innerHTML = '';
+
+    const weekDaysAr = {
+        'Saturday': 'السبت',
+        'Sunday': 'الأحد',
+        'Monday': 'الاثنين',
+        'Tuesday': 'الثلاثاء',
+        'Wednesday': 'الأربعاء',
+        'Thursday': 'الخميس',
+        'Friday': 'الجمعة',
+    };
+
+    schedules.forEach((schedule, index) => {
+        const div = document.createElement('div');
+        div.className = 'schedule-item';
+        div.innerHTML = `
+            <div class="schedule-day">
+                <strong>${weekDaysAr[schedule.day]}</strong>
+                <br>
+                <small class="text-muted">من ${schedule.time}</small>
+            </div>
+            <div class="schedule-time">
+                <button type="button" class="schedule-remove" onclick="removeSchedule(${index})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+
+    // Update hidden input
+    document.getElementById('schedulesInput').value = JSON.stringify(schedules);
+}
+
+function removeSchedule(index) {
+    schedules.splice(index, 1);
+    updateSchedulesList();
+    updateDaysSummary();
+}
+
+function updateDaysSummary() {
+    const summaryDiv = document.getElementById('daysSummary');
+    const summaryText = document.getElementById('daysSummaryText');
+
+    if (schedules.length === 0) {
+        summaryDiv.style.display = 'none';
+    } else {
+        summaryDiv.style.display = 'block';
+        summaryText.textContent = `تم تحديد ${schedules.length} موعد/مواعد`;
+    }
+}
+
+// Auto-close modal when clicking outside
+window.onclick = function(event) {
+    const modal = document.getElementById('scheduleModal');
+    if (event.target === modal) {
+        closeScheduleModal();
+    }
+}
+
+// Form submission
+document.getElementById('bookingForm').onsubmit = function() {
+    if (schedules.length === 0) {
+        alert('يرجى إضافة موعد واحد على الأقل');
+        return false;
+    }
+    return true;
+};
+</script>
+{% endblock %}

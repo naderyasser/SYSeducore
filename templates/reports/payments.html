@@ -291,6 +291,10 @@
             <p class="mb-0 mt-2 opacity-75">متابعة وتتبع المدفوعات والمصروفات</p>
         </div>
         <div class="export-buttons">
+            <a href="{% url 'reports:logout' %}" class="btn-export" style="background: rgba(220, 38, 38, 0.9); color: #fff;">
+                <i class="bi bi-box-arrow-right"></i>
+                تسجيل الخروج
+            </a>
             <button class="btn-export excel" onclick="exportTableToExcel()">
                 <i class="bi bi-file-earmark-excel"></i>
                 تصدير Excel

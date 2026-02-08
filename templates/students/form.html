@@ -377,15 +377,6 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label for="id_date_of_birth" class="form-label">تاريخ الميلاد</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-calendar"></i></span>
-                                <input type="date" name="date_of_birth" id="id_date_of_birth" class="form-control"
-                                    value="{{ form.date_of_birth.value|default:''|date:'Y-m-d' }}">
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
                             <div class="form-check form-switch" style="margin-top: 35px;">
                                 <input type="checkbox" name="is_active" class="form-check-input" id="id_is_active"
                                     {% if not student or student.is_active %}checked{% endif %}>
