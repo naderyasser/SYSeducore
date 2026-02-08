@@ -1,0 +1,438 @@
+{% extends 'base.html' %}
+
+{% block title %}المواعيد - البحث والحجز{% endblock %}
+{% block page_title %}المواعيد - البحث والحجز{% endblock %}
+
+{% block extra_css %}
+<style>
+    .search-hero {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 20px;
+        padding: 40px;
+        color: #fff;
+        margin-bottom: 30px;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .search-hero::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -30%;
+        width: 80%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        animation: float 15s ease-in-out infinite;
+    }
+
+    @keyframes float {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-20px) rotate(5deg); }
+    }
+
+    .search-hero-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .search-hero h1 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .search-hero p {
+        opacity: 0.9;
+        margin-bottom: 25px;
+    }
+
+    .search-card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        margin-bottom: 24px;
+    }
+
+    .filter-section {
+        display: flex;
+        gap: 15px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    .filter-group {
+        flex: 1;
+        min-width: 200px;
+    }
+
+    .filter-group label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 8px;
+        display: block;
+    }
+
+    .search-input-wrapper {
+        position: relative;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 14px 50px 14px 20px;
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        font-size: 1rem;
+        transition: all 0.3s;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #9ca3af;
+    }
+
+    .teacher-card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 24px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        border: 1px solid #f0f0f0;
+        transition: all 0.3s;
+        margin-bottom: 20px;
+    }
+
+    .teacher-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.1);
+    }
+
+    .teacher-card-header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .teacher-avatar {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .teacher-info h3 {
+        margin: 0 0 4px 0;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .teacher-specialization {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    .teacher-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 16px;
+    }
+
+    .detail-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.9rem;
+    }
+
+    .detail-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .subjects-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .subject-tag {
+        background: #e0e7ff;
+        color: #4338ca;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+    }
+
+    .teacher-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .btn-book {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .btn-book:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-view {
+        background: #f3f4f6;
+        color: #374151;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 10px;
+        font-weight: 500;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .btn-view:hover {
+        background: #e5e7eb;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .quick-filters {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 20px;
+    }
+
+    .quick-filter-btn {
+        padding: 8px 16px;
+        border: 2px solid #e5e7eb;
+        background: #fff;
+        border-radius: 20px;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+        color: #6b7280;
+    }
+
+    .quick-filter-btn:hover, .quick-filter-btn.active {
+        border-color: #667eea;
+        background: #667eea;
+        color: #fff;
+    }
+
+    @media (max-width: 768px) {
+        .filter-section {
+            flex-direction: column;
+        }
+
+        .teacher-card-header {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .teacher-actions {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Search Hero -->
+<div class="search-hero">
+    <div class="search-hero-content">
+        <h1><i class="bi bi-calendar-check me-2"></i>المواعيد - البحث والحجز</h1>
+        <p>ابحث عن المدرسين والمواد الدراسية واحجز للطلاب</p>
+    </div>
+</div>
+
+<!-- Search Card -->
+<div class="search-card">
+    <form method="get" class="filter-section">
+        <div class="filter-group" style="flex: 2; min-width: 300px;">
+            <label>البحث</label>
+            <div class="search-input-wrapper">
+                <i class="bi bi-search search-icon"></i>
+                <input type="text" name="q" class="search-input" placeholder="ابحث عن مدرس أو تخصص..." value="{{ query }}">
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <label>المرحلة الدراسية</label>
+            <select name="education_stage" class="search-input">
+                <option value="">الكل المراحل</option>
+                <option value="primary" {% if education_stage == 'primary' %}selected{% endif %}>ابتدائي</option>
+                <option value="preparatory" {% if education_stage == 'preparatory' %}selected{% endif %}>اعدادي</option>
+                <option value="secondary" {% if education_stage == 'secondary' %}selected{% endif %}>ثانوي</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>الجنس</label>
+            <select name="gender" class="search-input">
+                <option value="">الكل</option>
+                <option value="male" {% if gender == 'male' %}selected{% endif %}>بنين</option>
+                <option value="female" {% if gender == 'female' %}selected{% endif %}>بنات</option>
+                <option value="mixed" {% if gender == 'mixed' %}selected{% endif %}>مختلط</option>
+            </select>
+        </div>
+
+        <div class="filter-group">
+            <label>المادة</label>
+            <select name="subject" class="search-input">
+                <option value="">كل المواد</option>
+                {% for subject in subjects %}
+                <option value="{{ subject.subject_id }}" {% if selected_subject == subject.subject_id|stringformat:"s" %}selected{% endif %}>
+                    {{ subject.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="filter-group" style="display: flex; align-items: flex-end;">
+            <button type="submit" class="btn-book">
+                <i class="bi bi-search me-2"></i>بحث
+            </button>
+        </div>
+    </form>
+
+    <div class="quick-filters">
+        <a href="{% url 'teachers:booking_search' %}" class="quick-filter-btn">
+            <i class="bi bi-arrow-clock"></i> عرض الكل
+        </a>
+        {% if query or education_stage or gender or selected_subject %}
+        <a href="{% url 'teachers:booking_search' %}" class="quick-filter-btn">
+            <i class="bi bi-x-circle"></i> مسح الفلاتر
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Calendar Link -->
+<div class="search-card" style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 1.3rem;">
+            <i class="bi bi-calendar-week me-2" style="color: #667eea;"></i>
+            التقويم الشامل
+        </h3>
+        <p style="margin: 0; color: #6b7280; font-size: 0.95rem;">
+            عرض جميع المواعيد المجدولة حسب الأيام
+        </p>
+    </div>
+    <a href="{% url 'teachers:booking_calendar' %}" class="btn-book">
+        <i class="bi bi-calendar3 me-2"></i>عرض التقويم
+    </a>
+</div>
+
+<!-- Results -->
+{% if teachers %}
+    <div class="row">
+        {% for teacher in teachers %}
+        <div class="col-lg-6 col-xl-4">
+            <div class="teacher-card">
+                <div class="teacher-card-header">
+                    <div class="teacher-avatar">
+                        {{ teacher.full_name|slice:"0:2"|upper }}
+                    </div>
+                    <div class="teacher-info">
+                        <h3>{{ teacher.full_name }}</h3>
+                        <p class="teacher-specialization">{{ teacher.specialization|default:"-" }}</p>
+                    </div>
+                </div>
+
+                <div class="teacher-details">
+                    <div class="detail-item">
+                        <div class="detail-icon">
+                            <i class="bi bi-graduation-cap"></i>
+                        </div>
+                        <span>{{ teacher.get_education_stage_display }}</span>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-icon">
+                            <i class="bi bi-gender-ambiguous"></i>
+                        </div>
+                        <span>{{ teacher.get_gender_display }}</span>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-icon">
+                            <i class="bi bi-telephone"></i>
+                        </div>
+                        <span>{{ teacher.phone|default:"-" }}</span>
+                    </div>
+                </div>
+
+                {% if teacher.subjects.all %}
+                <div class="subjects-tags" style="margin-bottom: 16px;">
+                    {% for subject in teacher.subjects.all|slice:"0:3" %}
+                    <span class="subject-tag">{{ subject.name }}</span>
+                    {% endfor %}
+                    {% if teacher.subjects.count > 3 %}
+                    <span class="subject-tag">+{{ teacher.subjects.count|add:"-3" }}</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <div class="teacher-actions">
+                    <a href="{% url 'teachers:booking_create_for_teacher' teacher.teacher_id %}" class="btn-book">
+                        <i class="bi bi-calendar-plus me-1"></i>
+                        حجز موعد
+                    </a>
+                    <a href="{% url 'teachers:detail' teacher.teacher_id %}" class="btn-view">
+                        <i class="bi bi-person me-1"></i>
+                        الملف الشخصي
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="empty-state">
+        <i class="bi bi-search"></i>
+        <h3>لا توجد نتائج</h3>
+        <p>جرب البحث بكلمات مختلفة أو مسح الفلاتر</p>
+</div>
+{% endif %}
+{% endblock %}

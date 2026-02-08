@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.db.models import Sum, Count, Q, F, Avg
@@ -6,11 +6,70 @@ from django.db.models.functions import TruncDate, TruncMonth
 from datetime import timedelta, datetime
 from collections import defaultdict
 import json
+from django.contrib import messages
 
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room
 from apps.attendance.models import Attendance, Session, ActivityLog
 from apps.payments.models import Payment
+
+
+# Password for accessing sensitive reports
+REPORTS_PASSWORD = "0000"
+
+
+def report_password_required(view_func):
+    """
+    Decorator to require password for accessing sensitive reports.
+    Checks session for password verification.
+    """
+    def _wrapped_view(request, *args, **kwargs):
+        if not request.session.get('report_authenticated'):
+            # Save the original URL to redirect back after authentication
+            request.session['report_redirect_after'] = request.get_full_path()
+            return redirect('reports:password_prompt')
+        return view_func(request, *args, **kwargs)
+    return _wrapped_view
+
+
+def password_prompt(request):
+    """
+    Display password entry form for accessing protected reports.
+    """
+    return render(request, 'reports/password_prompt.html')
+
+
+def verify_password(request):
+    """
+    Verify the password and grant access if correct.
+    """
+    if request.method == 'POST':
+        password = request.POST.get('password', '')
+        if password == REPORTS_PASSWORD:
+            request.session['report_authenticated'] = True
+            # Set session to expire after 1 hour
+            request.session.set_expiry(3600)
+
+            # Redirect to the originally requested URL or dashboard
+            redirect_url = request.session.get('report_redirect_after')
+            if redirect_url:
+                del request.session['report_redirect_after']
+                return redirect(redirect_url)
+            return redirect('reports:dashboard')
+        else:
+            messages.error(request, 'Incorrect password. Please try again.')
+
+    return redirect('reports:password_prompt')
+
+
+def clear_report_session(request):
+    """
+    Clear the report authentication session.
+    """
+    if 'report_authenticated' in request.session:
+        del request.session['report_authenticated']
+    messages.success(request, 'You have been logged out from reports access.')
+    return redirect('reports:dashboard')
 
 
 def AttendanceService_get_day_name():
@@ -30,187 +89,194 @@ def dashboard(request):
     """
     today = timezone.now().date()
     this_month_start = today.replace(day=1)
-    last_month_start = (this_month_start - timedelta(days=1)).replace(day=1)
-    week_ago = today - timedelta(days=7)
     current_day_name = AttendanceService_get_day_name()
-    
-    # ====== OVERALL STATISTICS ======
+
+    # ====== KEY METRICS ======
     total_students = Student.objects.filter(is_active=True).count()
     total_teachers = Teacher.objects.filter(is_active=True).count()
-    total_groups = Group.objects.filter(is_active=True).count()
-    
+    total_rooms = Room.objects.filter(is_active=True).count()
+    total_active_groups = Group.objects.filter(is_active=True).count()
+
     # New students this month
     new_students_this_month = Student.objects.filter(
         is_active=True,
         created_at__date__gte=this_month_start
     ).count()
-    
-    # ====== ATTENDANCE STATISTICS ======
-    # Today's attendance
+
+    # ====== TODAY'S OVERVIEW ======
+    # Today's sessions
     today_sessions = Session.objects.filter(session_date=today)
+    today_active_sessions = today_sessions.filter(is_cancelled=False).count()
+    today_cancelled_sessions = today_sessions.filter(is_cancelled=True).count()
+
+    # Today's attendance
     today_attendances = Attendance.objects.filter(session__session_date=today)
     today_present = today_attendances.filter(status='present').count()
     today_late = today_attendances.filter(status='late').count()
     today_absent = today_attendances.filter(status='absent').count()
-    
-    # Week attendance trend
-    week_attendance_data = []
-    for i in range(6, -1, -1):
-        date = today - timedelta(days=i)
-        day_attendances = Attendance.objects.filter(session__session_date=date)
-        week_attendance_data.append({
-            'date': date.strftime('%a'),
-            'full_date': date.strftime('%Y-%m-%d'),
-            'present': day_attendances.filter(status='present').count(),
-            'late': day_attendances.filter(status='late').count(),
-            'absent': day_attendances.filter(status='absent').count(),
-        })
-    
-    # ====== FINANCIAL STATISTICS ======
-    # This month payments
+    today_total_attendance = today_present + today_late + today_absent
+    today_attendance_rate = ((today_present + today_late) / today_total_attendance * 100) if today_total_attendance > 0 else 0
+
+    # Students absent today
+    absent_today = today_attendances.filter(status='absent').select_related('student', 'session__group')[:5]
+
+    # ====== FINANCIAL SUMMARY ======
     this_month_payments = Payment.objects.filter(month__gte=this_month_start)
-    month_total_due = this_month_payments.aggregate(
-        total=Sum('amount_due')
-    )['total'] or 0
-    month_total_paid = this_month_payments.aggregate(
-        total=Sum('amount_paid')
-    )['total'] or 0
+    month_total_due = this_month_payments.aggregate(total=Sum('amount_due'))['total'] or 0
+    month_total_paid = this_month_payments.aggregate(total=Sum('amount_paid'))['total'] or 0
     month_remaining = month_total_due - month_total_paid
-    
-    # Payment status counts
-    paid_count = this_month_payments.filter(status='paid').count()
-    partial_count = this_month_payments.filter(status='partial').count()
-    unpaid_count = this_month_payments.filter(status='unpaid').count()
-    
-    # Monthly revenue trend (last 6 months)
-    months_revenue = []
-    for i in range(5, -1, -1):
-        month_date = (this_month_start - timedelta(days=i*30)).replace(day=1)
-        month_end = (month_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        
-        month_data = Payment.objects.filter(
-            month__gte=month_date,
-            month__lte=month_end
-        ).aggregate(
-            due=Sum('amount_due'),
-            paid=Sum('amount_paid')
-        )
-        
-        months_revenue.append({
-            'month': month_date.strftime('%b'),
-            'due': float(month_data['due'] or 0),
-            'paid': float(month_data['paid'] or 0),
-        })
-    
-    # ====== GROUP STATISTICS ======
-    groups_stats = []
-    for group in Group.objects.filter(is_active=True).select_related('teacher', 'room')[:5]:
-        enrolled_count = StudentGroupEnrollment.objects.filter(
-            group=group,
-            is_active=True
-        ).count()
-        
-        capacity = group.room.capacity if group.room else 0
-        utilization = (enrolled_count / capacity * 100) if capacity > 0 else 0
-        
-        groups_stats.append({
-            'name': group.group_name,
-            'teacher': group.teacher.full_name if group.teacher else '-',
-            'enrolled': enrolled_count,
-            'capacity': capacity,
-            'utilization': utilization,
-        })
-    
-    # ====== RECENT ACTIVITY ======
-    recent_attendances = Attendance.objects.select_related(
-        'student', 'session__group'
-    ).order_by('-scan_time')[:8]
-    
-    recent_payments = Payment.objects.select_related(
-        'student', 'group'
-    ).filter(
+    collection_rate = (month_total_paid / month_total_due * 100) if month_total_due > 0 else 0
+
+    # Pending payments (unpaid + partial)
+    pending_payments_count = this_month_payments.filter(status__in=['unpaid', 'partial']).count()
+    pending_payments_list = Payment.objects.filter(
+        status__in=['unpaid', 'partial']
+    ).select_related('student', 'group').order_by('-month')[:5]
+
+    # Recent payments
+    recent_payments = Payment.objects.select_related('student', 'group').filter(
         status__in=['paid', 'partial']
     ).order_by('-payment_date')[:5]
-    
-    # Pending payments
-    pending_payments = Payment.objects.filter(
-        status__in=['unpaid', 'partial']
-    ).select_related('student', 'group').order_by('-month')[:8]
-    
-    # ====== TOP PERFORMERS ======
-    # Top groups by attendance
-    top_groups = Group.objects.filter(is_active=True).annotate(
-        attendance_count=Count('sessions__attendances')
-    ).order_by('-attendance_count')[:5]
 
-    # ====== SCHEDULE WIDGET (Today's Schedule) ======
-    # عرض جدول اليوم: المدرسين + القاعات + المواعيد الحالية
+    # ====== TODAY'S SCHEDULE ======
     todays_groups = Group.objects.filter(
         is_active=True,
         schedule_day=current_day_name
     ).select_related('teacher', 'room').order_by('schedule_time')
 
     today_schedule = []
+    now = timezone.now()
+    current_time = now.time()
+
     for grp in todays_groups:
         enrolled_count = StudentGroupEnrollment.objects.filter(
             group=grp, is_active=True
         ).count()
+        capacity = grp.room.capacity if grp.room else 0
+        end_time = grp.get_end_time()
+
+        # Determine session status
+        session_status = 'upcoming'
+        if current_time > end_time:
+            session_status = 'completed'
+        elif current_time >= grp.schedule_time:
+            session_status = 'ongoing'
+
         today_schedule.append({
-            'group': grp,
+            'id': grp.group_id,
+            'group_name': grp.group_name,
             'teacher': grp.teacher.full_name,
             'room': grp.room.name if grp.room else '-',
             'time_start': grp.schedule_time.strftime('%I:%M %p'),
-            'time_end': grp.get_end_time().strftime('%I:%M %p'),
+            'time_end': end_time.strftime('%I:%M %p'),
             'duration': grp.get_duration_display(),
             'enrolled': enrolled_count,
+            'capacity': capacity,
+            'utilization': (enrolled_count / capacity * 100) if capacity > 0 else 0,
+            'status': session_status,
         })
 
-    # ====== ACTIVITY LOG (Who is Active?) ======
-    # سجل الدخول - من يعمل على السيستم حالياً
-    recent_activities = ActivityLog.objects.select_related('user').order_by('-created_at')[:15]
+    # ====== WEEK ATTENDANCE TREND ======
+    week_attendance_data = []
+    for i in range(6, -1, -1):
+        date = today - timedelta(days=i)
+        day_attendances = Attendance.objects.filter(session__session_date=date)
+        total = day_attendances.count()
+        present = day_attendances.filter(status='present').count()
+        late = day_attendances.filter(status='late').count()
+        absent = day_attendances.filter(status='absent').count()
+        attendance_rate = ((present + late) / total * 100) if total > 0 else 0
+
+        week_attendance_data.append({
+            'date': date.strftime('%a'),
+            'full_date': date.strftime('%Y-%m-%d'),
+            'present': present,
+            'late': late,
+            'absent': absent,
+            'rate': round(attendance_rate, 1),
+        })
+
+    # ====== RECENT ACTIVITY ======
+    recent_attendances = Attendance.objects.select_related(
+        'student', 'session__group'
+    ).order_by('-scan_time')[:6]
+
+    # Activity log
+    recent_activities = ActivityLog.objects.select_related('user').order_by('-created_at')[:10]
+
+    # ====== GROUPS STATUS ======
+    # Groups with low enrollment
+    groups_low_enrollment = []
+    groups_high_enrollment = []
+
+    for group in Group.objects.filter(is_active=True).select_related('teacher', 'room'):
+        enrolled = StudentGroupEnrollment.objects.filter(
+            group=group, is_active=True
+        ).count()
+        capacity = group.room.capacity if group.room else 0
+        utilization = (enrolled / capacity * 100) if capacity > 0 else 0
+
+        group_info = {
+            'name': group.group_name,
+            'teacher': group.teacher.full_name if group.teacher else '-',
+            'enrolled': enrolled,
+            'capacity': capacity,
+            'utilization': utilization,
+        }
+
+        if utilization < 50:
+            groups_low_enrollment.append(group_info)
+        elif utilization >= 90:
+            groups_high_enrollment.append(group_info)
+
+    # ====== QUICK STATS ======
+    total_rooms_count = Room.objects.filter(is_active=True).count()
 
     context = {
-        # Overall stats
+        # Key Metrics
         'total_students': total_students,
         'total_teachers': total_teachers,
-        'total_groups': total_groups,
+        'total_rooms': total_rooms_count,
+        'total_groups': total_active_groups,
         'new_students_this_month': new_students_this_month,
-        
-        # Today's attendance
-        'today_sessions': today_sessions.count(),
+
+        # Today's Overview
+        'today_date': today,
+        'today_day_name': current_day_name,
+        'today_total_sessions': today_sessions.count(),
+        'today_active_sessions': today_active_sessions,
+        'today_cancelled_sessions': today_cancelled_sessions,
         'today_present': today_present,
         'today_late': today_late,
         'today_absent': today_absent,
-        'today_total': today_present + today_late + today_absent,
-        
+        'today_total_attendance': today_total_attendance,
+        'today_attendance_rate': round(today_attendance_rate, 1),
+        'absent_today': absent_today,
+
         # Financial
         'month_total_due': month_total_due,
         'month_total_paid': month_total_paid,
         'month_remaining': month_remaining,
-        'collection_rate': (month_total_paid / month_total_due * 100) if month_total_due > 0 else 0,
-        'paid_count': paid_count,
-        'partial_count': partial_count,
-        'unpaid_count': unpaid_count,
-        
-        # Chart data
-        'week_attendance_json': json.dumps(week_attendance_data, ensure_ascii=False),
-        'months_revenue_json': json.dumps(months_revenue, ensure_ascii=False),
-        
-        # Lists
-        'groups_stats': groups_stats,
-        'recent_attendances': recent_attendances,
+        'collection_rate': round(collection_rate, 1),
+        'pending_payments_count': pending_payments_count,
+        'pending_payments_list': pending_payments_list,
         'recent_payments': recent_payments,
-        'pending_payments': pending_payments,
-        'top_groups': top_groups,
 
-        # Schedule Widget
+        # Schedule
         'today_schedule': today_schedule,
-        'current_day_name': current_day_name,
 
-        # Activity Log
+        # Charts
+        'week_attendance_json': json.dumps(week_attendance_data, ensure_ascii=False),
+
+        # Recent Activity
+        'recent_attendances': recent_attendances,
         'recent_activities': recent_activities,
+
+        # Groups Status
+        'groups_low_enrollment': groups_low_enrollment[:3],
+        'groups_high_enrollment': groups_high_enrollment[:3],
     }
-    
+
     return render(request, 'reports/dashboard.html', context)
 
 
@@ -273,6 +339,7 @@ def attendance_report(request):
 
 
 @login_required
+@report_password_required
 def payment_report(request):
     """
     Comprehensive Payment Report with filters and statistics
@@ -333,6 +400,7 @@ def payment_report(request):
 
 
 @login_required
+@report_password_required
 def financial_report(request):
     """
     Detailed Financial Report

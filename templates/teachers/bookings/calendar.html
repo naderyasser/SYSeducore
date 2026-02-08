@@ -1,0 +1,334 @@
+{% extends 'base.html' %}
+
+{% block title %}التقويم الشامل للمواعيد{% endblock %}
+{% block page_title %}التقويم الشامل للمواعيد{% endblock %}
+
+{% block extra_css %}
+<style>
+    .calendar-container {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        padding: 30px;
+        margin-bottom: 30px;
+    }
+
+    .calendar-header {
+        text-align: center;
+        padding-bottom: 30px;
+        border-bottom: 2px solid #f3f4f6;
+        margin-bottom: 30px;
+    }
+
+    .calendar-header h1 {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 8px;
+    }
+
+    .calendar-header p {
+        color: #6b7280;
+        font-size: 1rem;
+    }
+
+    .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 24px;
+    }
+
+    .day-column {
+        background: #f9fafb;
+        border-radius: 16px;
+        padding: 20px;
+        min-height: 400px;
+    }
+
+    .day-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 16px;
+        border-bottom: 2px solid #e5e7eb;
+        margin-bottom: 16px;
+    }
+
+    .day-header h2 {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin: 0;
+    }
+
+    .day-count {
+        background: #667eea;
+        color: #fff;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .day-count.empty {
+        background: #d1d5db;
+    }
+
+    .booking-card {
+        background: #fff;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border: 1px solid #e5e7eb;
+        transition: all 0.3s;
+        cursor: pointer;
+    }
+
+    .booking-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        border-color: #667eea;
+    }
+
+    .booking-time {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 600;
+        color: #667eea;
+        font-size: 0.95rem;
+        margin-bottom: 8px;
+    }
+
+    .booking-time i {
+        font-size: 1rem;
+    }
+
+    .booking-title {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 8px;
+        font-size: 1rem;
+    }
+
+    .booking-details {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+        font-size: 0.85rem;
+        color: #6b7280;
+    }
+
+    .booking-detail {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .booking-detail i {
+        font-size: 0.9rem;
+        width: 16px;
+    }
+
+    .booking-teacher {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        padding-top: 8px;
+        border-top: 1px solid #f3f4f6;
+        font-size: 0.9rem;
+    }
+
+    .booking-teacher i {
+        color: #667eea;
+    }
+
+    .enrollment-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin-top: 8px;
+    }
+
+    .enrollment-badge.good {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .enrollment-badge.warning {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .enrollment-badge.full {
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    .empty-day {
+        text-align: center;
+        padding: 40px 20px;
+        color: #9ca3af;
+    }
+
+    .empty-day i {
+        font-size: 2rem;
+        margin-bottom: 12px;
+        opacity: 0.5;
+    }
+
+    .calendar-actions {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    .btn-action {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: #fff;
+        border: none;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+        background: #f3f4f6;
+        color: #374151;
+        border: none;
+    }
+
+    .btn-secondary:hover {
+        background: #e5e7eb;
+    }
+
+    @media (max-width: 768px) {
+        .calendar-container {
+            padding: 20px;
+        }
+
+        .calendar-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="calendar-container">
+    <div class="calendar-header">
+        <h1><i class="bi bi-calendar-week me-2" style="color: #667eea;"></i>التقويم الشامل للمواعيد</h1>
+        <p>عرض جميع المواعيد المجدولة حسب الأيام</p>
+    </div>
+
+    <div class="calendar-actions">
+        <a href="{% url 'teachers:booking_search' %}" class="btn-action btn-primary">
+            <i class="bi bi-plus-circle"></i>
+            حجز موعد جديد
+        </a>
+        <a href="{% url 'teachers:group_list' %}" class="btn-action btn-secondary">
+            <i class="bi bi-list-ul"></i>
+            قائمة المجموعات
+        </a>
+    </div>
+
+    <div class="calendar-grid">
+        {% for day in week_days %}
+        <div class="day-column">
+            <div class="day-header">
+                <h2>{{ calendar_data.day.arabic_name }}</h2>
+                <div class="day-count {% if calendar_data.day.groups %}{% else %}empty{% endif %}">
+                    {{ calendar_data.day.groups|length }}
+                </div>
+            </div>
+
+            {% if calendar_data.day.groups %}
+                {% for booking in calendar_data.day.groups %}
+                <div class="booking-card" onclick="window.location.href='{% url 'teachers:group_detail' booking.id %}'">
+                    <div class="booking-time">
+                        <i class="bi bi-clock"></i>
+                        {{ booking.time }} - {{ booking.end_time }}
+                        <span style="color: #9ca3af; font-weight: 400;">({{ booking.duration }})</span>
+                    </div>
+
+                    <div class="booking-title">{{ booking.name }}</div>
+
+                    <div class="booking-details">
+                        <div class="booking-detail">
+                            <i class="bi bi-book"></i>
+                            {{ booking.subject }}
+                        </div>
+                        <div class="booking-detail">
+                            <i class="bi bi-geo-alt"></i>
+                            {{ booking.room }}
+                        </div>
+                        <div class="booking-detail">
+                            <i class="bi bi-person"></i>
+                            {{ booking.gender }}
+                        </div>
+                        <div class="booking-detail">
+                            <i class="bi bi-cash"></i>
+                            {{ booking.fee }} ر.س
+                        </div>
+                    </div>
+
+                    <div class="booking-teacher">
+                        <i class="bi bi-person-badge"></i>
+                        {{ booking.teacher }}
+                    </div>
+
+                    {% if booking.capacity > 0 %}
+                        {% widthratio booking.enrolled 1 booking.capacity as enrollment_percent %}
+                        {% if enrollment_percent >= 100 %}
+                            <div class="enrollment-badge full">
+                                <i class="bi bi-exclamation-circle"></i>
+                                مكتمل ({{ booking.enrolled }}/{{ booking.capacity }})
+                            </div>
+                        {% elif enrollment_percent >= 80 %}
+                            <div class="enrollment-badge warning">
+                                <i class="bi bi-exclamation-triangle"></i>
+                                {{ booking.enrolled }}/{{ booking.capacity }}
+                            </div>
+                        {% else %}
+                            <div class="enrollment-badge good">
+                                <i class="bi bi-check-circle"></i>
+                                {{ booking.enrolled }}/{{ booking.capacity }}
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-day">
+                    <i class="bi bi-calendar-x"></i>
+                    <p>لا توجد مواعيد</p>
+                </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

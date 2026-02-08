@@ -116,7 +116,7 @@ def send_barcode_whatsapp(request, student_id):
 
 يرجى الاحتفاظ بهذا الكود لتسجيل الحضور في المركز.
 
-_نظام إدارة المركز التعليمي_"""
+_نظام بداية التعليمي_"""
 
         # Try to send image via UltraMsg
         instance_id = getattr(settings, 'ULTRAMSG_INSTANCE_ID', '')

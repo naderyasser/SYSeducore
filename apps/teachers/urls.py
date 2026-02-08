@@ -21,6 +21,7 @@ urlpatterns = [
     # Groups
     path('groups/', views.group_list, name='group_list'),
     path('groups/create/', views.group_create, name='group_create'),
+    path('groups/<int:group_id>/', views.group_detail, name='group_detail'),
     path('groups/<int:group_id>/edit/', views.group_update, name='group_update'),
     path('groups/<int:group_id>/delete/', views.group_delete, name='group_delete'),
 
@@ -30,6 +31,13 @@ urlpatterns = [
     path('subjects/<int:subject_id>/', views.subject_detail, name='subject_detail'),
     path('subjects/<int:subject_id>/edit/', views.subject_update, name='subject_update'),
     path('subjects/<int:subject_id>/delete/', views.subject_delete, name='subject_delete'),
+
+    # Bookings (المواعيد)
+    path('bookings/', views.booking_search, name='booking_search'),
+    path('bookings/create/', views.booking_create, name='booking_create'),
+    path('bookings/create/<int:teacher_id>/', views.booking_create, name='booking_create_for_teacher'),
+    path('bookings/calendar/', views.booking_calendar, name='booking_calendar'),
+    path('bookings/enroll/', views.booking_student_enroll, name='booking_student_enroll'),
 
     # API: Rooms
     path('api/rooms/', api_views.room_list_api, name='api_room_list'),

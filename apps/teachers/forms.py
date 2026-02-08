@@ -64,7 +64,14 @@ class GroupForm(forms.ModelForm):
     - مدة الحصة
     - تصنيف الجنس
     - المرحلة والسنة الدراسية
+    - متعدد الأيام (يتم التعامل مع schedule_day بالكاستوم شيكبكس)
     """
+    schedule_day = forms.ChoiceField(
+        choices=[],
+        required=False,
+        widget=forms.HiddenInput()
+    )
+
     class Meta:
         model = Group
         fields = [
@@ -76,7 +83,6 @@ class GroupForm(forms.ModelForm):
             'group_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اسم المجموعة'}),
             'teacher': forms.Select(attrs={'class': 'form-select'}),
             'room': forms.Select(attrs={'class': 'form-select'}),
-            'schedule_day': forms.Select(attrs={'class': 'form-select'}),
             'schedule_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
             'duration_minutes': forms.NumberInput(attrs={
                 'class': 'form-control',

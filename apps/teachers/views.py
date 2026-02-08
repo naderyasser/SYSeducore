@@ -1,8 +1,16 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db.models import Q
+from django.utils import timezone
+from datetime import datetime
+from django.http import JsonResponse
+import json
+
 from .models import Teacher, Group, Room, Subject
 from .forms import TeacherForm, GroupForm, RoomForm, SubjectForm
+
+from apps.students.models import Student, StudentGroupEnrollment
 
 
 # ==================== Teachers ====================
@@ -175,12 +183,78 @@ def group_create(request):
     if request.method == 'POST':
         form = GroupForm(request.POST)
         if form.is_valid():
-            form.save()
-            messages.success(request, 'تم إضافة المجموعة بنجاح')
+            # Check if multiple days were selected
+            schedule_days_json = request.POST.get('schedule_days')
+            if schedule_days_json:
+                try:
+                    import json
+                    schedule_days = json.loads(schedule_days_json)
+                except:
+                    schedule_days = [form.cleaned_data.get('schedule_day')]
+            else:
+                schedule_days = [form.cleaned_data.get('schedule_day')]
+
+            # Don't save the form yet - we'll create multiple groups
+            created_groups = []
+            for i, day in enumerate(schedule_days):
+                group_name = form.cleaned_data['group_name']
+                # Add day suffix if multiple days
+                if len(schedule_days) > 1:
+                    day_ar = {
+                        'Saturday': '(السبت)',
+                        'Sunday': '(الأحد)',
+                        'Monday': '(الاثنين)',
+                        'Tuesday': '(الثلاثاء)',
+                        'Wednesday': '(الأربعاء)',
+                        'Thursday': '(الخميس)',
+                        'Friday': '(الجمعة)',
+                    }.get(day, '')
+                    group_name = f"{group_name} {day_ar}"
+
+                # Create group for each day
+                group = Group.objects.create(
+                    group_name=group_name,
+                    teacher=form.cleaned_data['teacher'],
+                    room=form.cleaned_data.get('room'),
+                    schedule_day=day,
+                    schedule_time=form.cleaned_data['schedule_time'],
+                    duration_minutes=form.cleaned_data['duration_minutes'],
+                    gender_type=form.cleaned_data.get('gender_type', 'mixed'),
+                    education_stage=form.cleaned_data.get('education_stage'),
+                    education_year=form.cleaned_data.get('education_year'),
+                    standard_fee=form.cleaned_data['standard_fee'],
+                    center_percentage=form.cleaned_data.get('center_percentage', 30),
+                    is_active=form.cleaned_data.get('is_active', True),
+                )
+                created_groups.append(group)
+
+            if len(created_groups) > 1:
+                messages.success(request, f'تم إضافة {len(created_groups)} مجموعات بنجاح')
+            else:
+                messages.success(request, 'تم إضافة المجموعة بنجاح')
             return redirect('teachers:group_list')
     else:
         form = GroupForm()
     return render(request, 'teachers/groups/form.html', {'form': form})
+
+
+@login_required
+def group_detail(request, group_id):
+    """
+    عرض تفاصيل المجموعة
+    """
+    group = get_object_or_404(Group, pk=group_id)
+    enrolled_students = StudentGroupEnrollment.objects.filter(
+        group=group, is_active=True
+    ).select_related('student')
+
+    context = {
+        'group': group,
+        'enrolled_students': enrolled_students,
+        'enrolled_count': enrolled_students.count(),
+        'capacity': group.room.capacity if group.room else 0,
+    }
+    return render(request, 'teachers/groups/detail.html', context)
 
 
 @login_required
@@ -298,4 +372,314 @@ def subject_delete(request, subject_id):
     return render(request, 'teachers/subjects/confirm_delete.html', {
         'subject': subject
     })
+
+
+# ==================== Bookings (المواعيد) ====================
+
+@login_required
+def booking_search(request):
+    """
+    صفحة البحث عن المواعيد - البحث عن المدرسين والمواد والقاعات
+    """
+    query = request.GET.get('q', '')
+    education_stage = request.GET.get('education_stage', '')
+    gender = request.GET.get('gender', '')
+    subject_id = request.GET.get('subject', '')
+
+    # Get available subjects
+    subjects = Subject.objects.all().order_by('name')
+
+    # Base teacher queryset
+    teachers = Teacher.objects.filter(is_active=True)
+
+    # Apply filters
+    if query:
+        teachers = teachers.filter(
+            Q(full_name__icontains=query) |
+            Q(specialization__icontains=query)
+        )
+
+    if education_stage:
+        teachers = teachers.filter(education_stage=education_stage)
+
+    if gender:
+        teachers = teachers.filter(gender=gender)
+
+    if subject_id:
+        teachers = teachers.filter(subjects__subject_id=subject_id)
+
+    teachers = teachers.distinct()
+
+    # Get available rooms
+    rooms = Room.objects.filter(is_active=True).order_by('name')
+
+    context = {
+        'teachers': teachers,
+        'subjects': subjects,
+        'rooms': rooms,
+        'query': query,
+        'education_stage': education_stage,
+        'gender': gender,
+        'selected_subject': subject_id,
+        'education_stages': [
+            ('primary', 'ابتدائي'),
+            ('preparatory', 'اعدادي'),
+            ('secondary', 'ثانوي'),
+        ],
+        'gender_types': [
+            ('male', 'بنين'),
+            ('female', 'بنات'),
+            ('mixed', 'مختلط'),
+        ],
+    }
+    return render(request, 'teachers/bookings/search.html', context)
+
+
+@login_required
+def booking_create(request, teacher_id=None):
+    """
+    إنشاء حجز جديد (مجموعة) وحجز طالب
+    """
+    teacher = None
+    if teacher_id:
+        teacher = get_object_or_404(Teacher, pk=teacher_id)
+
+    if request.method == 'POST':
+        try:
+            data = request.POST
+
+            # Extract form data
+            group_name = data.get('group_name')
+            subject_id = data.get('subject')
+            room_id = data.get('room')
+            gender_type = data.get('gender_type')
+            education_stage = data.get('education_stage')
+            education_year = data.get('education_year')
+            duration_minutes = int(data.get('duration_minutes', 120))
+            standard_fee = float(data.get('standard_fee', 0))
+            center_percentage = float(data.get('center_percentage', 30))
+
+            # Multi-day schedules
+            schedules_json = data.get('schedules')
+            if schedules_json:
+                schedules = json.loads(schedules_json)
+            else:
+                # Single day fallback
+                schedules = [{
+                    'day': data.get('schedule_day'),
+                    'time': data.get('schedule_time')
+                }]
+
+            # Student to enroll
+            student_id = data.get('student_id')
+            financial_status = data.get('financial_status', 'normal')
+
+            if not schedules:
+                messages.error(request, 'يرجى تحديد موعد واحد على الأقل')
+                return redirect('teachers:booking_search')
+
+            # Get or create subject
+            if subject_id:
+                subject = Subject.objects.get(pk=subject_id)
+            else:
+                subject_name = data.get('subject_name')
+                if subject_name:
+                    subject, created = Subject.objects.get_or_create(name=subject_name)
+                else:
+                    messages.error(request, 'يرجى اختيار أو إدخال المادة الدراسية')
+                    return redirect('teachers:booking_search')
+
+            # Get room
+            room = None
+            if room_id:
+                room = Room.objects.get(pk=room_id)
+
+            # Create groups for each schedule
+            created_groups = []
+            for i, schedule in enumerate(schedules):
+                group_name_suffix = f" ({schedule['day']})" if len(schedules) > 1 else ""
+                final_group_name = f"{group_name}{group_name_suffix}"
+
+                group = Group.objects.create(
+                    group_name=final_group_name,
+                    teacher=teacher if teacher else Teacher.objects.first(),
+                    room=room,
+                    subject=subject,
+                    schedule_day=schedule['day'],
+                    schedule_time=schedule['time'],
+                    duration_minutes=duration_minutes,
+                    gender_type=gender_type or 'mixed',
+                    education_stage=education_stage,
+                    education_year=education_year,
+                    standard_fee=standard_fee,
+                    center_percentage=center_percentage,
+                )
+                created_groups.append(group)
+
+            # Enroll student if provided
+            if student_id:
+                student = Student.objects.get(pk=student_id)
+                for group in created_groups:
+                    StudentGroupEnrollment.objects.get_or_create(
+                        student=student,
+                        group=group,
+                        defaults={
+                            'financial_status': financial_status,
+                            'is_active': True
+                        }
+                    )
+
+            messages.success(request, f'تم إنشاء {len(created_groups)} مجموعة بنجاح')
+            return redirect('teachers:group_list')
+
+        except Exception as e:
+            messages.error(request, f'حدث خطأ: {str(e)}')
+            return redirect('teachers:booking_search')
+
+    # Get data for form
+    subjects = Subject.objects.all().order_by('name')
+    rooms = Room.objects.filter(is_active=True).order_by('name')
+    students = Student.objects.filter(is_active=True).order_by('full_name')
+
+    context = {
+        'teacher': teacher,
+        'subjects': subjects,
+        'rooms': rooms,
+        'students': students,
+        'week_days': [
+            ('Saturday', 'السبت'),
+            ('Sunday', 'الأحد'),
+            ('Monday', 'الاثنين'),
+            ('Tuesday', 'الثلاثاء'),
+            ('Wednesday', 'الأربعاء'),
+            ('Thursday', 'الخميس'),
+            ('Friday', 'الجمعة'),
+        ],
+        'education_stages': [
+            ('primary', 'ابتدائي'),
+            ('preparatory', 'اعدادي'),
+            ('secondary', 'ثانوي'),
+        ],
+        'education_years': [
+            ('1', 'الصف الأول'),
+            ('2', 'الصف الثاني'),
+            ('3', 'الصف الثالث'),
+            ('4', 'الصف الرابع'),
+            ('5', 'الصف الخامس'),
+            ('6', 'الصف السادس'),
+        ],
+        'gender_types': [
+            ('male', 'بنين'),
+            ('female', 'بنات'),
+            ('mixed', 'مختلط'),
+        ],
+        'financial_statuses': [
+            ('normal', 'عادي'),
+            ('symbolic', 'رمزي'),
+            ('exempt', 'معفي'),
+        ],
+    }
+    return render(request, 'teachers/bookings/create.html', context)
+
+
+@login_required
+def booking_calendar(request):
+    """
+    عرض التقويم الشامل لجميع المواعيد
+    """
+    groups = Group.objects.filter(is_active=True).select_related(
+        'teacher', 'room', 'subject'
+    ).order_by('schedule_day', 'schedule_time')
+
+    # Organize by day
+    week_days = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+    week_days_arabic = {
+        'Saturday': 'السبت',
+        'Sunday': 'الأحد',
+        'Monday': 'الاثنين',
+        'Tuesday': 'الثلاثاء',
+        'Wednesday': 'الأربعاء',
+        'Thursday': 'الخميس',
+        'Friday': 'الجمعة',
+    }
+
+    calendar_data = {}
+    for day in week_days:
+        calendar_data[day] = {
+            'arabic_name': week_days_arabic[day],
+            'groups': []
+        }
+
+    for group in groups:
+        day = group.schedule_day
+        if day in calendar_data:
+            enrolled_count = StudentGroupEnrollment.objects.filter(
+                group=group, is_active=True
+            ).count()
+
+            calendar_data[day]['groups'].append({
+                'id': group.group_id,
+                'name': group.group_name,
+                'teacher': group.teacher.full_name if group.teacher else '-',
+                'subject': group.subject.name if group.subject else '-',
+                'room': group.room.name if group.room else '-',
+                'time': group.schedule_time.strftime('%I:%M %p'),
+                'end_time': group.get_end_time().strftime('%I:%M %p'),
+                'duration': group.get_duration_display(),
+                'enrolled': enrolled_count,
+                'capacity': group.room.capacity if group.room else 0,
+                'gender': group.get_gender_type_display(),
+                'education_stage': group.get_education_stage_display(),
+                'fee': group.standard_fee,
+            })
+
+    context = {
+        'calendar_data': calendar_data,
+        'week_days': week_days,
+    }
+    return render(request, 'teachers/bookings/calendar.html', context)
+
+
+@login_required
+def booking_student_enroll(request):
+    """
+    AJAX endpoint لتسجيل طالب في مجموعة موجودة
+    """
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+
+        group_id = data.get('group_id')
+        student_id = data.get('student_id')
+        financial_status = data.get('financial_status', 'normal')
+
+        try:
+            group = Group.objects.get(pk=group_id)
+            student = Student.objects.get(pk=student_id)
+
+            # Check if student is already enrolled
+            existing = StudentGroupEnrollment.objects.filter(
+                student=student, group=group, is_active=True
+            ).exists()
+
+            if existing:
+                return JsonResponse({'success': False, 'message': 'الطالب مسجل بالفعل في هذه المجموعة'})
+
+            # Enroll student
+            enrollment = StudentGroupEnrollment.objects.create(
+                student=student,
+                group=group,
+                financial_status=financial_status,
+                is_active=True
+            )
+
+            return JsonResponse({
+                'success': True,
+                'message': 'تم تسجيل الطالب بنجاح'
+            })
+
+        except Exception as e:
+            return JsonResponse({'success': False, 'message': str(e)})
+
+    return JsonResponse({'success': False, 'message': 'طلب غير صحيح'})
 
