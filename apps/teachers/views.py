@@ -588,7 +588,7 @@ def booking_calendar(request):
     عرض التقويم الشامل لجميع المواعيد
     """
     groups = Group.objects.filter(is_active=True).select_related(
-        'teacher', 'room', 'subject'
+        'teacher', 'room'
     ).order_by('schedule_day', 'schedule_time')
 
     # Organize by day

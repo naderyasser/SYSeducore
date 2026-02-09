@@ -97,13 +97,18 @@ class StudentForm(forms.ModelForm):
         return code
 
     def _clean_phone(self, phone):
-        """Helper to normalize phone numbers"""
-        phone = phone.replace(' ', '').replace('-', '')
-        if not phone.startswith('+'):
-            if phone.startswith('0'):
-                phone = '+20' + phone[1:]
-            else:
-                phone = '+20' + phone
+        """Helper to normalize phone numbers - removes +20 prefix for storage"""
+        if not phone:
+            return phone
+        phone = phone.replace(' ', '').replace('-', '').strip()
+        # Remove +20 prefix if exists
+        if phone.startswith('+20'):
+            phone = '0' + phone[3:]
+        elif phone.startswith('20') and len(phone) == 12:
+            phone = '0' + phone[2:]
+        # Ensure starts with 0
+        if not phone.startswith('0') and len(phone) == 10:
+            phone = '0' + phone
         return phone
 
     def clean_parent_phone(self):
