@@ -400,10 +400,10 @@ def booking_search(request):
         )
 
     if education_stage:
-        teachers = teachers.filter(education_stage=education_stage)
+        teachers = teachers.filter(groups__education_stage=education_stage)
 
     if gender:
-        teachers = teachers.filter(gender=gender)
+        teachers = teachers.filter(groups__gender_type=gender)
 
     if subject_id:
         teachers = teachers.filter(subjects__subject_id=subject_id)
