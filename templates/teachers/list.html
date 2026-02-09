@@ -38,6 +38,7 @@
                 <thead>
                     <tr>
                         <th>الاسم</th>
+                        <th>المواد</th>
                         <th>رقم الهاتف</th>
                         <th>عدد المجموعات</th>
                         <th>الحالة</th>
@@ -56,6 +57,9 @@
                                     <div class="fw-semibold">{{ teacher.full_name }}</div>
                                 </div>
                             </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ teacher.get_subjects_display }}</span>
                         </td>
                         <td>{{ teacher.phone }}</td>
                         <td>

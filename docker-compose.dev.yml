@@ -1,0 +1,37 @@
+version: '3.8'
+
+# Development override for docker-compose.yml
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+services:
+  web:
+    # Override command for development with auto-reload
+    command: >
+      sh -c "python manage.py migrate --no-input &&
+             python manage.py collectstatic --no-input --clear &&
+             python manage.py runserver 0.0.0.0:8000"
+    environment:
+      - DEBUG=True
+      - DJANGO_SETTINGS_MODULE=config.settings
+    ports:
+      - "3000:8000"  # Map port 3000 externally to 8000 internally
+    volumes:
+      - .:/app  # Enable code hot-reload
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - logs_volume:/app/logs
+
+  celery_worker:
+    # Add watchdog for auto-reload in development
+    command: watchmedo auto-restart -d /app -p '*.py' -- celery -A config worker -l info --concurrency=2
+    environment:
+      - DEBUG=True
+
+  celery_beat:
+    environment:
+      - DEBUG=True
+
+volumes:
+  static_volume:
+  media_volume:
+  logs_volume:
