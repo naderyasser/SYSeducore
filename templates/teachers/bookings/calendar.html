@@ -245,7 +245,7 @@
     </div>
 
     <div class="calendar-actions">
-        <a href="{% url 'teachers:booking_search' %}" class="btn-action btn-primary">
+        <a href="{% url 'teachers:booking_create' %}" class="btn-action btn-primary">
             <i class="bi bi-plus-circle"></i>
             حجز موعد جديد
         </a>
@@ -256,17 +256,17 @@
     </div>
 
     <div class="calendar-grid">
-        {% for day in week_days %}
+        {% for day in calendar_days %}
         <div class="day-column">
             <div class="day-header">
-                <h2>{{ calendar_data.day.arabic_name }}</h2>
-                <div class="day-count {% if calendar_data.day.groups %}{% else %}empty{% endif %}">
-                    {{ calendar_data.day.groups|length }}
+                <h2>{{ day.arabic_name }}</h2>
+                <div class="day-count {% if day.groups %}{% else %}empty{% endif %}">
+                    {{ day.groups|length }}
                 </div>
             </div>
 
-            {% if calendar_data.day.groups %}
-                {% for booking in calendar_data.day.groups %}
+            {% if day.groups %}
+                {% for booking in day.groups %}
                 <div class="booking-card" onclick="window.location.href='{% url 'teachers:group_detail' booking.id %}'">
                     <div class="booking-time">
                         <i class="bi bi-clock"></i>
