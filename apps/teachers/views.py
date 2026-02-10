@@ -1,9 +1,10 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.utils import timezone
-from datetime import datetime
+from django.core.exceptions import ValidationError
+from datetime import datetime, timedelta
 from django.http import JsonResponse
 import json
 
@@ -11,6 +12,7 @@ from .models import Teacher, Group, Room, Subject
 from .forms import TeacherForm, GroupForm, RoomForm, SubjectForm
 
 from apps.students.models import Student, StudentGroupEnrollment
+from apps.attendance.models import Session, Attendance
 
 
 # ==================== Teachers ====================
@@ -25,7 +27,22 @@ def teacher_list(request):
 def teacher_detail(request, teacher_id):
     teacher = get_object_or_404(Teacher, pk=teacher_id)
     groups = teacher.groups.filter(is_active=True)
-    return render(request, 'teachers/detail.html', {'teacher': teacher, 'groups': groups})
+    
+    # Get upcoming sessions for this teacher (next 7 days)
+    today = timezone.now().date()
+    next_week = today + timedelta(days=7)
+    upcoming_sessions = Session.objects.filter(
+        group__teacher=teacher,
+        session_date__gte=today,
+        session_date__lte=next_week,
+        is_cancelled=False
+    ).select_related('group', 'group__room').order_by('session_date')[:5]
+    
+    return render(request, 'teachers/detail.html', {
+        'teacher': teacher,
+        'groups': groups,
+        'upcoming_sessions': upcoming_sessions
+    })
 
 
 @login_required
@@ -196,6 +213,8 @@ def group_create(request):
 
             # Don't save the form yet - we'll create multiple groups
             created_groups = []
+            errors = []
+            
             for i, day in enumerate(schedule_days):
                 group_name = form.cleaned_data['group_name']
                 # Add day suffix if multiple days
@@ -211,28 +230,41 @@ def group_create(request):
                     }.get(day, '')
                     group_name = f"{group_name} {day_ar}"
 
-                # Create group for each day
-                group = Group.objects.create(
-                    group_name=group_name,
-                    teacher=form.cleaned_data['teacher'],
-                    room=form.cleaned_data.get('room'),
-                    schedule_day=day,
-                    schedule_time=form.cleaned_data['schedule_time'],
-                    duration_minutes=form.cleaned_data['duration_minutes'],
-                    gender_type=form.cleaned_data.get('gender_type', 'mixed'),
-                    education_stage=form.cleaned_data.get('education_stage'),
-                    education_year=form.cleaned_data.get('education_year'),
-                    standard_fee=form.cleaned_data['standard_fee'],
-                    center_percentage=form.cleaned_data.get('center_percentage', 30),
-                    is_active=form.cleaned_data.get('is_active', True),
-                )
-                created_groups.append(group)
+                try:
+                    # Create group for each day
+                    group = Group.objects.create(
+                        group_name=group_name,
+                        teacher=form.cleaned_data['teacher'],
+                        room=form.cleaned_data.get('room'),
+                        schedule_day=day,
+                        schedule_time=form.cleaned_data['schedule_time'],
+                        duration_minutes=form.cleaned_data['duration_minutes'],
+                        gender_type=form.cleaned_data.get('gender_type', 'mixed'),
+                        education_stage=form.cleaned_data.get('education_stage'),
+                        education_year=form.cleaned_data.get('education_year'),
+                        standard_fee=form.cleaned_data['standard_fee'],
+                        center_percentage=form.cleaned_data.get('center_percentage', 30),
+                        is_active=form.cleaned_data.get('is_active', True),
+                    )
+                    created_groups.append(group)
+                except ValidationError as e:
+                    day_ar = dict(Group.DAYS_CHOICES).get(day, day)
+                    errors.append(f"{day_ar}: {e.message_dict.get('schedule_time', [str(e)])[0]}")
 
-            if len(created_groups) > 1:
-                messages.success(request, f'تم إضافة {len(created_groups)} مجموعات بنجاح')
-            else:
-                messages.success(request, 'تم إضافة المجموعة بنجاح')
-            return redirect('teachers:group_list')
+            if created_groups:
+                if len(created_groups) > 1:
+                    messages.success(request, f'تم إضافة {len(created_groups)} مجموعات بنجاح')
+                else:
+                    messages.success(request, 'تم إضافة المجموعة بنجاح')
+                    
+            if errors:
+                for error in errors:
+                    messages.error(request, error)
+                    
+            if created_groups:
+                return redirect('teachers:group_list')
+        else:
+            messages.error(request, 'يرجى تصحيح الأخطاء في النموذج')
     else:
         form = GroupForm()
     return render(request, 'teachers/groups/form.html', {'form': form})
@@ -413,6 +445,27 @@ def booking_search(request):
     # Get available rooms
     rooms = Room.objects.filter(is_active=True).order_by('name')
 
+    # Get upcoming sessions (next 7 days)
+    today = timezone.now().date()
+    next_week = today + timedelta(days=7)
+    upcoming_sessions = Session.objects.filter(
+        session_date__gte=today,
+        session_date__lte=next_week,
+        is_cancelled=False
+    ).select_related('group', 'group__teacher', 'group__room').order_by('session_date')
+
+    # Get recent attendance stats (last 7 days)
+    last_week = today - timedelta(days=7)
+    attendance_stats = Attendance.objects.filter(
+        session__session_date__gte=last_week,
+        session__session_date__lte=today
+    ).aggregate(
+        total=Count('attendance_id'),
+        present=Count('attendance_id', filter=Q(status='present')),
+        late=Count('attendance_id', filter=Q(status='late')),
+        absent=Count('attendance_id', filter=Q(status='absent'))
+    )
+
     context = {
         'teachers': teachers,
         'subjects': subjects,
@@ -431,6 +484,8 @@ def booking_search(request):
             ('female', 'بنات'),
             ('mixed', 'مختلط'),
         ],
+        'upcoming_sessions': upcoming_sessions,
+        'attendance_stats': attendance_stats,
     }
     return render(request, 'teachers/bookings/search.html', context)
 
@@ -621,7 +676,7 @@ def booking_calendar(request):
                 'id': group.group_id,
                 'name': group.group_name,
                 'teacher': group.teacher.full_name if group.teacher else '-',
-                'subject': group.subject.name if group.subject else '-',
+                'subject': group.teacher.get_subjects_display() if group.teacher else '-',
                 'room': group.room.name if group.room else '-',
                 'time': group.schedule_time.strftime('%I:%M %p'),
                 'end_time': group.get_end_time().strftime('%I:%M %p'),
@@ -633,8 +688,18 @@ def booking_calendar(request):
                 'fee': group.standard_fee,
             })
 
+    # Build ordered list of day data for template iteration
+    calendar_days = []
+    for day in week_days:
+        calendar_days.append({
+            'name': day,
+            'arabic_name': calendar_data[day]['arabic_name'],
+            'groups': calendar_data[day]['groups'],
+        })
+
     context = {
         'calendar_data': calendar_data,
+        'calendar_days': calendar_days,
         'week_days': week_days,
     }
     return render(request, 'teachers/bookings/calendar.html', context)
