@@ -273,12 +273,12 @@ GLM4_API_URL = config('GLM4_API_URL', default='https://api.glm4.example.com')
 
 # Security Settings (for production)
 if not DEBUG:
-    SECURE_SSL_REDIRECT = False  # nginx handles SSL redirect
+    SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = 'SAMEORIGIN'
+    X_FRAME_OPTIONS = 'DENY'
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
