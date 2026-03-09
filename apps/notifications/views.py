@@ -417,6 +417,7 @@ def manage_templates(request):
     return render(request, 'notifications/manage_templates.html', context)
 
 
+@login_required
 def test_whatsapp(request):
     """
     Test WhatsApp sending (for development only).

@@ -19,6 +19,7 @@
                         <th>المبلغ المدفوع</th>
                         <th>الحالة</th>
                         <th>تاريخ الدفع</th>
+                        <th>الإجراءات</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -32,7 +33,7 @@
                                 <span class="fw-semibold">{{ payment.student.full_name }}</span>
                             </div>
                         </td>
-                        <td>{{ payment.student.group.group_name|default:"-" }}</td>
+                        <td>{{ payment.group.group_name|default:"-" }}</td>
                         <td><span class="fw-semibold">{{ payment.amount_due }} ج.م</span></td>
                         <td>{{ payment.amount_paid }} ج.م</td>
                         <td>
@@ -45,10 +46,20 @@
                             {% endif %}
                         </td>
                         <td>{{ payment.payment_date|date:"Y-m-d"|default:"-" }}</td>
+                        <td>
+                            {% if payment.status != 'paid' %}
+                            <button onclick="markAsPaidAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }})" 
+                                    class="btn btn-sm btn-success">
+                                <i class="bi bi-check-circle me-1"></i>تسديد + تفعيل
+                            </button>
+                            {% else %}
+                            <span class="text-success"><i class="bi bi-check-circle-fill"></i></span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
+                        <td colspan="7" class="text-center py-5 text-muted">
                             <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                             <p class="mt-2 mb-0">لا يوجد سجلات مدفوعات</p>
                         </td>
@@ -59,4 +70,48 @@
         </div>
     </div>
 </div>
+
+<script>
+function markAsPaidAndActivate(paymentId, studentId) {
+    if (!confirm('هل تريد تسديد الدفعة وتفعيل اشتراك الطالب لمدة 30 يوم؟')) return;
+    
+    // Mark payment as paid
+    fetch(`/payments/api/${paymentId}/mark-paid/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Activate subscription
+            return fetch(`/students/api/${studentId}/subscription/activate/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: 'days=30'
+            });
+        } else {
+            throw new Error(data.message || 'فشل تسديد الدفعة');
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ تم التسديد وتفعيل الاشتراك بنجاح!');
+            location.reload();
+        } else {
+            alert('تم التسديد ولكن فشل تفعيل الاشتراك: ' + data.message);
+            location.reload();
+        }
+    })
+    .catch(error => {
+        alert('خطأ: ' + error.message);
+    });
+}
+</script>
 {% endblock %}

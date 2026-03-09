@@ -251,7 +251,13 @@
                         <i class="bi bi-phone"></i>
                         رقم الطالب
                     </span>
-                    <span class="info-value">{{ student.student_phone|default:"-" }}</span>
+                    <span class="info-value">
+                        {% if student.student_phone %}
+                        <a href="tel:{{ student.student_phone }}" class="text-decoration-none">{{ student.student_phone }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </span>
                 </div>
 
                 <div class="info-row">
@@ -259,7 +265,13 @@
                         <i class="bi bi-telephone"></i>
                         رقم ولي الأمر
                     </span>
-                    <span class="info-value">{{ student.parent_phone }}</span>
+                    <span class="info-value">
+                        {% if student.parent_phone %}
+                        <a href="tel:{{ student.parent_phone }}" class="text-decoration-none">{{ student.parent_phone }}</a>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </span>
                 </div>
 
                 {% if student.parent_name %}
@@ -353,6 +365,29 @@
                     <a href="{% url 'students:id_card' student_id=student.student_id %}" target="_blank" class="btn btn-primary">
                         <i class="bi bi-card-heading me-1"></i>البطاقة
                     </a>
+                    <button onclick="activateSubscription({{ student.student_id }})" class="btn btn-success">
+                        <i class="bi bi-check-circle me-1"></i>تفعيل الاشتراك (30 يوم)
+                    </button>
+                </div>
+                
+                <!-- Subscription Status -->
+                <div class="mt-3" id="subscriptionStatus">
+                    {% if student.subscription_expiry_date %}
+                    <div class="alert alert-{% if student.is_subscription_active %}success{% else %}danger{% endif %} py-2">
+                        <small>
+                            <i class="bi bi-calendar-check me-1"></i>
+                            {% if student.is_subscription_active %}
+                                الاشتراك نشط حتى: {{ student.subscription_expiry_date }}
+                            {% else %}
+                                الاشتراك منتهي منذ: {{ student.subscription_expiry_date }}
+                            {% endif %}
+                        </small>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-warning py-2">
+                        <small><i class="bi bi-exclamation-triangle me-1"></i>لم يتم تفعيل الاشتراك</small>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -600,6 +635,33 @@ function removeFromGroup(enrollmentId) {
             location.reload();
         } else {
             alert(data.message || 'فشلت العملية');
+        }
+    })
+    .catch(error => {
+        alert('فشل الاتصال بالخادم');
+    });
+}
+
+// Activate Subscription
+function activateSubscription(studentId) {
+    const days = prompt('عدد الأيام (افتراضي 30):', '30');
+    if (!days) return;
+
+    fetch(`/students/api/${studentId}/subscription/activate/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `days=${days}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert(data.message || 'فشل التفعيل');
         }
     })
     .catch(error => {

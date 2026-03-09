@@ -1,8 +1,8 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Count, Q, Prefetch
-from django.db import models
+from django.db.models import Count, Q, Prefetch, Exists, OuterRef
+from django.db import models, transaction
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from datetime import timedelta
@@ -21,6 +21,9 @@ def student_list(request):
     List all students with filtering and search functionality.
     View as table with barcode display and action buttons.
     """
+    from apps.payments.models import Payment
+    from django.utils import timezone
+    
     # Get filter parameters
     search = request.GET.get('search', '')
     group_filter = request.GET.get('group', '')
@@ -78,6 +81,17 @@ def student_list(request):
 
     # Order by most recent first
     students = students.order_by('-created_at')
+    
+    # Add payment status for current month
+    current_month = timezone.now().date().replace(day=1)
+    paid_student_ids = set(
+        Payment.objects.filter(
+            month=current_month,
+            status='paid'
+        ).values_list('student_id', flat=True)
+    )
+    for student in students:
+        student.has_paid_current_month = student.student_id in paid_student_ids
 
     # Get all groups for filter dropdown
     all_groups = Group.objects.filter(is_active=True).select_related('teacher')
@@ -134,24 +148,17 @@ def student_detail(request, student_id):
         scan_time__gte=thirty_days_ago
     ).order_by('-scan_time')[:20]
 
-    # Attendance statistics
-    attendance_stats = {
-        'present': Attendance.objects.filter(
-            student=student,
-            status='present',
-            scan_time__gte=thirty_days_ago
-        ).count(),
-        'late': Attendance.objects.filter(
-            student=student,
-            status='late',
-            scan_time__gte=thirty_days_ago
-        ).count(),
-        'absent': Attendance.objects.filter(
-            student=student,
-            status='absent',
-            scan_time__gte=thirty_days_ago
-        ).count(),
-    }
+    # Attendance statistics (single query with conditional aggregation)
+    from django.db.models import Case, When, IntegerField as AggIntField
+    attendance_agg = Attendance.objects.filter(
+        student=student,
+        scan_time__gte=thirty_days_ago
+    ).aggregate(
+        present=Count('pk', filter=Q(status='present')),
+        late=Count('pk', filter=Q(status='late')),
+        absent=Count('pk', filter=Q(status='absent')),
+    )
+    attendance_stats = attendance_agg
 
     # Get available groups (not enrolled in) - filtered by student's gender and education stage
     enrolled_group_ids = active_enrollments.values_list('group_id', flat=True)
@@ -204,20 +211,21 @@ def student_create(request):
         selected_groups = request.POST.getlist('groups')
 
         if form.is_valid():
-            student = form.save()
+            with transaction.atomic():
+                student = form.save()
 
-            # Add to selected groups if any
-            for group_id in selected_groups:
-                try:
-                    group = Group.objects.get(pk=group_id)
-                    StudentGroupEnrollment.objects.create(
-                        student=student,
-                        group=group,
-                        financial_status='normal',
-                        is_active=True
-                    )
-                except Group.DoesNotExist:
-                    pass
+                # Add to selected groups if any
+                for group_id in selected_groups:
+                    try:
+                        group = Group.objects.get(pk=group_id)
+                        StudentGroupEnrollment.objects.create(
+                            student=student,
+                            group=group,
+                            financial_status='normal',
+                            is_active=True
+                        )
+                    except Group.DoesNotExist:
+                        pass
 
             # Generate barcode image
             try:
@@ -273,27 +281,30 @@ def student_update(request, student_id):
         selected_group_ids = set(int(g) for g in selected_groups if g.isdigit())
 
         if form.is_valid():
-            form.save()
+            with transaction.atomic():
+                form.save()
 
-            # Add new enrollments
-            for group_id in selected_group_ids - current_group_ids:
-                try:
-                    group = Group.objects.get(pk=group_id)
-                    StudentGroupEnrollment.objects.create(
+                # Add new enrollments
+                for group_id in selected_group_ids - current_group_ids:
+                    try:
+                        group = Group.objects.get(pk=group_id)
+                        StudentGroupEnrollment.objects.get_or_create(
+                            student=student,
+                            group=group,
+                            defaults={
+                                'financial_status': 'normal',
+                                'is_active': True
+                            }
+                        )
+                    except Group.DoesNotExist:
+                        pass
+
+                # Deactivate removed enrollments
+                for group_id in current_group_ids - selected_group_ids:
+                    StudentGroupEnrollment.objects.filter(
                         student=student,
-                        group=group,
-                        financial_status='normal',
-                        is_active=True
-                    )
-                except Group.DoesNotExist:
-                    pass
-
-            # Deactivate removed enrollments
-            for group_id in current_group_ids - selected_group_ids:
-                StudentGroupEnrollment.objects.filter(
-                    student=student,
-                    group_id=group_id
-                ).update(is_active=False)
+                        group_id=group_id
+                    ).update(is_active=False)
 
             messages.success(request, 'تم تحديث بيانات الطالب بنجاح')
             return redirect('students:detail', student_id=student.student_id)

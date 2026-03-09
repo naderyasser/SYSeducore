@@ -139,6 +139,21 @@ class Student(models.Model):
     )
 
     is_active = models.BooleanField(default=True, verbose_name="نشط")
+    
+    # Subscription fields - حقول الاشتراك
+    last_payment_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="تاريخ آخر دفع",
+        help_text="تاريخ تفعيل آخر اشتراك"
+    )
+    subscription_expiry_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name="تاريخ انتهاء الاشتراك",
+        help_text="تاريخ انتهاء صلاحية الاشتراك (30 يوم من التفعيل)"
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -265,6 +280,65 @@ class Student(models.Model):
                 return group.standard_fee
         except StudentGroupEnrollment.DoesNotExist:
             return 0
+    
+    def is_subscription_active(self):
+        """التحقق من صلاحية الاشتراك"""
+        from django.utils import timezone
+        if not self.subscription_expiry_date:
+            return False
+        return timezone.now().date() <= self.subscription_expiry_date
+    
+    def activate_subscription(self, days=30):
+        """تفعيل اشتراك الطالب لمدة محددة (افتراضي 30 يوم)"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        today = timezone.now().date()
+        self.last_payment_date = today
+        self.subscription_expiry_date = today + timedelta(days=days)
+        self.is_active = True
+        self.save()
+        
+        return self.subscription_expiry_date
+    
+    def get_subscription_status(self):
+        """الحصول على حالة الاشتراك"""
+        from django.utils import timezone
+        
+        if not self.subscription_expiry_date:
+            return {
+                'status': 'inactive',
+                'message': 'لم يتم تفعيل الاشتراك',
+                'days_remaining': 0
+            }
+        
+        today = timezone.now().date()
+        days_remaining = (self.subscription_expiry_date - today).days
+        
+        if days_remaining < 0:
+            return {
+                'status': 'expired',
+                'message': f'منتهي منذ {abs(days_remaining)} يوم',
+                'days_remaining': days_remaining
+            }
+        elif days_remaining == 0:
+            return {
+                'status': 'expires_today',
+                'message': 'ينتهي اليوم',
+                'days_remaining': 0
+            }
+        elif days_remaining <= 3:
+            return {
+                'status': 'expiring_soon',
+                'message': f'ينتهي خلال {days_remaining} يوم',
+                'days_remaining': days_remaining
+            }
+        else:
+            return {
+                'status': 'active',
+                'message': f'نشط - متبقي {days_remaining} يوم',
+                'days_remaining': days_remaining
+            }
 
     def get_active_groups_count(self):
         """Get count of active group enrollments"""
@@ -278,8 +352,8 @@ class Student(models.Model):
         from apps.payments.models import Payment
         total = Payment.objects.filter(
             student=self,
-            status='completed'
-        ).aggregate(total=models.Sum('amount'))['total']
+            status='paid'
+        ).aggregate(total=models.Sum('amount_paid'))['total']
         return total or 0
 
 
@@ -296,13 +370,13 @@ class StudentGroupEnrollment(models.Model):
 
     student = models.ForeignKey(
         Student,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         verbose_name="الطالب",
         related_name='group_enrollments'
     )
     group = models.ForeignKey(
         'teachers.Group',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         verbose_name="المجموعة"
     )
 

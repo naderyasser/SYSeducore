@@ -17,7 +17,8 @@ def send_attendance_notifications_task():
     sessions = Session.objects.filter(
         session_date=now.date(),
         notification_sent=False,
-        is_cancelled=False
+        is_cancelled=False,
+        group__is_active=True  # Filter inactive groups
     ).select_related('group')
     
     for session in sessions:

@@ -30,12 +30,12 @@ def supervisor_required(view_func):
 
 def teacher_required(view_func):
     """
-    Decorator for views that checks if user is authenticated.
+    Decorator for views that checks if user is a teacher, supervisor, or admin.
     """
     def check_teacher(user):
         if not user.is_authenticated:
             return False
-        return True
+        return user.role in ['teacher', 'admin', 'supervisor']
     
     decorated_view = user_passes_test(check_teacher)(view_func)
     return decorated_view

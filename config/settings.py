@@ -23,7 +23,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
@@ -162,6 +162,17 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
+# Messages framework - map Django tags to Bootstrap classes
+from django.contrib.messages import constants as message_constants
+MESSAGE_TAGS = {
+    message_constants.DEBUG: 'secondary',
+    message_constants.INFO: 'info',
+    message_constants.SUCCESS: 'success',
+    message_constants.WARNING: 'warning',
+    message_constants.ERROR: 'danger',
+}
+
+
 # Django REST Framework Settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -182,6 +193,7 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "https://sys.educore.software",
 ]
 CORS_ALLOW_CREDENTIALS = True
 
@@ -230,7 +242,7 @@ if crontab is not None:
     CELERY_BEAT_SCHEDULE = {
         'send-attendance-notifications': {
             'task': 'apps.notifications.tasks.send_attendance_notifications_task',
-            'schedule': crontab(minute='*/1'),  # Every minute
+            'schedule': crontab(minute='*/5'),  # Every 5 minutes
         },
         'send-monthly-reminders': {
             'task': 'apps.notifications.tasks.send_monthly_reminders_task',
@@ -242,7 +254,7 @@ else:
 
 
 # WhatsApp Configuration (WASender API)
-WASENDER_API_TOKEN = config('WASENDER_API_TOKEN', default='dc40a76959c63ba6acb5d8f2e3424d424e31b476150479ae2fdc5a72398671cc')
+WASENDER_API_TOKEN = config('WASENDER_API_TOKEN', default='')
 WASENDER_API_URL = config('WASENDER_API_URL', default='https://wasenderapi.com/api/send-message')
 
 # Legacy UltraMsg Configuration (deprecated)

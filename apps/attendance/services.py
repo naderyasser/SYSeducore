@@ -90,11 +90,12 @@ class AttendanceService:
         """
         معالجة إدخال كود الطالب - النظام المبسط
 
-        الخوارزمية (4 خطوات):
+        الخوارزمية (5 خطوات):
         1. جلب الطالب بـ student_code
-        2. مطابقة الجدول (الوقت واليوم الحاليين)
-        3. قاعدة 10 دقائق صارمة (>10 = BLOCK)
-        4. فحص مالي
+        2. التحقق من صلاحية الاشتراك (30 يوم)
+        3. مطابقة الجدول (الوقت واليوم الحاليين)
+        4. قاعدة 10 دقائق صارمة (>10 = BLOCK)
+        5. فحص مالي
         + الكشف الفوري للحالة المالية
         """
         # ========================================
@@ -110,6 +111,20 @@ class AttendanceService:
                 'success': False,
                 'message': 'كود غير صالح',
                 'sound': 'error'
+            }
+
+        # ========================================
+        # الخطوة 1.5: التحقق من صلاحية الاشتراك
+        # ========================================
+        if not student.is_subscription_active():
+            subscription_status = student.get_subscription_status()
+            return {
+                'success': False,
+                'message': f'عفواً، اشتراك الطالب منتهي. {subscription_status["message"]}',
+                'sound': 'error',
+                'error_type': 'subscription_expired',
+                'student_name': student.full_name,
+                'subscription_status': subscription_status
             }
 
         # ========================================
@@ -135,16 +150,32 @@ class AttendanceService:
             if group.schedule_day != current_day_name:
                 continue
 
-            # هذه هي المجموعة المطابقة لليوم
-            matching_group = group
-            enrollment = enr
-            break
+            # مطابقة الوقت: التحقق من أن الوقت الحالي ضمن نطاق الحصة
+            # تحويل إلى التوقيت المحلي للمقارنة
+            from django.conf import settings
+            import pytz
+            
+            local_tz = pytz.timezone(settings.TIME_ZONE)
+            current_time_local = current_time.astimezone(local_tz)
+            
+            session_start = local_tz.localize(
+                datetime.combine(current_time_local.date(), group.schedule_time)
+            )
+            session_end = session_start + timedelta(minutes=group.duration_minutes)
+            early_window = session_start - timedelta(minutes=AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES)
+
+            # السماح بالمسح من 30 دقيقة قبل الحصة حتى نهاية الحصة
+            if early_window <= current_time_local <= session_end:
+                matching_group = group
+                enrollment = enr
+                break
 
         if not matching_group:
             return {
                 'success': False,
-                'message': 'لا توجد حصة مجدولة لك اليوم',
-                'sound': 'error'
+                'message': 'ممنوع الدخول: مجموعة خاطئة أو لا توجد حصة الآن',
+                'sound': 'error',
+                'error_type': 'wrong_schedule'
             }
 
         # ========================================
@@ -166,6 +197,7 @@ class AttendanceService:
                 'success': False,
                 'message': time_check['reason'],
                 'sound': 'error',
+                'error_type': time_check.get('error_type', 'time_error'),
                 'instant_status': instant_status,
                 'student_name': student.full_name,
                 'group_name': matching_group.group_name,
@@ -184,10 +216,11 @@ class AttendanceService:
                 'success': False,
                 'message': financial_check['reason'],
                 'sound': 'error',
+                'error_type': financial_check.get('error_type', 'financial_error'),
                 'instant_status': instant_status,
                 'student_name': student.full_name,
                 'group_name': matching_group.group_name,
-                'can_override': True,  # يمكن للإدارة التجاوز (استثناء إداري)
+                'can_override': True,
             }
 
         # ========================================
@@ -230,7 +263,7 @@ class AttendanceService:
                 'student_id': student.student_id,
                 'full_name': student.full_name,
                 'student_code': student.student_code,
-                'phone': student.phone,
+                'phone': student.student_phone,
             },
             'group': {
                 'group_id': matching_group.group_id,
@@ -277,36 +310,45 @@ class AttendanceService:
         - لا يوجد "تأخير"، فقط قبول أو رفض
         - يراعي مدة الحصة (بعد انتهاء الحصة = رفض)
         """
-        # تحويل schedule_time إلى datetime
-        today = timezone.now().date()
-        session_start = timezone.make_aware(
-            datetime.combine(today, schedule_time)
+        # تحويل scan_time إلى التوقيت المحلي للمقارنة مع schedule_time
+        from django.conf import settings
+        import pytz
+        
+        local_tz = pytz.timezone(settings.TIME_ZONE)
+        scan_time_local = scan_time.astimezone(local_tz)
+        
+        # إنشاء session_start في نفس التوقيت المحلي
+        session_start = local_tz.localize(
+            datetime.combine(scan_time_local.date(), schedule_time)
         )
         session_end = session_start + timedelta(minutes=duration_minutes)
 
         # حساب الفرق بالدقائق
-        diff = scan_time - session_start
+        diff = scan_time_local - session_start
         diff_minutes = diff.total_seconds() / 60
 
         # رفض إذا وصل بعد انتهاء الحصة
-        if scan_time > session_end:
+        if scan_time_local > session_end:
             return {
                 'allowed': False,
-                'reason': f'الحصة انتهت. كانت من {schedule_time.strftime("%I:%M %p")} إلى {session_end.strftime("%I:%M %p")}'
+                'reason': f'الحصة انتهت. كانت من {schedule_time.strftime("%I:%M %p")} إلى {session_end.strftime("%I:%M %p")}',
+                'error_type': 'session_ended'
             }
 
         # السماح بالوصول المبكر (30 دقيقة قبل الموعد)
         if diff_minutes < -AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES:
             return {
                 'allowed': False,
-                'reason': f'وصلت مبكراً جداً. الموعد: {schedule_time.strftime("%I:%M %p")}'
+                'reason': f'وصلت مبكراً جداً. الموعد: {schedule_time.strftime("%I:%M %p")}',
+                'error_type': 'too_early'
             }
 
         # القاعدة الصارمة: أكثر من 10 دقائق = رفض
         if diff_minutes > AttendanceService.STRICT_GRACE_PERIOD_MINUTES:
             return {
                 'allowed': False,
-                'reason': f'ممنوع الدخول - تأخرت {int(diff_minutes)} دقيقة (الحد المسموح: 10 دقائق)'
+                'reason': f'ممنوع الدخول - تأخرت {int(diff_minutes)} دقيقة (الحد المسموح: 10 دقائق)',
+                'error_type': 'too_late'
             }
 
         # قبول: في الموعد أو في حدود الـ 10 دقائق
@@ -355,7 +397,8 @@ class AttendanceService:
         except StudentGroupEnrollment.DoesNotExist:
             return {
                 'allowed': False,
-                'reason': 'الطالب غير مسجل في هذه المجموعة'
+                'reason': 'ممنوع الدخول: غير مسجل في هذه المجموعة',
+                'error_type': 'not_enrolled'
             }
 
         # الطلاب المعفيين دائماً مسموح لهم
@@ -392,23 +435,27 @@ class AttendanceService:
                     if is_first_month:
                         return {
                             'allowed': False,
-                            'reason': 'الشهر الأول: يجب الدفع أولاً قبل الدخول'
+                            'reason': 'ممنوع الدخول: الدفع مطلوب (الشهر الأول)',
+                            'error_type': 'payment_required'
                         }
                     else:
                         return {
                             'allowed': False,
-                            'reason': 'ممنوع الدخول - يرجى مراجعة الحسابات'
+                            'reason': 'ممنوع الدخول: الدفع مطلوب',
+                            'error_type': 'payment_required'
                         }
             except Payment.DoesNotExist:
                 if is_first_month:
                     return {
                         'allowed': False,
-                        'reason': 'الشهر الأول: يجب الدفع أولاً قبل الدخول'
+                        'reason': 'ممنوع الدخول: الدفع مطلوب (الشهر الأول)',
+                        'error_type': 'payment_required'
                     }
                 else:
                     return {
                         'allowed': False,
-                        'reason': 'ممنوع الدخول - يرجى مراجعة الحسابات'
+                        'reason': 'ممنوع الدخول: الدفع مطلوب',
+                        'error_type': 'payment_required'
                     }
 
         return {'allowed': True}

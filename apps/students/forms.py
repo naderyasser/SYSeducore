@@ -83,6 +83,13 @@ class StudentForm(forms.ModelForm):
         # Education fields
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
+        
+        # Clean phone numbers on initial display (remove +20 prefix)
+        if self.instance and self.instance.pk:
+            if self.instance.student_phone:
+                self.initial['student_phone'] = self._clean_phone(self.instance.student_phone)
+            if self.instance.parent_phone:
+                self.initial['parent_phone'] = self._clean_phone(self.instance.parent_phone)
 
     def clean_student_code(self):
         code = self.cleaned_data.get('student_code')

@@ -291,7 +291,7 @@
                         </div>
                         <div class="booking-detail">
                             <i class="bi bi-cash"></i>
-                            {{ booking.fee }} ر.س
+                            {{ booking.fee }} ج.م
                         </div>
                     </div>
 
@@ -301,7 +301,7 @@
                     </div>
 
                     {% if booking.capacity > 0 %}
-                        {% widthratio booking.enrolled 1 booking.capacity as enrollment_percent %}
+                        {% widthratio booking.enrolled booking.capacity 100 as enrollment_percent %}
                         {% if enrollment_percent >= 100 %}
                             <div class="enrollment-badge full">
                                 <i class="bi bi-exclamation-circle"></i>

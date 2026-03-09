@@ -138,6 +138,7 @@ class NotificationTimingTest(TestCase):
             self.assertTrue(self.session.notification_sent)
 
 
+
 class WhatsAppServiceTest(TestCase):
     """Test WhatsApp service methods"""
 

@@ -253,6 +253,13 @@
         transition: all 0.3s;
         border: 2px dashed #e5e7eb;
         background: #fafafa;
+        user-select: none;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        position: relative;
+        z-index: 10;
+        cursor: pointer;
     }
 
     .quick-action:hover {
@@ -260,6 +267,8 @@
         background: #eff6ff;
         text-decoration: none;
         color: inherit;
+        transform: translateY(-2px);
+        z-index: 11;
     }
 
     .quick-action-icon {
@@ -273,17 +282,20 @@
         margin-bottom: 12px;
         background: #fff;
         box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        pointer-events: none;
     }
 
     .quick-action-title {
         font-weight: 600;
         color: #1f2937;
         margin-bottom: 2px;
+        pointer-events: none;
     }
 
     .quick-action-desc {
         font-size: 0.8rem;
         color: #6b7280;
+        pointer-events: none;
     }
 
     /* List Items */

@@ -894,11 +894,11 @@
                 <p>اختر طريقة الإدخال: أدخل كود الطالب يدوياً أو امسح الباركود بالكاميرا</p>
 
                 <div class="input-modes">
-                    <button class="input-mode-btn active" id="manualModeBtn" onclick="switchMode('manual')">
+                    <button class="input-mode-btn active" id="manualModeBtn">
                         <i class="bi bi-keyboard"></i>
                         إدخال يدوي
                     </button>
-                    <button class="input-mode-btn" id="cameraModeBtn" onclick="switchMode('camera')">
+                    <button class="input-mode-btn" id="cameraModeBtn">
                         <i class="bi bi-camera"></i>
                         الكاميرا
                     </button>
@@ -925,7 +925,7 @@
                 <!-- Camera Scanner -->
                 <div class="camera-scanner" id="cameraScanner">
                     <div class="camera-container">
-                        <video id="cameraPreview" autoplay playsinline></video>
+                        <video id="cameraPreview" autoplay playsinline muted></video>
                         <div class="camera-overlay">
                             <div class="scan-frame">
                                 <div class="scan-line"></div>
@@ -933,11 +933,11 @@
                         </div>
                     </div>
                     <div class="camera-controls">
-                        <button class="camera-btn" id="startCameraBtn" onclick="startCamera()">
+                        <button class="camera-btn" id="startCameraBtn">
                             <i class="bi bi-play-fill"></i>
                             تشغيل الكاميرا
                         </button>
-                        <button class="camera-btn danger" id="stopCameraBtn" onclick="stopCamera()" style="display: none;">
+                        <button class="camera-btn danger" id="stopCameraBtn" style="display: none;">
                             <i class="bi bi-stop-fill"></i>
                             إيقاف الكاميرا
                         </button>
@@ -1088,6 +1088,8 @@
 let scansHistory = [];
 let cameraStream = null;
 let isCameraRunning = false;
+let lastScannedCode = null;
+let lastScanTime = 0;
 let currentFilter = 'all';
 let todayStats = { present: 0, total: 0 };
 
@@ -1104,6 +1106,16 @@ const scansList = document.getElementById('scansList');
 // Initialize
 document.addEventListener('DOMContentLoaded', function() {
     initializeApp();
+    
+    // Log diagnostic info
+    console.log('=== Camera Diagnostics ===');
+    console.log('Protocol:', location.protocol);
+    console.log('Hostname:', location.hostname);
+    console.log('HTTPS:', location.protocol === 'https:');
+    console.log('MediaDevices API:', !!navigator.mediaDevices);
+    console.log('getUserMedia:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
+    console.log('BarcodeDetector API:', 'BarcodeDetector' in window);
+    console.log('========================');
 });
 
 async function initializeApp() {
@@ -1113,6 +1125,28 @@ async function initializeApp() {
     // Setup event listeners
     input.addEventListener('keypress', handleKeyPress);
     input.addEventListener('input', handleInput);
+    
+    // Setup mode switch buttons
+    const manualModeBtn = document.getElementById('manualModeBtn');
+    const cameraModeBtn = document.getElementById('cameraModeBtn');
+    const startCameraBtn = document.getElementById('startCameraBtn');
+    const stopCameraBtn = document.getElementById('stopCameraBtn');
+    
+    if (manualModeBtn) {
+        manualModeBtn.addEventListener('click', () => switchMode('manual'));
+    }
+    
+    if (cameraModeBtn) {
+        cameraModeBtn.addEventListener('click', () => switchMode('camera'));
+    }
+    
+    if (startCameraBtn) {
+        startCameraBtn.addEventListener('click', startCamera);
+    }
+    
+    if (stopCameraBtn) {
+        stopCameraBtn.addEventListener('click', stopCamera);
+    }
 
     // Load initial data
     await loadTodayStats();
@@ -1429,21 +1463,64 @@ function switchMode(mode) {
 // Camera Functions
 async function startCamera() {
     try {
-        // Check if Barcode Detection API is available
-        if ('BarcodeDetector' in window) {
-            startCameraWithAPI();
-        } else {
-            // Fallback to QuaggaJS
-            startCameraWithQuagga();
+        // Check if running on HTTPS or localhost
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            alert('الكاميرا تتطلب اتصال آمن (HTTPS). يرجى استخدام الإدخال اليدوي.');
+            return;
         }
+
+        // Check if mediaDevices is supported
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('المتصفح لا يدعم الكاميرا. يرجى استخدام الإدخال اليدوي.');
+            return;
+        }
+
+        // Request camera permission
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+        });
+
+        cameraStream = stream;
+        const video = document.getElementById('cameraPreview');
+        video.srcObject = stream;
+
+        // Wait for video to be ready
+        await new Promise((resolve) => {
+            video.onloadedmetadata = () => {
+                video.play();
+                resolve();
+            };
+        });
 
         document.getElementById('startCameraBtn').style.display = 'none';
         document.getElementById('stopCameraBtn').style.display = 'flex';
         isCameraRunning = true;
 
+        // Check if Barcode Detection API is available
+        if ('BarcodeDetector' in window) {
+            detectBarcodeAPI();
+        } else {
+            // Fallback: show message
+            alert('المتصفح لا يدعم قراءة الباركود تلقائياً. يرجى استخدام الإدخال اليدوي.');
+            stopCamera();
+        }
+
     } catch (error) {
         console.error('Error starting camera:', error);
-        alert('تعذر تشغيل الكاميرا. يرجى التأكد من إعدادات الكاميرا.');
+        
+        let errorMessage = 'تعذر تشغيل الكاميرا. ';
+        
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+            errorMessage += 'يرجى السماح بالوصول للكاميرا من إعدادات المتصفح.';
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+            errorMessage += 'لم يتم العثور على كاميرا متصلة.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+            errorMessage += 'الكاميرا قيد الاستخدام من تطبيق آخر.';
+        } else {
+            errorMessage += 'يرجى استخدام الإدخال اليدوي.';
+        }
+        
+        alert(errorMessage);
     }
 }
 
@@ -1468,14 +1545,29 @@ async function detectBarcodeAPI() {
     if (!isCameraRunning || !cameraStream) return;
 
     const video = document.getElementById('cameraPreview');
-    const barcodeDetector = new BarcodeDetector({ formats: ['qr_code', 'ean_13', 'ean_8', 'code_128'] });
+    
+    // Check if video is ready
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        requestAnimationFrame(detectBarcodeAPI);
+        return;
+    }
 
     try {
+        const barcodeDetector = new BarcodeDetector({ 
+            formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code'] 
+        });
+        
         const barcodes = await barcodeDetector.detect(video);
 
         if (barcodes.length > 0) {
             const code = barcodes[0].rawValue;
-            await processStudentCode(code);
+            
+            // Prevent duplicate scans
+            if (code !== lastScannedCode || Date.now() - lastScanTime > 3000) {
+                lastScannedCode = code;
+                lastScanTime = Date.now();
+                await processStudentCode(code);
+            }
         }
     } catch (error) {
         console.error('Barcode detection error:', error);
@@ -1488,48 +1580,26 @@ async function detectBarcodeAPI() {
 }
 
 function startCameraWithQuagga() {
-    Quagga.init({
-        inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target: document.querySelector('#cameraPreview'),
-            constraints: {
-                facingMode: "environment"
-            }
-        },
-        decoder: {
-            readers: ["ean_reader", "ean_8_reader", "code_128_reader", "code_39_reader"]
-        }
-    }, function(err) {
-        if (err) {
-            console.error('Quagga initialization error:', err);
-            return;
-        }
-        Quagga.start();
-    });
-
-    Quagga.onDetected(async function(result) {
-        const code = result.codeResult.code;
-        await processStudentCode(code);
-    });
+    // QuaggaJS fallback removed - not reliable
+    // Show message to use manual input instead
+    alert('المتصفح لا يدعم قراءة الباركود. يرجى استخدام الإدخال اليدوي.');
+    stopCamera();
 }
 
 function stopCamera() {
     isCameraRunning = false;
+    lastScannedCode = null;
+    lastScanTime = 0;
 
     if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
         cameraStream = null;
     }
 
-    if (typeof Quagga !== 'undefined') {
-        try {
-            Quagga.stop();
-        } catch (e) {}
-    }
-
     const video = document.getElementById('cameraPreview');
-    video.srcObject = null;
+    if (video) {
+        video.srcObject = null;
+    }
 
     document.getElementById('startCameraBtn').style.display = 'flex';
     document.getElementById('stopCameraBtn').style.display = 'none';

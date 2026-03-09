@@ -70,7 +70,9 @@
                         </td>
                         <td>
                             {% if contact.parent_phone %}
-                            <code>{{ contact.parent_phone }}</code>
+                            <a href="tel:{{ contact.parent_phone }}" class="text-decoration-none">
+                                <code>{{ contact.parent_phone }}</code>
+                            </a>
                             {% else %}
                             <span class="text-muted">-</span>
                             {% endif %}

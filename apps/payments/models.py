@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator
 
 
 class Payment(models.Model):
@@ -15,31 +16,33 @@ class Payment(models.Model):
     payment_id = models.AutoField(primary_key=True)
     student = models.ForeignKey(
         'students.Student',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='payments'
     )
     group = models.ForeignKey(
         'teachers.Group',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='payments',
         verbose_name="المجموعة"
     )
 
-    month = models.DateField(verbose_name="الشهر")
+    month = models.DateField(verbose_name="الشهر", db_index=True)
     amount_due = models.DecimalField(
         max_digits=10,
         decimal_places=2,
+        validators=[MinValueValidator(0)],
         verbose_name="المبلغ المطلوب"
     )
     amount_paid = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         default=0,
+        validators=[MinValueValidator(0)],
         verbose_name="المبلغ المدفوع"
     )
 
     payment_date = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الدفع")
-    sessions_attended = models.IntegerField(default=0, verbose_name="عدد الحصص")
+    sessions_attended = models.PositiveIntegerField(default=0, verbose_name="عدد الحصص")
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,

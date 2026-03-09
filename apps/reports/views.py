@@ -6,7 +6,9 @@ from django.db.models.functions import TruncDate, TruncMonth
 from datetime import timedelta, datetime
 from collections import defaultdict
 import json
+import functools
 from django.contrib import messages
+from decouple import config
 
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room
@@ -15,7 +17,7 @@ from apps.payments.models import Payment
 
 
 # Password for accessing sensitive reports
-REPORTS_PASSWORD = "0000"
+REPORTS_PASSWORD = config('REPORTS_PASSWORD', default='0000')
 
 
 def report_password_required(view_func):
@@ -23,6 +25,7 @@ def report_password_required(view_func):
     Decorator to require password for accessing sensitive reports.
     Checks session for password verification.
     """
+    @functools.wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
         if not request.session.get('report_authenticated'):
             # Save the original URL to redirect back after authentication
@@ -32,6 +35,7 @@ def report_password_required(view_func):
     return _wrapped_view
 
 
+@login_required
 def password_prompt(request):
     """
     Display password entry form for accessing protected reports.
@@ -39,6 +43,7 @@ def password_prompt(request):
     return render(request, 'reports/password_prompt.html')
 
 
+@login_required
 def verify_password(request):
     """
     Verify the password and grant access if correct.
@@ -62,6 +67,7 @@ def verify_password(request):
     return redirect('reports:password_prompt')
 
 
+@login_required
 def clear_report_session(request):
     """
     Clear the report authentication session.
@@ -105,7 +111,7 @@ def dashboard(request):
 
     # ====== TODAY'S OVERVIEW ======
     # Today's sessions
-    today_sessions = Session.objects.filter(session_date=today)
+    today_sessions = Session.objects.filter(session_date=today, group__is_active=True)
     today_active_sessions = today_sessions.filter(is_cancelled=False).count()
     today_cancelled_sessions = today_sessions.filter(is_cancelled=True).count()
 
@@ -142,16 +148,19 @@ def dashboard(request):
     todays_groups = Group.objects.filter(
         is_active=True,
         schedule_day=current_day_name
-    ).select_related('teacher', 'room').order_by('schedule_time')
+    ).select_related('teacher', 'room').annotate(
+        enrolled_count=Count(
+            'studentgroupenrollment',
+            filter=Q(studentgroupenrollment__is_active=True)
+        )
+    ).order_by('schedule_time')
 
     today_schedule = []
     now = timezone.now()
     current_time = now.time()
 
     for grp in todays_groups:
-        enrolled_count = StudentGroupEnrollment.objects.filter(
-            group=grp, is_active=True
-        ).count()
+        enrolled_count = grp.enrolled_count
         capacity = grp.room.capacity if grp.room else 0
         end_time = grp.get_end_time()
 
@@ -209,17 +218,16 @@ def dashboard(request):
     groups_low_enrollment = []
     groups_high_enrollment = []
 
-    for group in Group.objects.filter(is_active=True).select_related('teacher', 'room'):
-        enrolled = StudentGroupEnrollment.objects.filter(
-            group=group, is_active=True
-        ).count()
+    for group in Group.objects.filter(is_active=True).select_related('teacher', 'room').annotate(
+        enrolled=Count('studentgroupenrollment', filter=Q(studentgroupenrollment__is_active=True))
+    ):
         capacity = group.room.capacity if group.room else 0
-        utilization = (enrolled / capacity * 100) if capacity > 0 else 0
+        utilization = (group.enrolled / capacity * 100) if capacity > 0 else 0
 
         group_info = {
             'name': group.group_name,
             'teacher': group.teacher.full_name if group.teacher else '-',
-            'enrolled': enrolled,
+            'enrolled': group.enrolled,
             'capacity': capacity,
             'utilization': utilization,
         }
@@ -440,6 +448,7 @@ def financial_report(request):
             'name': teacher.full_name,
             'groups_count': groups.count(),
             'total_revenue': total_revenue,
+            'is_active': teacher.is_active,
         })
     
     context = {

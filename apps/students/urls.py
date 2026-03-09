@@ -29,4 +29,8 @@ urlpatterns = [
     path('api/<int:student_id>/available-groups/', api_views.available_groups, name='api_available_groups'),
     path('api/add-to-group/', api_views.add_to_group, name='api_add_to_group'),
     path('api/remove-from-group/', api_views.remove_from_group, name='api_remove_from_group'),
+    
+    # Subscription APIs
+    path('api/<int:student_id>/subscription/activate/', api_views.activate_subscription, name='api_activate_subscription'),
+    path('api/<int:student_id>/subscription/status/', api_views.subscription_status, name='api_subscription_status'),
 ]

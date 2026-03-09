@@ -3,7 +3,6 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
 from .models import Session, Attendance
 from .services import AttendanceService
 from apps.students.models import Student
@@ -144,7 +143,8 @@ def today_stats(request):
         # الحصص اليوم
         today_sessions = Session.objects.filter(
             session_date=today,
-            is_cancelled=False
+            is_cancelled=False,
+            group__is_active=True  # Filter inactive groups
         ).count()
 
         # إجمالي الطلاب النشطين

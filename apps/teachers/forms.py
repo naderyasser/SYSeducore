@@ -67,7 +67,7 @@ class GroupForm(forms.ModelForm):
     - متعدد الأيام (يتم التعامل مع schedule_day بالكاستوم شيكبكس)
     """
     schedule_day = forms.ChoiceField(
-        choices=[],
+        choices=Group.DAYS_CHOICES,
         required=False,
         widget=forms.HiddenInput()
     )
