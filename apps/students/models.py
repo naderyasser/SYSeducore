@@ -4,6 +4,7 @@ from django.conf import settings
 import os
 import io
 import base64
+import qrcode
 from barcode import Code128
 from barcode.writer import ImageWriter
 from PIL import Image
@@ -205,14 +206,22 @@ class Student(models.Model):
         last_code = last_numeric.get('max_code')
         return str(last_code + 1) if last_code else '1001'
 
+    def generate_qr_image(self):
+        """Generate QR code image for student"""
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_H,
+            box_size=10,
+            border=3,
+        )
+        qr.add_data(self.student_code)
+        qr.make(fit=True)
+        return qr.make_image(fill_color="black", back_color="white").convert('RGB')
+
     def generate_barcode_image(self):
-        """Generate Code128 barcode image for student"""
+        """Generate Code128 barcode image for student (legacy)"""
         buffer = io.BytesIO()
-        
-        # Create Code128 barcode
         code128 = Code128(self.student_code, writer=ImageWriter())
-        
-        # Save to buffer
         code128.write(buffer, options={
             'module_height': 15,
             'module_width': 0.6,
@@ -222,46 +231,35 @@ class Student(models.Model):
             'background': 'white',
             'foreground': 'black',
         })
-        
         buffer.seek(0)
         return Image.open(buffer)
 
     def get_barcode_base64(self):
-        """Get barcode as base64 string"""
+        """Get QR code as base64 string"""
         try:
+            img = self.generate_qr_image()
             buffer = io.BytesIO()
-            img = self.generate_barcode_image()
-            
-            # Convert to RGB if necessary
-            if img.mode != 'RGB':
-                img = img.convert('RGB')
-            
             img.save(buffer, format='PNG')
             return base64.b64encode(buffer.getvalue()).decode()
-        except Exception as e:
-            # Fallback to QR if barcode fails
-            import qrcode
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_H,
-                box_size=10,
-                border=4,
-            )
-            qr.add_data(self.student_code)
-            qr.make(fit=True)
-            qr_img = qr.make_image(fill_color="black", back_color="white")
-            
-            buffer = io.BytesIO()
-            qr_img.save(buffer, format='PNG')
-            return base64.b64encode(buffer.getvalue()).decode()
+        except Exception:
+            # Fallback to Code128 barcode
+            try:
+                img = self.generate_barcode_image()
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                buffer = io.BytesIO()
+                img.save(buffer, format='PNG')
+                return base64.b64encode(buffer.getvalue()).decode()
+            except Exception:
+                return ''
 
     def save_barcode_image(self):
-        """Save barcode image to media directory"""
+        """Save QR code image to media directory"""
         barcode_dir = os.path.join(settings.MEDIA_ROOT, 'barcodes')
         os.makedirs(barcode_dir, exist_ok=True)
 
         filepath = os.path.join(barcode_dir, f'{self.student_code}.png')
-        img = self.generate_barcode_image()
+        img = self.generate_qr_image()
         img.save(filepath)
         return filepath
 

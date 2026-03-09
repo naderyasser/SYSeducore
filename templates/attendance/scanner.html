@@ -891,7 +891,7 @@
             <!-- Scan Input Section -->
             <div class="scan-input-section">
                 <h2><i class="bi bi-qr-code-scan"></i> تسجيل حضور الطلاب</h2>
-                <p>اختر طريقة الإدخال: أدخل كود الطالب يدوياً أو امسح الباركود بالكاميرا</p>
+                <p>اختر طريقة الإدخال: أدخل كود الطالب يدوياً أو امسح كود QR بالكاميرا</p>
 
                 <div class="input-modes">
                     <button class="input-mode-btn active" id="manualModeBtn">
@@ -944,7 +944,7 @@
                     </div>
                     <p style="margin-top: 15px; font-size: 0.85rem; opacity: 0.9;">
                         <i class="bi bi-info-circle"></i>
-                        وجه الكاميرا نحو باركود الطالب
+                        وجه الكاميرا نحو كود QR الطالب
                     </p>
                 </div>
             </div>
@@ -1081,8 +1081,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- QuaggaJS for Barcode Scanning -->
-<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+<!-- html5-qrcode for reliable QR/Barcode scanning -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
 // Global State
 let scansHistory = [];
@@ -1461,10 +1461,12 @@ function switchMode(mode) {
 }
 
 // Camera Functions
+let html5QrScanner = null;
+
 async function startCamera() {
     try {
         // Check if running on HTTPS or localhost
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
             alert('الكاميرا تتطلب اتصال آمن (HTTPS). يرجى استخدام الإدخال اليدوي.');
             return;
         }
@@ -1475,122 +1477,89 @@ async function startCamera() {
             return;
         }
 
-        // Request camera permission
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: 'environment' } 
-        });
-
-        cameraStream = stream;
         const video = document.getElementById('cameraPreview');
-        video.srcObject = stream;
+        // Hide the native video element, html5-qrcode creates its own
+        video.style.display = 'none';
 
-        // Wait for video to be ready
-        await new Promise((resolve) => {
-            video.onloadedmetadata = () => {
-                video.play();
-                resolve();
-            };
-        });
+        // Create scanner container if not exists
+        let scannerContainer = document.getElementById('html5QrReader');
+        if (!scannerContainer) {
+            scannerContainer = document.createElement('div');
+            scannerContainer.id = 'html5QrReader';
+            scannerContainer.style.width = '100%';
+            scannerContainer.style.borderRadius = '12px';
+            scannerContainer.style.overflow = 'hidden';
+            video.parentNode.insertBefore(scannerContainer, video);
+        }
+
+        html5QrScanner = new Html5Qrcode('html5QrReader');
+
+        const config = {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            aspectRatio: 1.0,
+            formatsToSupport: [
+                Html5QrcodeSupportedFormats.QR_CODE,
+                Html5QrcodeSupportedFormats.CODE_128,
+                Html5QrcodeSupportedFormats.CODE_39,
+                Html5QrcodeSupportedFormats.EAN_13,
+                Html5QrcodeSupportedFormats.EAN_8,
+            ]
+        };
+
+        await html5QrScanner.start(
+            { facingMode: 'environment' },
+            config,
+            async (decodedText) => {
+                // Prevent duplicate scans (3 second cooldown)
+                if (decodedText === lastScannedCode && Date.now() - lastScanTime < 3000) {
+                    return;
+                }
+                lastScannedCode = decodedText;
+                lastScanTime = Date.now();
+                await processStudentCode(decodedText);
+            },
+            () => {} // ignore scan failures (normal when no code in view)
+        );
 
         document.getElementById('startCameraBtn').style.display = 'none';
         document.getElementById('stopCameraBtn').style.display = 'flex';
         isCameraRunning = true;
-
-        // Check if Barcode Detection API is available
-        if ('BarcodeDetector' in window) {
-            detectBarcodeAPI();
-        } else {
-            // Fallback: show message
-            alert('المتصفح لا يدعم قراءة الباركود تلقائياً. يرجى استخدام الإدخال اليدوي.');
-            stopCamera();
-        }
 
     } catch (error) {
         console.error('Error starting camera:', error);
         
         let errorMessage = 'تعذر تشغيل الكاميرا. ';
         
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        if (error.toString().includes('NotAllowed') || error.toString().includes('Permission')) {
             errorMessage += 'يرجى السماح بالوصول للكاميرا من إعدادات المتصفح.';
-        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        } else if (error.toString().includes('NotFound') || error.toString().includes('DevicesNotFound')) {
             errorMessage += 'لم يتم العثور على كاميرا متصلة.';
-        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        } else if (error.toString().includes('NotReadable')) {
             errorMessage += 'الكاميرا قيد الاستخدام من تطبيق آخر.';
         } else {
-            errorMessage += 'يرجى استخدام الإدخال اليدوي.';
+            errorMessage += error.toString();
         }
         
         alert(errorMessage);
     }
 }
 
-function startCameraWithAPI() {
-    const video = document.getElementById('cameraPreview');
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(stream => {
-            cameraStream = stream;
-            video.srcObject = stream;
-
-            // Start barcode detection
-            detectBarcodeAPI();
-        })
-        .catch(error => {
-            console.error('Error accessing camera:', error);
-            throw error;
-        });
-}
-
-async function detectBarcodeAPI() {
-    if (!isCameraRunning || !cameraStream) return;
-
-    const video = document.getElementById('cameraPreview');
-    
-    // Check if video is ready
-    if (video.readyState !== video.HAVE_ENOUGH_DATA) {
-        requestAnimationFrame(detectBarcodeAPI);
-        return;
-    }
-
-    try {
-        const barcodeDetector = new BarcodeDetector({ 
-            formats: ['code_128', 'code_39', 'ean_13', 'ean_8', 'qr_code'] 
-        });
-        
-        const barcodes = await barcodeDetector.detect(video);
-
-        if (barcodes.length > 0) {
-            const code = barcodes[0].rawValue;
-            
-            // Prevent duplicate scans
-            if (code !== lastScannedCode || Date.now() - lastScanTime > 3000) {
-                lastScannedCode = code;
-                lastScanTime = Date.now();
-                await processStudentCode(code);
-            }
-        }
-    } catch (error) {
-        console.error('Barcode detection error:', error);
-    }
-
-    // Continue detection
-    if (isCameraRunning) {
-        requestAnimationFrame(detectBarcodeAPI);
-    }
-}
-
-function startCameraWithQuagga() {
-    // QuaggaJS fallback removed - not reliable
-    // Show message to use manual input instead
-    alert('المتصفح لا يدعم قراءة الباركود. يرجى استخدام الإدخال اليدوي.');
-    stopCamera();
-}
-
-function stopCamera() {
+async function stopCamera() {
     isCameraRunning = false;
     lastScannedCode = null;
     lastScanTime = 0;
 
+    if (html5QrScanner) {
+        try {
+            await html5QrScanner.stop();
+        } catch (e) {
+            // Already stopped
+        }
+        html5QrScanner = null;
+    }
+
+    // Also stop any native streams
     if (cameraStream) {
         cameraStream.getTracks().forEach(track => track.stop());
         cameraStream = null;
@@ -1599,6 +1568,7 @@ function stopCamera() {
     const video = document.getElementById('cameraPreview');
     if (video) {
         video.srcObject = null;
+        video.style.display = '';
     }
 
     document.getElementById('startCameraBtn').style.display = 'flex';
