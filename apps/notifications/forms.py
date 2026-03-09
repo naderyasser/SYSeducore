@@ -79,7 +79,10 @@ class SendWhatsAppMessageForm(forms.Form):
         # تخصيص الـ CSS للحقول
         for field_name, field in self.fields.items():
             if field_name not in ['include_student_name']:
-                field.widget.attrs.update({'class': 'form-control'})
+                # Don't overwrite form-select with form-control
+                current_class = field.widget.attrs.get('class', '')
+                if 'form-select' not in current_class:
+                    field.widget.attrs.update({'class': 'form-control'})
 
     def clean(self):
         cleaned_data = super().clean()

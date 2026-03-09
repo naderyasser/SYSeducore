@@ -13,6 +13,8 @@
         margin-bottom: 20px;
         flex-wrap: wrap;
         gap: 15px;
+        position: relative;
+        z-index: 100;
     }
 
     .page-header h1 {
@@ -20,6 +22,12 @@
         font-weight: 600;
         color: #1f2937;
         margin: 0;
+    }
+
+    .page-header .btn {
+        position: relative;
+        z-index: 101;
+        cursor: pointer;
     }
 
     /* Stats Overview */
@@ -568,7 +576,7 @@
 
 {% block content %}
 <!-- Page Header -->
-<div class="page-header">
+<div class="page-header mb-4">
     <h1><i class="bi bi-people me-2" style="color: #3b82f6;"></i>إدارة الطلاب</h1>
     <div class="d-flex gap-2">
         <a href="{% url 'students:create' %}" class="btn btn-primary">
@@ -701,7 +709,16 @@
                             {{ student.full_name|slice:":1" }}
                         </div>
                         <div class="student-details">
-                            <h6>{{ student.full_name }}</h6>
+                            <h6>
+                                {{ student.full_name }}
+                                {% if student.active_enrollments %}
+                                    {% if student.has_paid_current_month %}
+                                    <span class="badge bg-success" style="font-size: 0.65rem; margin-right: 5px;">مدفوع</span>
+                                    {% else %}
+                                    <span class="badge bg-danger" style="font-size: 0.65rem; margin-right: 5px;">غير مدفوع</span>
+                                    {% endif %}
+                                {% endif %}
+                            </h6>
                             <span class="student-code">
                                 <i class="bi bi-hash"></i>{{ student.student_code }}
                             </span>

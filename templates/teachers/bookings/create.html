@@ -385,7 +385,7 @@
                     <input type="time" id="schedule_time" class="form-control" style="width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 10px; font-size: 1rem;">
                 </div>
 
-                <button type="button" class="btn-add-schedule" onclick="addSchedule()">
+                <button type="button" class="btn-add-schedule" id="addScheduleBtn">
                     <i class="bi bi-plus-circle me-2"></i>إضافة للمواعيد
                 </button>
             </div>
@@ -416,18 +416,20 @@
             </div>
         </div>
 
-        <button type="submit" class="btn-submit">
+        <button type="submit" class="btn-submit" id="submitBtn">
             <i class="bi bi-check-circle me-2"></i>إنشاء الحجز
         </button>
+        
+        <input type="hidden" name="schedules" id="schedulesInput">
     </form>
 </div>
 
-<input type="hidden" name="schedules" id="schedulesInput">
 {% endblock %}
 
 {% block extra_js %}
 <script>
 let schedules = [];
+let isSubmitting = false;
 
 function addSchedule() {
     const selectedDays = [];
@@ -464,6 +466,8 @@ function addSchedule() {
 
 function updateSchedulesList() {
     const container = document.getElementById('schedulesList');
+    if (!container) return;
+    
     container.innerHTML = '';
 
     const weekDaysAr = {
@@ -486,16 +490,26 @@ function updateSchedulesList() {
                 <small class="text-muted">من ${schedule.time}</small>
             </div>
             <div class="schedule-time">
-                <button type="button" class="schedule-remove" onclick="removeSchedule(${index})">
+                <button type="button" class="schedule-remove" data-index="${index}">
                     <i class="bi bi-trash"></i>
                 </button>
             </div>
         `;
+        
+        // Add event listener to remove button
+        const removeBtn = div.querySelector('.schedule-remove');
+        removeBtn.addEventListener('click', function() {
+            removeSchedule(parseInt(this.dataset.index));
+        });
+        
         container.appendChild(div);
     });
 
     // Update hidden input
-    document.getElementById('schedulesInput').value = JSON.stringify(schedules);
+    const schedulesInput = document.getElementById('schedulesInput');
+    if (schedulesInput) {
+        schedulesInput.value = JSON.stringify(schedules);
+    }
 }
 
 function removeSchedule(index) {
@@ -508,6 +522,8 @@ function updateDaysSummary() {
     const summaryDiv = document.getElementById('daysSummary');
     const summaryText = document.getElementById('daysSummaryText');
 
+    if (!summaryDiv || !summaryText) return;
+
     if (schedules.length === 0) {
         summaryDiv.style.display = 'none';
     } else {
@@ -516,21 +532,40 @@ function updateDaysSummary() {
     }
 }
 
-// Auto-close modal when clicking outside
-window.onclick = function(event) {
-    const modal = document.getElementById('scheduleModal');
-    if (event.target === modal) {
-        closeScheduleModal();
+// Form submission with proper event listener
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('bookingForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const addScheduleBtn = document.getElementById('addScheduleBtn');
+    
+    // Add schedule button event listener
+    if (addScheduleBtn) {
+        addScheduleBtn.addEventListener('click', addSchedule);
     }
-}
-
-// Form submission
-document.getElementById('bookingForm').onsubmit = function() {
-    if (schedules.length === 0) {
-        alert('يرجى إضافة موعد واحد على الأقل');
-        return false;
+    
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+            
+            if (schedules.length === 0) {
+                e.preventDefault();
+                alert('يرجى إضافة موعد واحد على الأقل');
+                return false;
+            }
+            
+            // Disable button and show loading state
+            isSubmitting = true;
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>جاري الإنشاء...';
+            }
+            
+            return true;
+        });
     }
-    return true;
-};
+});
 </script>
 {% endblock %}

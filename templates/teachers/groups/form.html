@@ -75,6 +75,38 @@
                 </h5>
             </div>
             <div class="card-body">
+                {% if messages %}
+                <div class="mb-3">
+                    {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if form.errors %}
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <strong>يوجد أخطاء في النموذج:</strong>
+                    <ul class="mb-0 mt-2">
+                        {% for field in form %}
+                            {% if field.errors %}
+                                {% for error in field.errors %}
+                                <li>{{ field.label }}: {{ error }}</li>
+                                {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                        {% if form.non_field_errors %}
+                            {% for error in form.non_field_errors %}
+                            <li>{{ error }}</li>
+                            {% endfor %}
+                        {% endif %}
+                    </ul>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endif %}
+
                 <form method="post">
                     {% csrf_token %}
 
@@ -82,17 +114,26 @@
                         <div class="col-md-6">
                             <label class="form-label">اسم المجموعة <span class="text-danger">*</span></label>
                             {{ form.group_name }}
+                            {% if form.group_name.errors %}
+                            <div class="text-danger small mt-1">{{ form.group_name.errors.0 }}</div>
+                            {% endif %}
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">المدرس <span class="text-danger">*</span></label>
                             {{ form.teacher }}
+                            {% if form.teacher.errors %}
+                            <div class="text-danger small mt-1">{{ form.teacher.errors.0 }}</div>
+                            {% endif %}
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">القاعة</label>
                             {{ form.room }}
                             <small class="text-muted">اختياري - النظام يمنع تعارض الأوقات تلقائياً (حسب المدة)</small>
+                            {% if form.room.errors %}
+                            <div class="text-danger small mt-1">{{ form.room.errors.0 }}</div>
+                            {% endif %}
                         </div>
 
                         <div class="col-md-12">
@@ -137,12 +178,18 @@
                         <div class="col-md-6">
                             <label class="form-label">وقت البداية <span class="text-danger">*</span></label>
                             {{ form.schedule_time }}
+                            {% if form.schedule_time.errors %}
+                            <div class="text-danger small mt-1">{{ form.schedule_time.errors.0 }}</div>
+                            {% endif %}
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">مدة الحصة (بالدقيقة) <span class="text-danger">*</span></label>
                             {{ form.duration_minutes }}
                             <small class="text-muted">الافتراضي: 120 دقيقة (ساعتين)</small>
+                            {% if form.duration_minutes.errors %}
+                            <div class="text-danger small mt-1">{{ form.duration_minutes.errors.0 }}</div>
+                            {% endif %}
                         </div>
                     </div>
 
@@ -176,11 +223,17 @@
                         <div class="col-md-6">
                             <label class="form-label">السعر الشهري <span class="text-danger">*</span></label>
                             {{ form.standard_fee }}
+                            {% if form.standard_fee.errors %}
+                            <div class="text-danger small mt-1">{{ form.standard_fee.errors.0 }}</div>
+                            {% endif %}
                         </div>
 
                         <div class="col-md-6">
                             <label class="form-label">نسبة السنتر %</label>
                             {{ form.center_percentage }}
+                            {% if form.center_percentage.errors %}
+                            <div class="text-danger small mt-1">{{ form.center_percentage.errors.0 }}</div>
+                            {% endif %}
                         </div>
 
                         <div class="col-md-6">

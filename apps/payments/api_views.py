@@ -43,3 +43,38 @@ def record_payment(request, payment_id):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def mark_as_paid(request, payment_id):
+    """
+    تسديد الدفعة بالكامل
+    """
+    try:
+        payment = Payment.objects.get(pk=payment_id)
+        
+        payment.amount_paid = payment.amount_due
+        payment.status = 'paid'
+        payment.payment_date = timezone.now()
+        payment.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'تم تسديد الدفعة بنجاح',
+            'payment': {
+                'payment_id': payment.payment_id,
+                'amount_paid': float(payment.amount_paid),
+                'status': payment.status
+            }
+        })
+    except Payment.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'الدفعة غير موجودة'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        }, status=500)

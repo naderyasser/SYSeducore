@@ -37,8 +37,10 @@ def login_view(request):
 @login_required
 def logout_view(request):
     """
-    Logout view for users.
+    Logout view for users. Requires POST to prevent CSRF logout attacks.
     """
+    if request.method != 'POST':
+        return redirect('reports:dashboard')
     logout(request)
     messages.success(request, 'تم تسجيل الخروج بنجاح')
     return redirect('accounts:login')

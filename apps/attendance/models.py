@@ -9,7 +9,7 @@ class Session(models.Model):
     session_id = models.AutoField(primary_key=True)
     group = models.ForeignKey(
         'teachers.Group',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='sessions'
     )
     session_date = models.DateField(default=timezone.now)
@@ -45,12 +45,12 @@ class Attendance(models.Model):
     attendance_id = models.AutoField(primary_key=True)
     student = models.ForeignKey(
         'students.Student',
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='attendances'
     )
     session = models.ForeignKey(
         Session,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='attendances'
     )
     

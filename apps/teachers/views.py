@@ -19,7 +19,7 @@ from apps.attendance.models import Session, Attendance
 
 @login_required
 def teacher_list(request):
-    teachers = Teacher.objects.filter(is_active=True)
+    teachers = Teacher.objects.filter(is_active=True).prefetch_related('subjects')
     return render(request, 'teachers/list.html', {'teachers': teachers})
 
 
@@ -33,6 +33,7 @@ def teacher_detail(request, teacher_id):
     next_week = today + timedelta(days=7)
     upcoming_sessions = Session.objects.filter(
         group__teacher=teacher,
+        group__is_active=True,  # Filter inactive groups
         session_date__gte=today,
         session_date__lte=next_week,
         is_cancelled=False
@@ -109,23 +110,23 @@ def room_detail(request, room_id):
     عرض تفاصيل القاعة مع جدولها وإحصائياتها
     """
     room = get_object_or_404(Room, pk=room_id)
-    groups = room.groups.filter(is_active=True).select_related('teacher')
+    groups = room.groups.filter(is_active=True).select_related('teacher').annotate(
+        students_count=Count(
+            'studentgroupenrollment',
+            filter=Q(studentgroupenrollment__is_active=True)
+        )
+    )
 
     # حساب الطلاب في كل مجموعة
     groups_with_students = []
     total_students = 0
 
     for group in groups:
-        from apps.students.models import StudentGroupEnrollment
-        students_count = StudentGroupEnrollment.objects.filter(
-            group=group,
-            is_active=True
-        ).count()
-        total_students += students_count
+        total_students += group.students_count
 
         groups_with_students.append({
             'group': group,
-            'students_count': students_count
+            'students_count': group.students_count
         })
 
     # جدول أسبوعي
@@ -206,7 +207,7 @@ def group_create(request):
                 try:
                     import json
                     schedule_days = json.loads(schedule_days_json)
-                except:
+                except (json.JSONDecodeError, TypeError, ValueError):
                     schedule_days = [form.cleaned_data.get('schedule_day')]
             else:
                 schedule_days = [form.cleaned_data.get('schedule_day')]
@@ -320,14 +321,14 @@ def subject_list(request):
     """
     عرض قائمة المواد الدراسية
     """
-    subjects = Subject.objects.all().order_by('name')
-    # Count teachers for each subject
+    subjects = Subject.objects.annotate(
+        teachers_count_val=Count('teachers')
+    ).order_by('name')
     subjects_with_counts = []
     for subject in subjects:
-        teachers_count = subject.teachers.count()
         subjects_with_counts.append({
             'subject': subject,
-            'teachers_count': teachers_count
+            'teachers_count': subject.teachers_count_val
         })
     return render(request, 'teachers/subjects/list.html', {
         'subjects_with_counts': subjects_with_counts,
@@ -451,7 +452,8 @@ def booking_search(request):
     upcoming_sessions = Session.objects.filter(
         session_date__gte=today,
         session_date__lte=next_week,
-        is_cancelled=False
+        is_cancelled=False,
+        group__is_active=True  # Filter inactive groups
     ).select_related('group', 'group__teacher', 'group__room').order_by('session_date')
 
     # Get recent attendance stats (last 7 days)

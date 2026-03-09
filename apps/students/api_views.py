@@ -617,3 +617,62 @@ def bulk_action(request):
         'message': message,
         'affected': count
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def activate_subscription(request, student_id):
+    """
+    تفعيل اشتراك الطالب لمدة 30 يوم
+    """
+    try:
+        student = get_object_or_404(Student, pk=student_id)
+        days = int(request.POST.get('days', 30))
+        
+        expiry_date = student.activate_subscription(days=days)
+        subscription_status = student.get_subscription_status()
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'تم تفعيل اشتراك {student.full_name} لمدة {days} يوم',
+            'student': {
+                'student_id': student.student_id,
+                'full_name': student.full_name,
+                'last_payment_date': student.last_payment_date.isoformat() if student.last_payment_date else None,
+                'subscription_expiry_date': student.subscription_expiry_date.isoformat() if student.subscription_expiry_date else None,
+            },
+            'subscription_status': subscription_status
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'خطأ: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def subscription_status(request, student_id):
+    """
+    الحصول على حالة اشتراك الطالب
+    """
+    try:
+        student = get_object_or_404(Student, pk=student_id)
+        subscription_status = student.get_subscription_status()
+        
+        return JsonResponse({
+            'success': True,
+            'student': {
+                'student_id': student.student_id,
+                'full_name': student.full_name,
+                'last_payment_date': student.last_payment_date.isoformat() if student.last_payment_date else None,
+                'subscription_expiry_date': student.subscription_expiry_date.isoformat() if student.subscription_expiry_date else None,
+                'is_active': student.is_subscription_active(),
+            },
+            'subscription_status': subscription_status
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'message': f'خطأ: {str(e)}'
+        }, status=500)
