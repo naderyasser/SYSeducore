@@ -177,6 +177,42 @@
             grid-template-columns: 1fr;
         }
     }
+
+    .payment-radio {
+        cursor: pointer;
+    }
+
+    .payment-radio input[type="radio"] {
+        display: none;
+    }
+
+    .payment-radio-label {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.82rem;
+        font-weight: 500;
+        border: 2px solid #e5e7eb;
+        transition: all 0.2s;
+    }
+
+    .payment-radio input[type="radio"]:checked + .payment-radio-label.normal {
+        background: #e0e7ff;
+        border-color: #4338ca;
+        color: #4338ca;
+    }
+
+    .payment-radio input[type="radio"]:checked + .payment-radio-label.symbolic {
+        background: #fef3c7;
+        border-color: #d97706;
+        color: #92400e;
+    }
+
+    .payment-radio input[type="radio"]:checked + .payment-radio-label.exempt {
+        background: #d1fae5;
+        border-color: #059669;
+        color: #065f46;
+    }
 </style>
 {% endblock %}
 
@@ -228,7 +264,7 @@
             {% endfor %}
             {% endif %}
 
-            <form method="post" id="studentForm">
+            <form method="post" id="studentForm" data-is-new-student="{% if student %}false{% else %}true{% endif %}">
                 {% csrf_token %}
 
                 <!-- Info Box -->
@@ -318,9 +354,12 @@
                             <label for="id_education_year" class="form-label">السنة الدراسية</label>
                             <select name="education_year" id="id_education_year" class="form-select">
                                 <option value="">-- اختر السنة --</option>
-                                <option value="1" {% if form.education_year.value == '1' or form.education_year.value == 1 %}selected{% endif %}>الأولى</option>
-                                <option value="2" {% if form.education_year.value == '2' or form.education_year.value == 2 %}selected{% endif %}>الثانية</option>
-                                <option value="3" {% if form.education_year.value == '3' or form.education_year.value == 3 %}selected{% endif %}>الثالثة</option>
+                                <option value="1" {% if form.education_year.value == '1' or form.education_year.value == 1 %}selected{% endif %}>الأول</option>
+                                <option value="2" {% if form.education_year.value == '2' or form.education_year.value == 2 %}selected{% endif %}>الثاني</option>
+                                <option value="3" {% if form.education_year.value == '3' or form.education_year.value == 3 %}selected{% endif %}>الثالث</option>
+                                <option value="4" data-primary-only="true" {% if form.education_year.value == '4' or form.education_year.value == 4 %}selected{% endif %}>الرابع</option>
+                                <option value="5" data-primary-only="true" {% if form.education_year.value == '5' or form.education_year.value == 5 %}selected{% endif %}>الخامس</option>
+                                <option value="6" data-primary-only="true" {% if form.education_year.value == '6' or form.education_year.value == 6 %}selected{% endif %}>السادس</option>
                             </select>
                         </div>
 
@@ -420,24 +459,61 @@
                     </div>
                 </div>
                 <div class="form-section">
-                    <h6><i class="bi bi-collection me-2"></i>المجموعات</h6>
+                    <h6><i class="bi bi-collection me-2"></i>المجموعات وحالة الدفع</h6>
 
                     {% if groups %}
-                    <p class="text-muted mb-3">اختر المجموعات التي سيشترك فيها الطالب:</p>
+                    <p class="text-muted mb-3">اختر المجموعات التي سيشترك فيها الطالب وحدد حالة الدفع لكل مجموعة:</p>
 
                     <div class="groups-grid">
                         {% for group in groups %}
-                        <label class="group-checkbox">
-                            <input type="checkbox" name="groups" value="{{ group.group_id }}"
-                                {% if student and group.group_id in current_group_ids %}checked{% endif %}>
-                            <div class="group-checkbox-content">
-                                <div class="group-name">{{ group.group_name }}</div>
-                                <div class="group-info">
-                                    <i class="bi bi-person me-1"></i>{{ group.teacher.full_name|default:"-" }}
-                                    <span style="margin: 0 5px;">|</span>
-                                    <i class="bi bi-calendar3 me-1"></i>{{ group.get_schedule_day_display }}
-                                    <span style="margin: 0 5px;">|</span>
-                                    <i class="bi bi-clock me-1"></i>{{ group.schedule_time|date:"H:i" }}
+                        <label class="group-checkbox" style="flex-direction: column; align-items: stretch;">
+                            <div style="display: flex; align-items: flex-start;">
+                                <input type="checkbox" name="groups" value="{{ group.group_id }}"
+                                    {% if student and group.group_id in current_group_ids %}checked{% endif %}
+                                    onchange="togglePaymentOptions(this, {{ group.group_id }})">
+                                <div class="group-checkbox-content">
+                                    <div class="group-name">{{ group.group_name }}</div>
+                                    <div class="group-info">
+                                        <i class="bi bi-person me-1"></i>{{ group.teacher.full_name|default:"-" }}
+                                        <span style="margin: 0 5px;">|</span>
+                                        <i class="bi bi-calendar3 me-1"></i>{{ group.get_schedule_day_display }}
+                                        <span style="margin: 0 5px;">|</span>
+                                        <i class="bi bi-clock me-1"></i>{{ group.schedule_time|date:"H:i" }}
+                                        <span style="margin: 0 5px;">|</span>
+                                        <i class="bi bi-cash me-1"></i>{{ group.standard_fee }} ج.م
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="payment-options" id="payment_{{ group.group_id }}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+                                <div style="margin-bottom: 6px;">
+                                    <label style="font-size: 0.85rem; font-weight: 500; color: #374151;">
+                                        <i class="bi bi-wallet2 me-1"></i>حالة الدفع:
+                                    </label>
+                                </div>
+                                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
+                                    <label class="payment-radio">
+                                        <input type="radio" name="financial_status_{{ group.group_id }}" value="normal" checked
+                                            onchange="toggleCustomFee({{ group.group_id }}, this.value)">
+                                        <span class="payment-radio-label normal">💳 دفع كامل</span>
+                                    </label>
+                                    <label class="payment-radio">
+                                        <input type="radio" name="financial_status_{{ group.group_id }}" value="symbolic"
+                                            onchange="toggleCustomFee({{ group.group_id }}, this.value)">
+                                        <span class="payment-radio-label symbolic">🏷️ تخفيض/خصم</span>
+                                    </label>
+                                    <label class="payment-radio">
+                                        <input type="radio" name="financial_status_{{ group.group_id }}" value="exempt"
+                                            onchange="toggleCustomFee({{ group.group_id }}, this.value)">
+                                        <span class="payment-radio-label exempt">🎁 دخول مجاني</span>
+                                    </label>
+                                </div>
+                                <div id="custom_fee_{{ group.group_id }}" style="display: none;">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">المبلغ بعد الخصم</span>
+                                        <input type="number" name="custom_fee_{{ group.group_id }}" 
+                                            class="form-control" min="0" step="0.01" placeholder="أدخل المبلغ">
+                                        <span class="input-group-text">ج.م</span>
+                                    </div>
                                 </div>
                             </div>
                         </label>
@@ -481,6 +557,10 @@
 
 {% block extra_js %}
 <script>
+const studentForm = document.getElementById('studentForm');
+const isNewStudent = studentForm?.dataset.isNewStudent === 'true';
+const enrollmentData = JSON.parse('{{ enrollment_data_json|default:"{}" |escapejs }}');
+
 // Generate next code
 function generateCode() {
     fetch('{% url "students:next_code" %}')
@@ -512,11 +592,51 @@ function showCodePreview(code) {
 }
 
 // Auto-generate code preview on page load for new students
-{% if not student %}
 document.addEventListener('DOMContentLoaded', function() {
-    generateCode();
+    if (isNewStudent) {
+        generateCode();
+    }
+    // Show payment options for already-checked groups (edit mode)
+    document.querySelectorAll('input[name="groups"]:checked').forEach(cb => {
+        const groupId = cb.value;
+        const paymentDiv = document.getElementById('payment_' + groupId);
+        if (paymentDiv) {
+            paymentDiv.style.display = 'block';
+            // Restore financial status from enrollment data
+            if (enrollmentData[groupId]) {
+                const status = enrollmentData[groupId].financial_status;
+                const radio = document.querySelector(`input[name="financial_status_${groupId}"][value="${status}"]`);
+                if (radio) radio.checked = true;
+                if (status === 'symbolic') {
+                    const feeDiv = document.getElementById('custom_fee_' + groupId);
+                    if (feeDiv) {
+                        feeDiv.style.display = 'block';
+                        const feeInput = feeDiv.querySelector('input[type="number"]');
+                        if (feeInput && enrollmentData[groupId].custom_fee) {
+                            feeInput.value = enrollmentData[groupId].custom_fee;
+                        }
+                    }
+                }
+            }
+        }
+    });
 });
-{% endif %}
+
+// Toggle payment options when group checkbox changes
+function togglePaymentOptions(checkbox, groupId) {
+    const paymentDiv = document.getElementById('payment_' + groupId);
+    if (paymentDiv) {
+        paymentDiv.style.display = checkbox.checked ? 'block' : 'none';
+    }
+}
+
+// Toggle custom fee input when financial status changes
+function toggleCustomFee(groupId, status) {
+    const feeDiv = document.getElementById('custom_fee_' + groupId);
+    if (feeDiv) {
+        feeDiv.style.display = status === 'symbolic' ? 'block' : 'none';
+    }
+}
 
 // Update parent phone hint based on gender
 document.getElementById('id_gender').addEventListener('change', function() {
@@ -529,6 +649,29 @@ document.getElementById('id_gender').addEventListener('change', function() {
         hint.textContent = 'مثال: 01012345678';
     }
 });
+
+// Dynamic education year options based on stage
+function updateEducationYears() {
+    const stage = document.getElementById('id_education_stage').value;
+    const yearSelect = document.getElementById('id_education_year');
+    const options = yearSelect.querySelectorAll('option[data-primary-only]');
+    
+    options.forEach(opt => {
+        if (stage === 'primary') {
+            opt.style.display = '';
+            opt.disabled = false;
+        } else {
+            opt.style.display = 'none';
+            opt.disabled = true;
+            if (opt.selected) {
+                yearSelect.value = '';
+            }
+        }
+    });
+}
+
+document.getElementById('id_education_stage').addEventListener('change', updateEducationYears);
+document.addEventListener('DOMContentLoaded', updateEducationYears);
 
 // Form validation
 document.getElementById('studentForm').addEventListener('submit', function(e) {

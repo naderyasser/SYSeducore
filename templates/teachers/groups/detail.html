@@ -189,6 +189,32 @@
         gap: 12px;
     }
 
+    .student-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .btn-remove-student {
+        background: #fee2e2;
+        color: #dc2626;
+        border: none;
+        border-radius: 8px;
+        padding: 6px 12px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-remove-student:hover {
+        background: #dc2626;
+        color: #fff;
+    }
+
     .student-avatar {
         width: 48px;
         height: 48px;
@@ -384,7 +410,7 @@
         {% if enrolled_students %}
             <div class="students-list">
                 {% for enrollment in enrolled_students %}
-                <div class="student-card">
+                <div class="student-card" id="enrollment-{{ enrollment.id }}">
                     <div class="student-info">
                         <div class="student-avatar">
                             {{ enrollment.student.full_name|slice:":2"|upper }}
@@ -394,8 +420,14 @@
                             <div class="student-code">{{ enrollment.student.student_code }}</div>
                         </div>
                     </div>
-                    <div class="financial-badge {{ enrollment.financial_status }}">
-                        {{ enrollment.get_financial_status_display }}
+                    <div class="student-actions">
+                        <div class="financial-badge {{ enrollment.financial_status }}">
+                            {{ enrollment.get_financial_status_display }}
+                        </div>
+                        <button type="button" class="btn-remove-student" 
+                            onclick="removeStudent({{ enrollment.id }}, '{{ enrollment.student.full_name|escapejs }}')">
+                            <i class="bi bi-person-x"></i> إزالة
+                        </button>
                     </div>
                 </div>
                 {% endfor %}
@@ -408,4 +440,46 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function removeStudent(enrollmentId, studentName) {
+    if (!confirm(`هل أنت متأكد من إزالة "${studentName}" من هذه المجموعة؟`)) {
+        return;
+    }
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value 
+        || '{{ csrf_token }}';
+
+    const formData = new FormData();
+    formData.append('enrollment_id', enrollmentId);
+
+    fetch('{% url "students:api_remove_from_group" %}', {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken,
+        },
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const card = document.getElementById('enrollment-' + enrollmentId);
+            if (card) {
+                card.style.transition = 'opacity 0.3s, transform 0.3s';
+                card.style.opacity = '0';
+                card.style.transform = 'translateX(20px)';
+                setTimeout(() => card.remove(), 300);
+            }
+        } else {
+            alert(data.message || 'حدث خطأ أثناء إزالة الطالب');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('حدث خطأ في الاتصال');
+    });
+}
+</script>
 {% endblock %}

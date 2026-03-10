@@ -802,6 +802,10 @@
                     <span>التقرير المالي</span>
                     <i class="bi bi-shield-lock ms-auto" style="font-size: 0.8rem; color: #f59e0b;"></i>
                 </a>
+                <a href="{% url 'reports:recycle_bin' %}" class="menu-item {% if request.resolver_match.url_name == 'recycle_bin' %}active{% endif %}">
+                    <i class="bi bi-trash3"></i>
+                    <span>سلة المهملات</span>
+                </a>
             </div>
 
             <!-- الحساب (Account) -->

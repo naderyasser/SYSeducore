@@ -1,8 +1,10 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
+from django.db import models
 from django.db.models import Sum, Count, Q, F, Avg
 from django.db.models.functions import TruncDate, TruncMonth
+from django.http import JsonResponse
 from datetime import timedelta, datetime
 from collections import defaultdict
 import json
@@ -457,3 +459,152 @@ def financial_report(request):
     }
     
     return render(request, 'reports/financial.html', context)
+
+
+# ==================== Recycle Bin ====================
+
+@login_required
+def recycle_bin(request):
+    """
+    سلة المهملات - عرض العناصر المحذوفة مع إمكانية الاستعادة أو الحذف النهائي
+    """
+    filter_type = request.GET.get('type', 'all')
+    
+    deleted_students = Student.all_objects.dead().select_related('deleted_by')
+    deleted_teachers = Teacher.all_objects.dead().select_related('deleted_by')
+    deleted_groups = Group.all_objects.dead().select_related('teacher', 'deleted_by')
+    deleted_rooms = Room.all_objects.dead().select_related('deleted_by')
+    
+    context = {
+        'deleted_students': deleted_students if filter_type in ('all', 'students') else [],
+        'deleted_teachers': deleted_teachers if filter_type in ('all', 'teachers') else [],
+        'deleted_groups': deleted_groups if filter_type in ('all', 'groups') else [],
+        'deleted_rooms': deleted_rooms if filter_type in ('all', 'rooms') else [],
+        'students_count': deleted_students.count(),
+        'teachers_count': deleted_teachers.count(),
+        'groups_count': deleted_groups.count(),
+        'rooms_count': deleted_rooms.count(),
+        'total_count': deleted_students.count() + deleted_teachers.count() + deleted_groups.count() + deleted_rooms.count(),
+        'current_type': filter_type,
+    }
+    
+    return render(request, 'reports/recycle_bin.html', context)
+
+
+@login_required
+def recycle_restore(request):
+    """استعادة عنصر من سلة المهملات"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'})
+    
+    item_type = request.POST.get('type')
+    item_id = request.POST.get('id')
+    
+    if not item_type or not item_id:
+        return JsonResponse({'success': False, 'message': 'بيانات ناقصة'})
+    
+    model_map = {
+        'student': Student,
+        'teacher': Teacher,
+        'group': Group,
+        'room': Room,
+    }
+    
+    model = model_map.get(item_type)
+    if not model:
+        return JsonResponse({'success': False, 'message': 'نوع غير صالح'})
+    
+    try:
+        obj = model.all_objects.get(pk=item_id)
+        obj.restore()
+        
+        ActivityLog.log(
+            user=request.user,
+            action='update',
+            description=f'استعادة {item_type} من سلة المهملات: {obj}',
+            target_model=item_type.capitalize(),
+            target_id=item_id,
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'تم استعادة العنصر بنجاح'
+        })
+    except model.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
+
+
+@login_required
+def recycle_permanent_delete(request):
+    """حذف نهائي من سلة المهملات"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'})
+    
+    item_type = request.POST.get('type')
+    item_id = request.POST.get('id')
+    
+    if not item_type or not item_id:
+        return JsonResponse({'success': False, 'message': 'بيانات ناقصة'})
+    
+    model_map = {
+        'student': Student,
+        'teacher': Teacher,
+        'group': Group,
+        'room': Room,
+    }
+    
+    model = model_map.get(item_type)
+    if not model:
+        return JsonResponse({'success': False, 'message': 'نوع غير صالح'})
+    
+    try:
+        obj = model.all_objects.get(pk=item_id)
+        if not obj.is_deleted:
+            return JsonResponse({'success': False, 'message': 'لا يمكن حذف عنصر غير موجود في سلة المهملات'})
+        
+        obj_name = str(obj)
+        # Use Django's actual delete, bypassing soft delete
+        models.Model.delete(obj)
+        
+        ActivityLog.log(
+            user=request.user,
+            action='delete',
+            description=f'حذف نهائي {item_type}: {obj_name}',
+            target_model=item_type.capitalize(),
+            target_id=item_id,
+            request=request
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'تم الحذف النهائي بنجاح'
+        })
+    except model.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
+
+
+@login_required
+def recycle_empty(request):
+    """تفريغ سلة المهملات بالكامل"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'message': 'Method not allowed'})
+    
+    count = 0
+    for model in [Student, Teacher, Group, Room]:
+        deleted_qs = model.all_objects.dead()
+        count += deleted_qs.count()
+        # Use the queryset hard_delete method
+        deleted_qs.hard_delete()
+    
+    ActivityLog.log(
+        user=request.user,
+        action='delete',
+        description=f'تفريغ سلة المهملات: {count} عنصر',
+        target_model='RecycleBin',
+        target_id=0,
+        request=request
+    )
+    
+    messages.success(request, f'تم تفريغ سلة المهملات ({count} عنصر)')
+    return redirect('reports:recycle_bin')

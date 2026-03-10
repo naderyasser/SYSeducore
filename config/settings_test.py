@@ -30,3 +30,6 @@ CACHES = {
 # Disable Celery
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# Disable SSL redirect for tests
+SECURE_SSL_REDIRECT = False

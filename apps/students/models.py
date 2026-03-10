@@ -8,9 +8,10 @@ import qrcode
 from barcode import Code128
 from barcode.writer import ImageWriter
 from PIL import Image
+from apps.core.models import SoftDeleteModel
 
 
-class Student(models.Model):
+class Student(SoftDeleteModel):
     """
     Student model for managing students.
     الطالب يمكنه الانتساب لأكثر من مجموعة (أكثر من مدرس)
@@ -29,9 +30,12 @@ class Student(models.Model):
     ]
 
     EDUCATION_YEAR_CHOICES = [
-        ('1', 'أولى'),
-        ('2', 'ثانية'),
-        ('3', 'ثالثة'),
+        ('1', 'الأول'),
+        ('2', 'الثاني'),
+        ('3', 'الثالث'),
+        ('4', 'الرابع'),
+        ('5', 'الخامس'),
+        ('6', 'السادس'),
     ]
 
     EDUCATION_TYPE_CHOICES = [

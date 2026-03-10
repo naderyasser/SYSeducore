@@ -677,8 +677,9 @@ class StudentViewTest(BaseTestMixin, TestCase):
             reverse('students:delete', kwargs={'student_id': self.student.student_id})
         )
         self.assertEqual(response.status_code, 302)
-        self.student.refresh_from_db()
-        self.assertFalse(self.student.is_active)
+        from apps.students.models import Student
+        student = Student.all_objects.get(pk=self.student.student_id)
+        self.assertIsNotNone(student.deleted_at)
 
     def test_student_toggle_status(self):
         response = self.client.post(
@@ -728,8 +729,9 @@ class TeacherViewTest(BaseTestMixin, TestCase):
             reverse('teachers:delete', kwargs={'teacher_id': self.teacher.teacher_id})
         )
         self.assertEqual(response.status_code, 302)
-        self.teacher.refresh_from_db()
-        self.assertFalse(self.teacher.is_active)
+        from apps.teachers.models import Teacher
+        teacher = Teacher.all_objects.get(pk=self.teacher.teacher_id)
+        self.assertIsNotNone(teacher.deleted_at)
 
 
 # ============================================================
@@ -787,8 +789,9 @@ class GroupViewTest(BaseTestMixin, TestCase):
             reverse('teachers:group_delete', kwargs={'group_id': self.group.group_id})
         )
         self.assertEqual(response.status_code, 302)
-        self.group.refresh_from_db()
-        self.assertFalse(self.group.is_active)
+        from apps.teachers.models import Group
+        group = Group.all_objects.get(pk=self.group.group_id)
+        self.assertIsNotNone(group.deleted_at)
 
 
 # ============================================================
