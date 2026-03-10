@@ -1,0 +1,531 @@
+{% extends 'base.html' %}
+
+{% block title %}سلة المهملات{% endblock %}
+{% block page_title %}سلة المهملات{% endblock %}
+
+{% block extra_css %}
+<style>
+    .recycle-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .recycle-header {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        padding: 24px 30px;
+        margin-bottom: 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 16px;
+    }
+
+    .recycle-header h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #1f2937;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .recycle-header h2 i {
+        color: #ef4444;
+    }
+
+    .filter-tabs {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .filter-tab {
+        padding: 8px 18px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+        background: #fff;
+    }
+
+    .filter-tab:hover {
+        border-color: #3b82f6;
+        color: #3b82f6;
+    }
+
+    .filter-tab.active {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: #fff;
+    }
+
+    .filter-tab .badge {
+        background: rgba(255,255,255,0.25);
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 0.8rem;
+        margin-right: 4px;
+    }
+
+    .filter-tab:not(.active) .badge {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .section-card {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        margin-bottom: 24px;
+        overflow: hidden;
+    }
+
+    .section-header {
+        padding: 20px 24px;
+        border-bottom: 1px solid #f3f4f6;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .section-header i {
+        font-size: 1.2rem;
+    }
+
+    .section-header .count {
+        background: #fee2e2;
+        color: #dc2626;
+        padding: 2px 10px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        margin-right: auto;
+    }
+
+    .deleted-item {
+        padding: 16px 24px;
+        border-bottom: 1px solid #f9fafb;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        transition: background 0.2s;
+    }
+
+    .deleted-item:hover {
+        background: #f9fafb;
+    }
+
+    .deleted-item:last-child {
+        border-bottom: none;
+    }
+
+    .item-info {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+    }
+
+    .item-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1rem;
+        flex-shrink: 0;
+    }
+
+    .item-avatar.student { background: #ede9fe; color: #7c3aed; }
+    .item-avatar.teacher { background: #dbeafe; color: #2563eb; }
+    .item-avatar.group { background: #d1fae5; color: #059669; }
+    .item-avatar.room { background: #fef3c7; color: #d97706; }
+
+    .item-name {
+        font-weight: 600;
+        color: #1f2937;
+        font-size: 0.95rem;
+    }
+
+    .item-detail {
+        color: #6b7280;
+        font-size: 0.85rem;
+    }
+
+    .item-actions {
+        display: flex;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .btn-restore {
+        background: #d1fae5;
+        color: #059669;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-restore:hover {
+        background: #059669;
+        color: #fff;
+    }
+
+    .btn-permanent-delete {
+        background: #fee2e2;
+        color: #dc2626;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .btn-permanent-delete:hover {
+        background: #dc2626;
+        color: #fff;
+    }
+
+    .btn-empty-all {
+        background: #dc2626;
+        color: #fff;
+        border: none;
+        border-radius: 10px;
+        padding: 10px 20px;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s;
+    }
+
+    .btn-empty-all:hover {
+        background: #b91c1c;
+        transform: translateY(-1px);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #9ca3af;
+    }
+
+    .empty-state i {
+        font-size: 3.5rem;
+        margin-bottom: 16px;
+        opacity: 0.4;
+    }
+
+    .empty-state p {
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    @media (max-width: 768px) {
+        .recycle-header {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .deleted-item {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+        }
+
+        .item-actions {
+            justify-content: flex-end;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="recycle-container">
+    <div class="recycle-header">
+        <h2>
+            <i class="bi bi-trash3"></i>
+            سلة المهملات
+            {% if total_count > 0 %}
+            <span style="font-size: 0.85rem; color: #6b7280; font-weight: 400;">({{ total_count }} عنصر)</span>
+            {% endif %}
+        </h2>
+        <div style="display: flex; gap: 12px; align-items: center;">
+            {% if total_count > 0 %}
+            <form method="post" action="{% url 'reports:recycle_empty' %}" style="display: inline;"
+                onsubmit="return confirm('⚠️ هل أنت متأكد من تفريغ سلة المهملات بالكامل؟\nسيتم حذف {{ total_count }} عنصر نهائياً ولا يمكن استعادتهم!')">
+                {% csrf_token %}
+                <button type="submit" class="btn-empty-all">
+                    <i class="bi bi-trash3-fill"></i> تفريغ الكل
+                </button>
+            </form>
+            {% endif %}
+            <a href="{% url 'reports:dashboard' %}" class="btn btn-outline-secondary" style="border-radius: 10px;">
+                <i class="bi bi-arrow-right me-1"></i> الرئيسية
+            </a>
+        </div>
+    </div>
+
+    <div class="filter-tabs" style="margin-bottom: 20px;">
+        <a href="{% url 'reports:recycle_bin' %}" class="filter-tab {% if current_type == 'all' %}active{% endif %}">
+            الكل <span class="badge">{{ total_count }}</span>
+        </a>
+        <a href="{% url 'reports:recycle_bin' %}?type=students" class="filter-tab {% if current_type == 'students' %}active{% endif %}">
+            <i class="bi bi-mortarboard me-1"></i> طلاب <span class="badge">{{ students_count }}</span>
+        </a>
+        <a href="{% url 'reports:recycle_bin' %}?type=teachers" class="filter-tab {% if current_type == 'teachers' %}active{% endif %}">
+            <i class="bi bi-person-badge me-1"></i> مدرسين <span class="badge">{{ teachers_count }}</span>
+        </a>
+        <a href="{% url 'reports:recycle_bin' %}?type=groups" class="filter-tab {% if current_type == 'groups' %}active{% endif %}">
+            <i class="bi bi-people me-1"></i> مجموعات <span class="badge">{{ groups_count }}</span>
+        </a>
+        <a href="{% url 'reports:recycle_bin' %}?type=rooms" class="filter-tab {% if current_type == 'rooms' %}active{% endif %}">
+            <i class="bi bi-building me-1"></i> قاعات <span class="badge">{{ rooms_count }}</span>
+        </a>
+    </div>
+
+    {% if total_count == 0 %}
+    <div class="section-card">
+        <div class="empty-state">
+            <i class="bi bi-recycle"></i>
+            <p>سلة المهملات فارغة</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if deleted_students %}
+    <div class="section-card">
+        <div class="section-header">
+            <i class="bi bi-mortarboard" style="color: #7c3aed;"></i>
+            الطلاب المحذوفون
+            <span class="count">{{ students_count }}</span>
+        </div>
+        {% for student in deleted_students %}
+        <div class="deleted-item" id="item-student-{{ student.student_id }}">
+            <div class="item-info">
+                <div class="item-avatar student">
+                    {{ student.full_name|slice:":2"|upper }}
+                </div>
+                <div>
+                    <div class="item-name">{{ student.full_name }}</div>
+                    <div class="item-detail">
+                        كود: {{ student.student_code }}
+                        | حُذف {{ student.deleted_at|timesince }} 
+                        {% if student.deleted_by %}بواسطة {{ student.deleted_by.get_full_name|default:student.deleted_by.username }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="item-actions">
+                <button class="btn-restore" onclick="restoreItem('student', {{ student.student_id }})">
+                    <i class="bi bi-arrow-counterclockwise"></i> استعادة
+                </button>
+                <button class="btn-permanent-delete" onclick="permanentDelete('student', {{ student.student_id }}, '{{ student.full_name|escapejs }}')">
+                    <i class="bi bi-x-lg"></i> حذف نهائي
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if deleted_teachers %}
+    <div class="section-card">
+        <div class="section-header">
+            <i class="bi bi-person-badge" style="color: #2563eb;"></i>
+            المدرسون المحذوفون
+            <span class="count">{{ teachers_count }}</span>
+        </div>
+        {% for teacher in deleted_teachers %}
+        <div class="deleted-item" id="item-teacher-{{ teacher.teacher_id }}">
+            <div class="item-info">
+                <div class="item-avatar teacher">
+                    {{ teacher.full_name|slice:":2"|upper }}
+                </div>
+                <div>
+                    <div class="item-name">{{ teacher.full_name }}</div>
+                    <div class="item-detail">
+                        {{ teacher.phone }}
+                        | حُذف {{ teacher.deleted_at|timesince }}
+                        {% if teacher.deleted_by %}بواسطة {{ teacher.deleted_by.get_full_name|default:teacher.deleted_by.username }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="item-actions">
+                <button class="btn-restore" onclick="restoreItem('teacher', {{ teacher.teacher_id }})">
+                    <i class="bi bi-arrow-counterclockwise"></i> استعادة
+                </button>
+                <button class="btn-permanent-delete" onclick="permanentDelete('teacher', {{ teacher.teacher_id }}, '{{ teacher.full_name|escapejs }}')">
+                    <i class="bi bi-x-lg"></i> حذف نهائي
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if deleted_groups %}
+    <div class="section-card">
+        <div class="section-header">
+            <i class="bi bi-people" style="color: #059669;"></i>
+            المجموعات المحذوفة
+            <span class="count">{{ groups_count }}</span>
+        </div>
+        {% for group in deleted_groups %}
+        <div class="deleted-item" id="item-group-{{ group.group_id }}">
+            <div class="item-info">
+                <div class="item-avatar group">
+                    <i class="bi bi-people"></i>
+                </div>
+                <div>
+                    <div class="item-name">{{ group.group_name }}</div>
+                    <div class="item-detail">
+                        {% if group.teacher %}{{ group.teacher.full_name }} | {% endif %}
+                        حُذف {{ group.deleted_at|timesince }}
+                        {% if group.deleted_by %}بواسطة {{ group.deleted_by.get_full_name|default:group.deleted_by.username }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="item-actions">
+                <button class="btn-restore" onclick="restoreItem('group', {{ group.group_id }})">
+                    <i class="bi bi-arrow-counterclockwise"></i> استعادة
+                </button>
+                <button class="btn-permanent-delete" onclick="permanentDelete('group', {{ group.group_id }}, '{{ group.group_name|escapejs }}')">
+                    <i class="bi bi-x-lg"></i> حذف نهائي
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if deleted_rooms %}
+    <div class="section-card">
+        <div class="section-header">
+            <i class="bi bi-building" style="color: #d97706;"></i>
+            القاعات المحذوفة
+            <span class="count">{{ rooms_count }}</span>
+        </div>
+        {% for room in deleted_rooms %}
+        <div class="deleted-item" id="item-room-{{ room.room_id }}">
+            <div class="item-info">
+                <div class="item-avatar room">
+                    <i class="bi bi-building"></i>
+                </div>
+                <div>
+                    <div class="item-name">{{ room.name }}</div>
+                    <div class="item-detail">
+                        سعة: {{ room.capacity }}
+                        | حُذف {{ room.deleted_at|timesince }}
+                        {% if room.deleted_by %}بواسطة {{ room.deleted_by.get_full_name|default:room.deleted_by.username }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="item-actions">
+                <button class="btn-restore" onclick="restoreItem('room', {{ room.room_id }})">
+                    <i class="bi bi-arrow-counterclockwise"></i> استعادة
+                </button>
+                <button class="btn-permanent-delete" onclick="permanentDelete('room', {{ room.room_id }}, '{{ room.name|escapejs }}')">
+                    <i class="bi bi-x-lg"></i> حذف نهائي
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+
+function restoreItem(type, id) {
+    if (!confirm('هل تريد استعادة هذا العنصر؟')) return;
+
+    const formData = new FormData();
+    formData.append('type', type);
+    formData.append('id', id);
+
+    fetch('{% url "reports:recycle_restore" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const el = document.getElementById(`item-${type}-${id}`);
+            if (el) {
+                el.style.transition = 'opacity 0.3s, transform 0.3s';
+                el.style.opacity = '0';
+                el.style.transform = 'translateX(20px)';
+                setTimeout(() => {
+                    el.remove();
+                    location.reload();
+                }, 350);
+            }
+        } else {
+            alert(data.message || 'حدث خطأ');
+        }
+    })
+    .catch(() => alert('حدث خطأ في الاتصال'));
+}
+
+function permanentDelete(type, id, name) {
+    if (!confirm(`⚠️ هل أنت متأكد من الحذف النهائي لـ "${name}"؟\nلا يمكن التراجع عن هذا الإجراء!`)) return;
+
+    const formData = new FormData();
+    formData.append('type', type);
+    formData.append('id', id);
+
+    fetch('{% url "reports:recycle_permanent_delete" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrfToken },
+        body: formData
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const el = document.getElementById(`item-${type}-${id}`);
+            if (el) {
+                el.style.transition = 'opacity 0.3s, background 0.3s';
+                el.style.opacity = '0';
+                el.style.background = '#fee2e2';
+                setTimeout(() => {
+                    el.remove();
+                    location.reload();
+                }, 350);
+            }
+        } else {
+            alert(data.message || 'حدث خطأ');
+        }
+    })
+    .catch(() => alert('حدث خطأ في الاتصال'));
+}
+</script>
+{% endblock %}

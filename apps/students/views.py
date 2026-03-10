@@ -214,14 +214,25 @@ def student_create(request):
             with transaction.atomic():
                 student = form.save()
 
-                # Add to selected groups if any
+                # Add to selected groups if any, with financial status
                 for group_id in selected_groups:
                     try:
                         group = Group.objects.get(pk=group_id)
+                        financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
+                        if financial_status not in ('normal', 'symbolic', 'exempt'):
+                            financial_status = 'normal'
+                        custom_fee = None
+                        if financial_status == 'symbolic':
+                            try:
+                                custom_fee = request.POST.get(f'custom_fee_{group_id}')
+                                custom_fee = float(custom_fee) if custom_fee else None
+                            except (ValueError, TypeError):
+                                custom_fee = None
                         StudentGroupEnrollment.objects.create(
                             student=student,
                             group=group,
-                            financial_status='normal',
+                            financial_status=financial_status,
+                            custom_fee=custom_fee,
                             is_active=True
                         )
                     except Group.DoesNotExist:
@@ -272,6 +283,14 @@ def student_update(request, student_id):
         is_active=True
     )
     current_group_ids = set(current_enrollments.values_list('group_id', flat=True))
+    
+    # Build enrollment data for template (financial status per group)
+    enrollment_data = {}
+    for enrollment in current_enrollments:
+        enrollment_data[enrollment.group_id] = {
+            'financial_status': enrollment.financial_status,
+            'custom_fee': str(enrollment.custom_fee) if enrollment.custom_fee else '',
+        }
 
     if request.method == 'POST':
         form = StudentForm(request.POST, instance=student)
@@ -288,11 +307,22 @@ def student_update(request, student_id):
                 for group_id in selected_group_ids - current_group_ids:
                     try:
                         group = Group.objects.get(pk=group_id)
+                        financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
+                        if financial_status not in ('normal', 'symbolic', 'exempt'):
+                            financial_status = 'normal'
+                        custom_fee = None
+                        if financial_status == 'symbolic':
+                            try:
+                                custom_fee = request.POST.get(f'custom_fee_{group_id}')
+                                custom_fee = float(custom_fee) if custom_fee else None
+                            except (ValueError, TypeError):
+                                custom_fee = None
                         StudentGroupEnrollment.objects.get_or_create(
                             student=student,
                             group=group,
                             defaults={
-                                'financial_status': 'normal',
+                                'financial_status': financial_status,
+                                'custom_fee': custom_fee,
                                 'is_active': True
                             }
                         )
@@ -316,6 +346,7 @@ def student_update(request, student_id):
         'student': student,
         'groups': groups,
         'current_group_ids': current_group_ids,
+        'enrollment_data_json': json.dumps(enrollment_data),
         'is_create': False
     })
 
@@ -323,14 +354,24 @@ def student_update(request, student_id):
 @supervisor_required
 def student_delete(request, student_id):
     """
-    Soft delete a student (set is_active=False).
+    Soft delete a student (move to recycle bin).
     """
     student = get_object_or_404(Student, pk=student_id)
 
     if request.method == 'POST':
-        student.is_active = False
-        student.save()
-        messages.success(request, 'تم حذف الطالب بنجاح')
+        student.soft_delete(user=request.user)
+        
+        # Log the deletion
+        ActivityLog.log(
+            user=request.user,
+            action='student_delete',
+            description=f'حذف طالب (سلة المهملات): {student.full_name} (كود: {student.student_code})',
+            target_model='Student',
+            target_id=student.student_id,
+            request=request
+        )
+        
+        messages.success(request, f'تم نقل الطالب "{student.full_name}" إلى سلة المهملات')
         return redirect('students:list')
 
     return render(request, 'students/delete_confirm.html', {'student': student})

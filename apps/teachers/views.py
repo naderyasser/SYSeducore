@@ -77,9 +77,8 @@ def teacher_update(request, teacher_id):
 def teacher_delete(request, teacher_id):
     teacher = get_object_or_404(Teacher, pk=teacher_id)
     if request.method == 'POST':
-        teacher.is_active = False
-        teacher.save()
-        messages.success(request, 'تم حذف المدرس بنجاح')
+        teacher.soft_delete(user=request.user)
+        messages.success(request, f'تم نقل المدرس "{teacher.full_name}" إلى سلة المهملات')
     return redirect('teachers:list')
 
 
@@ -182,9 +181,8 @@ def room_update(request, room_id):
 def room_delete(request, room_id):
     room = get_object_or_404(Room, pk=room_id)
     if request.method == 'POST':
-        room.is_active = False
-        room.save()
-        messages.success(request, 'تم حذف القاعة بنجاح')
+        room.soft_delete(user=request.user)
+        messages.success(request, f'تم نقل القاعة "{room.name}" إلى سلة المهملات')
     return redirect('teachers:room_list')
 
 
@@ -308,9 +306,8 @@ def group_update(request, group_id):
 def group_delete(request, group_id):
     group = get_object_or_404(Group, pk=group_id)
     if request.method == 'POST':
-        group.is_active = False
-        group.save()
-        messages.success(request, 'تم حذف المجموعة بنجاح')
+        group.soft_delete(user=request.user)
+        messages.success(request, f'تم نقل المجموعة "{group.group_name}" إلى سلة المهملات')
     return redirect('teachers:group_list')
 
 

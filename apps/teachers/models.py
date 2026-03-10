@@ -1,9 +1,10 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from datetime import datetime, timedelta
+from apps.core.models import SoftDeleteModel
 
 
-class Room(models.Model):
+class Room(SoftDeleteModel):
     """
     Room model for managing classrooms.
     موديل القاعات الدراسية
@@ -43,7 +44,7 @@ class Subject(models.Model):
         return self.name
 
 
-class Teacher(models.Model):
+class Teacher(SoftDeleteModel):
     """
     Teacher model for managing teachers.
     """
@@ -104,7 +105,7 @@ class Teacher(models.Model):
         return self.specialization or "-"
 
 
-class Group(models.Model):
+class Group(SoftDeleteModel):
     """
     Group model for managing student groups.
     يدعم مدة الحصة + منع التعارض الذكي (تداخل الوقت) + تصنيف الجنس والمرحلة
