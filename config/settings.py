@@ -62,10 +62,14 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'apps.accounts.middleware.SystemLockoutMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.accounts.middleware.SessionTimeoutMiddleware',
 ]
+
+# System Lockout - set to True to block all access
+SYSTEM_LOCKOUT = True
 
 ROOT_URLCONF = 'config.urls'
 
