@@ -69,7 +69,7 @@ MIDDLEWARE = [
 ]
 
 # System Lockout - set to True to block all access
-SYSTEM_LOCKOUT = True
+SYSTEM_LOCKOUT = False
 
 ROOT_URLCONF = 'config.urls'
 
