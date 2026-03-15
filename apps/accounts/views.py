@@ -2,9 +2,17 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.views.decorators.cache import never_cache
 from .forms import LoginForm
 
 
+def csrf_failure(request, reason=''):
+    """Custom CSRF failure handler: redirects to login with a clear message."""
+    messages.warning(request, 'انتهت صلاحية الجلسة، يرجى المحاولة مرة أخرى.')
+    return redirect('accounts:login')
+
+
+@never_cache
 def login_view(request):
     """
     Login view for users.

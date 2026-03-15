@@ -213,6 +213,7 @@ SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 CSRF_COOKIE_HTTPONLY = False
 CSRF_USE_SESSIONS = False
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://localhost:8000,https://sys.educore.software', cast=Csv())
+CSRF_FAILURE_VIEW = 'apps.accounts.views.csrf_failure'
 
 # Proxy SSL Header (always set for reverse proxy)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
