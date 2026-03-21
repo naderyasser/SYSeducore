@@ -1,9 +1,11 @@
+from functools import wraps
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.contrib import messages as django_messages
+from django.conf import settings
 from django.db.models import Q, Count
 import json
 from .services import WhatsAppService
@@ -13,7 +15,19 @@ from apps.teachers.models import Group
 from apps.students.models import Student, StudentGroupEnrollment
 
 
+def whatsapp_required(view_func):
+    """Block access to WhatsApp views when notifications are disabled."""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if getattr(settings, 'NOTIFICATION_METHOD', 'none') != 'whatsapp':
+            django_messages.warning(request, 'خدمة الواتساب معطلة حالياً')
+            return redirect('reports:dashboard')
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
 @login_required
+@whatsapp_required
 def whatsapp_dashboard(request):
     """
     لوحة تحكم إدارة الواتساب
@@ -48,6 +62,7 @@ def whatsapp_dashboard(request):
 
 
 @login_required
+@whatsapp_required
 def send_message(request):
     """
     صفحة إرسال رسالة واتساب فردية
@@ -183,6 +198,7 @@ def send_message(request):
 
 
 @login_required
+@whatsapp_required
 def send_bulk_message(request):
     """
     صفحة الإرسال الجماعي
@@ -289,6 +305,7 @@ def send_bulk_message(request):
 
 
 @login_required
+@whatsapp_required
 def message_history(request):
     """
     سجل الرسائل المرسلة
@@ -338,6 +355,7 @@ def message_history(request):
 
 
 @login_required
+@whatsapp_required
 def contact_list(request):
     """
     قائمة جهات الاتصال (الطلاب وأولياء الأمور)
@@ -374,6 +392,7 @@ def contact_list(request):
 
 
 @login_required
+@whatsapp_required
 def manage_templates(request):
     """
     إدارة قوالب الرسائل
@@ -418,6 +437,7 @@ def manage_templates(request):
 
 
 @login_required
+@whatsapp_required
 def test_whatsapp(request):
     """
     Test WhatsApp sending (for development only).
