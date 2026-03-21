@@ -147,7 +147,7 @@ class StudentModelTest(BaseTestMixin, TestCase):
         self.assertTrue(self.student.is_subscription_active())
 
     def test_subscription_expired(self):
-        self.student.subscription_expiry_date = date.today() - timedelta(days=1)
+        self.student.subscription_expiry_date = timezone.now().date() - timedelta(days=1)
         self.student.save()
         self.assertFalse(self.student.is_subscription_active())
 
