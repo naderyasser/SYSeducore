@@ -12,7 +12,7 @@ from .models import Teacher, Group, Room, Subject
 from .forms import TeacherForm, GroupForm, RoomForm, SubjectForm
 
 from apps.students.models import Student, StudentGroupEnrollment
-from apps.attendance.models import Session, Attendance
+from apps.attendance.models import Session, Attendance, ActivityLog
 
 
 # ==================== Teachers ====================
@@ -51,7 +51,12 @@ def teacher_create(request):
     if request.method == 'POST':
         form = TeacherForm(request.POST, request.FILES)
         if form.is_valid():
-            form.save()
+            teacher = form.save()
+            ActivityLog.log(
+                user=request.user, action='teacher_create',
+                description=f'إضافة مدرس: {teacher.full_name}',
+                target_model='Teacher', target_id=teacher.pk, request=request
+            )
             messages.success(request, 'تم إضافة المدرس بنجاح')
             return redirect('teachers:list')
     else:
@@ -66,6 +71,11 @@ def teacher_update(request, teacher_id):
         form = TeacherForm(request.POST, request.FILES, instance=teacher)
         if form.is_valid():
             form.save()
+            ActivityLog.log(
+                user=request.user, action='teacher_update',
+                description=f'تعديل بيانات المدرس: {teacher.full_name}',
+                target_model='Teacher', target_id=teacher.pk, request=request
+            )
             messages.success(request, 'تم تحديث بيانات المدرس بنجاح')
             return redirect('teachers:detail', teacher_id=teacher_id)
     else:
@@ -78,6 +88,11 @@ def teacher_delete(request, teacher_id):
     teacher = get_object_or_404(Teacher, pk=teacher_id)
     if request.method == 'POST':
         teacher.soft_delete(user=request.user)
+        ActivityLog.log(
+            user=request.user, action='teacher_delete',
+            description=f'حذف مدرس (سلة المهملات): {teacher.full_name}',
+            target_model='Teacher', target_id=teacher.pk, request=request
+        )
         messages.success(request, f'تم نقل المدرس "{teacher.full_name}" إلى سلة المهملات')
     return redirect('teachers:list')
 
@@ -95,7 +110,12 @@ def room_create(request):
     if request.method == 'POST':
         form = RoomForm(request.POST)
         if form.is_valid():
-            form.save()
+            room = form.save()
+            ActivityLog.log(
+                user=request.user, action='room_create',
+                description=f'إضافة قاعة: {room.name}',
+                target_model='Room', target_id=room.pk, request=request
+            )
             messages.success(request, 'تم إضافة القاعة بنجاح')
             return redirect('teachers:room_list')
     else:
@@ -170,6 +190,11 @@ def room_update(request, room_id):
         form = RoomForm(request.POST, instance=room)
         if form.is_valid():
             form.save()
+            ActivityLog.log(
+                user=request.user, action='room_update',
+                description=f'تعديل بيانات القاعة: {room.name}',
+                target_model='Room', target_id=room.pk, request=request
+            )
             messages.success(request, 'تم تحديث بيانات القاعة بنجاح')
             return redirect('teachers:room_list')
     else:
@@ -182,6 +207,11 @@ def room_delete(request, room_id):
     room = get_object_or_404(Room, pk=room_id)
     if request.method == 'POST':
         room.soft_delete(user=request.user)
+        ActivityLog.log(
+            user=request.user, action='room_delete',
+            description=f'حذف قاعة (سلة المهملات): {room.name}',
+            target_model='Room', target_id=room.pk, request=request
+        )
         messages.success(request, f'تم نقل القاعة "{room.name}" إلى سلة المهملات')
     return redirect('teachers:room_list')
 
@@ -243,7 +273,13 @@ def group_create(request):
                         education_year=form.cleaned_data.get('education_year'),
                         standard_fee=form.cleaned_data['standard_fee'],
                         center_percentage=form.cleaned_data.get('center_percentage', 30),
+                        sessions_per_month=form.cleaned_data.get('sessions_per_month', 4),
                         is_active=form.cleaned_data.get('is_active', True),
+                    )
+                    ActivityLog.log(
+                        user=request.user, action='group_create',
+                        description=f'إنشاء مجموعة: {group.group_name}',
+                        target_model='Group', target_id=group.pk, request=request
                     )
                     created_groups.append(group)
                 except ValidationError as e:
@@ -295,6 +331,11 @@ def group_update(request, group_id):
         form = GroupForm(request.POST, instance=group)
         if form.is_valid():
             form.save()
+            ActivityLog.log(
+                user=request.user, action='group_update',
+                description=f'تعديل بيانات المجموعة: {group.group_name}',
+                target_model='Group', target_id=group.pk, request=request
+            )
             messages.success(request, 'تم تحديث بيانات المجموعة بنجاح')
             return redirect('teachers:group_list')
     else:
@@ -307,6 +348,11 @@ def group_delete(request, group_id):
     group = get_object_or_404(Group, pk=group_id)
     if request.method == 'POST':
         group.soft_delete(user=request.user)
+        ActivityLog.log(
+            user=request.user, action='group_delete',
+            description=f'حذف مجموعة (سلة المهملات): {group.group_name}',
+            target_model='Group', target_id=group.pk, request=request
+        )
         messages.success(request, f'تم نقل المجموعة "{group.group_name}" إلى سلة المهملات')
     return redirect('teachers:group_list')
 
@@ -341,7 +387,12 @@ def subject_create(request):
     if request.method == 'POST':
         form = SubjectForm(request.POST)
         if form.is_valid():
-            form.save()
+            subject = form.save()
+            ActivityLog.log(
+                user=request.user, action='subject_create',
+                description=f'إضافة مادة دراسية: {subject.name}',
+                target_model='Subject', target_id=subject.pk, request=request
+            )
             messages.success(request, 'تم إضافة المادة الدراسية بنجاح')
             return redirect('teachers:subject_list')
     else:
@@ -377,6 +428,11 @@ def subject_update(request, subject_id):
         form = SubjectForm(request.POST, instance=subject)
         if form.is_valid():
             form.save()
+            ActivityLog.log(
+                user=request.user, action='subject_update',
+                description=f'تعديل مادة دراسية: {subject.name}',
+                target_model='Subject', target_id=subject.pk, request=request
+            )
             messages.success(request, 'تم تحديث بيانات المادة الدراسية بنجاح')
             return redirect('teachers:subject_detail', subject_id=subject_id)
     else:
@@ -396,6 +452,11 @@ def subject_delete(request, subject_id):
     subject = get_object_or_404(Subject, pk=subject_id)
     if request.method == 'POST':
         subject_name = subject.name
+        ActivityLog.log(
+            user=request.user, action='subject_delete',
+            description=f'حذف مادة دراسية: {subject_name}',
+            target_model='Subject', target_id=subject.pk, request=request
+        )
         subject.delete()
         messages.success(request, f'تم حذف المادة ({subject_name}) بنجاح')
         return redirect('teachers:subject_list')

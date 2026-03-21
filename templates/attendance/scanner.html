@@ -910,11 +910,10 @@
                         type="text"
                         id="studentCodeInput"
                         class="code-input"
-                        placeholder="كود الطالب"
+                        placeholder="كود الطالب (يدوي أو مسدس الباركود)"
                         autofocus
                         autocomplete="off"
-                        inputmode="numeric"
-                        maxlength="6"
+                        maxlength="20"
                     >
                     <div class="input-status">
                         <span class="status-dot"></span>
@@ -1125,6 +1124,16 @@ async function initializeApp() {
     // Setup event listeners
     input.addEventListener('keypress', handleKeyPress);
     input.addEventListener('input', handleInput);
+
+    // Keep focus on input for barcode scanner gun support
+    // Re-focus after a short delay when focus is lost (unless user is in a modal)
+    input.addEventListener('blur', function() {
+        setTimeout(function() {
+            if (!document.querySelector('.modal.show') && document.getElementById('manualInput').style.display !== 'none') {
+                input.focus();
+            }
+        }, 100);
+    });
     
     // Setup mode switch buttons
     const manualModeBtn = document.getElementById('manualModeBtn');
@@ -1157,10 +1166,9 @@ async function initializeApp() {
     setInterval(updateClock, 60000);
 }
 
-// Handle Input
+// Handle Input - allow alphanumeric for barcode scanner guns
 function handleInput(e) {
-    // Only allow numbers
-    e.target.value = e.target.value.replace(/[^0-9]/g, '');
+    e.target.value = e.target.value.replace(/[^0-9a-zA-Z]/g, '');
 }
 
 // Handle Key Press

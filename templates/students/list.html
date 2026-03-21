@@ -341,6 +341,16 @@
         color: #fff;
     }
 
+    .action-btn.delete {
+        background: #fee2e2;
+        color: #dc2626;
+    }
+
+    .action-btn.delete:hover {
+        background: #ef4444;
+        color: #fff;
+    }
+
     /* Barcode Modal */
     .barcode-modal {
         display: none;
@@ -785,6 +795,9 @@
                     <a href="{% url 'students:update' student_id=student.student_id %}" class="action-btn edit" title="تعديل">
                         <i class="bi bi-pencil"></i>
                     </a>
+                    <button class="action-btn delete" onclick="confirmDeleteStudent({{ student.student_id }}, '{{ student.full_name|escapejs }}')" title="حذف">
+                        <i class="bi bi-trash"></i>
+                    </button>
                 </td>
             </tr>
             {% endfor %}
@@ -824,6 +837,27 @@
     </div>
 </div>
 
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteStudentModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius: 16px; border: none;">
+            <div class="modal-body text-center py-4">
+                <i class="bi bi-exclamation-triangle" style="font-size: 3rem; color: #dc2626;"></i>
+                <h5 class="mt-3 mb-2">تأكيد حذف الطالب</h5>
+                <p class="text-muted" id="deleteStudentMsg">هل أنت متأكد من حذف هذا الطالب؟</p>
+                <p class="text-muted small">سيتم نقل الطالب إلى سلة المهملات ويمكن استعادته لاحقاً</p>
+                <form id="deleteStudentForm" method="post" class="mt-3">
+                    {% csrf_token %}
+                    <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal" style="border-radius: 10px;">إلغاء</button>
+                    <button type="submit" class="btn btn-danger" style="border-radius: 10px;">
+                        <i class="bi bi-trash me-1"></i>حذف
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Add to Group Modal -->
 <div class="group-modal" id="groupModal">
     <div class="group-modal-content">
@@ -847,6 +881,13 @@
 // Global variables
 let currentStudentId = null;
 let currentBarcodeImage = null;
+
+// Delete student
+function confirmDeleteStudent(studentId, studentName) {
+    document.getElementById('deleteStudentMsg').textContent = `هل أنت متأكد من حذف الطالب "${studentName}"؟`;
+    document.getElementById('deleteStudentForm').action = `/students/${studentId}/delete/`;
+    new bootstrap.Modal(document.getElementById('deleteStudentModal')).show();
+}
 let currentStudentCode = null;
 let availableGroupsCache = {};
 

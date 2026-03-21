@@ -510,11 +510,21 @@
                                 <div id="custom_fee_{{ group.group_id }}" style="display: none;">
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text">المبلغ بعد الخصم</span>
-                                        <input type="number" name="custom_fee_{{ group.group_id }}" 
+                                        <input type="number" name="custom_fee_{{ group.group_id }}"
                                             class="form-control" min="0" step="0.01" placeholder="أدخل المبلغ">
                                         <span class="input-group-text">ج.م</span>
                                     </div>
                                 </div>
+                                {% if is_create %}
+                                <div style="margin-top: 8px;">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text"><i class="bi bi-cash me-1"></i> دفعة أولى</span>
+                                        <input type="number" name="initial_payment_{{ group.group_id }}"
+                                            class="form-control" min="0" step="0.01" placeholder="اختياري">
+                                        <span class="input-group-text">ج.م</span>
+                                    </div>
+                                </div>
+                                {% endif %}
                             </div>
                         </label>
                         {% endfor %}

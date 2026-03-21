@@ -12,6 +12,9 @@ urlpatterns = [
     path('payments/', views.payment_report, name='payments'),
     path('financial/', views.financial_report, name='financial'),
     
+    # Activity Log - سجل النشاط
+    path('activity-log/', views.activity_log, name='activity_log'),
+
     # Recycle Bin - سلة المهملات
     path('recycle-bin/', views.recycle_bin, name='recycle_bin'),
     path('recycle-bin/restore/', views.recycle_restore, name='recycle_restore'),

@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if is_create %}إضافة مستخدم{% else %}تعديل مستخدم{% endif %}{% endblock %}
+{% block page_title %}{% if is_create %}إضافة مستخدم جديد{% else %}تعديل مستخدم{% endif %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container { max-width: 700px; margin: 0 auto; }
+    .form-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 30px; margin-bottom: 24px; }
+    .form-card h3 { font-size: 1.1rem; font-weight: 700; color: #1f2937; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+    .form-card h3 i { color: #3b82f6; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-weight: 600; color: #374151; margin-bottom: 6px; font-size: 0.9rem; }
+    .form-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+    @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <form method="post">
+        {% csrf_token %}
+
+        {% if form.errors %}
+        <div class="alert alert-danger" style="border-radius: 12px;">
+            <i class="bi bi-exclamation-triangle me-1"></i>
+            يرجى تصحيح الأخطاء التالية:
+            <ul class="mb-0 mt-2">
+                {% for field, errors in form.errors.items %}
+                    {% for error in errors %}
+                    <li>{{ error }}</li>
+                    {% endfor %}
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="form-card">
+            <h3><i class="bi bi-person"></i> بيانات المستخدم</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>اسم المستخدم *</label>
+                    {{ form.username }}
+                </div>
+                <div class="form-group">
+                    <label>الدور *</label>
+                    {{ form.role }}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>الاسم الأول</label>
+                    {{ form.first_name }}
+                </div>
+                <div class="form-group">
+                    <label>اسم العائلة</label>
+                    {{ form.last_name }}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>البريد الإلكتروني</label>
+                    {{ form.email }}
+                </div>
+                <div class="form-group">
+                    <label>رقم الهاتف</label>
+                    {{ form.phone }}
+                </div>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <h3><i class="bi bi-shield-lock"></i> كلمة المرور</h3>
+            {% if is_create %}
+            <div class="form-row">
+                <div class="form-group">
+                    <label>كلمة المرور</label>
+                    {{ form.password1 }}
+                    <small class="text-muted">اتركه فارغاً لتوليد كلمة مرور تلقائياً</small>
+                </div>
+                <div class="form-group">
+                    <label>تأكيد كلمة المرور</label>
+                    {{ form.password2 }}
+                </div>
+            </div>
+            {% else %}
+            <div class="form-group">
+                <label>كلمة مرور جديدة</label>
+                {{ form.new_password }}
+                <small class="text-muted">اتركه فارغاً لعدم تغيير كلمة المرور</small>
+            </div>
+            <div class="form-group">
+                <label class="form-check-label">
+                    {{ form.is_active }} نشط
+                </label>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="form-actions">
+            <a href="{% url 'accounts:user_list' %}" class="btn btn-secondary" style="border-radius: 10px;">
+                <i class="bi bi-arrow-right me-1"></i> إلغاء
+            </a>
+            <button type="submit" class="btn btn-primary" style="border-radius: 10px;">
+                <i class="bi bi-check-lg me-1"></i>
+                {% if is_create %}إنشاء المستخدم{% else %}حفظ التغييرات{% endif %}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

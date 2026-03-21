@@ -6,6 +6,7 @@ from django.utils import timezone
 from .models import Payment
 from .services import SettlementService
 from apps.teachers.models import Teacher
+from apps.attendance.models import ActivityLog
 
 
 @login_required
@@ -61,7 +62,13 @@ def record_payment(request, payment_id):
             payment.status = 'partial'
         
         payment.save()
-        
+
+        ActivityLog.log(
+            user=request.user, action='payment_record',
+            description=f'تسجيل دفعة: {amount} جنيه للطالب {payment.student.full_name}',
+            target_model='Payment', target_id=payment.pk, request=request
+        )
+
         return JsonResponse({'success': True, 'new_amount_paid': float(payment.amount_paid)})
     except Payment.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Payment not found'}, status=404)

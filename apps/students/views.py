@@ -13,6 +13,7 @@ from .forms import StudentForm, StudentQuickForm
 from apps.teachers.models import Group
 from apps.accounts.decorators import supervisor_required
 from apps.attendance.models import Attendance, ActivityLog
+from apps.payments.models import Payment
 
 
 @login_required
@@ -228,13 +229,35 @@ def student_create(request):
                                 custom_fee = float(custom_fee) if custom_fee else None
                             except (ValueError, TypeError):
                                 custom_fee = None
-                        StudentGroupEnrollment.objects.create(
+                        enrollment = StudentGroupEnrollment.objects.create(
                             student=student,
                             group=group,
                             financial_status=financial_status,
                             custom_fee=custom_fee,
                             is_active=True
                         )
+
+                        # Handle initial payment if provided
+                        initial_payment = request.POST.get(f'initial_payment_{group_id}')
+                        if initial_payment:
+                            try:
+                                amount = float(initial_payment)
+                                if amount > 0:
+                                    amount_due = float(custom_fee) if custom_fee else float(group.standard_fee)
+                                    if financial_status == 'exempt':
+                                        amount_due = 0
+                                    payment_status = 'paid' if amount >= amount_due else ('partial' if amount > 0 else 'unpaid')
+                                    Payment.objects.create(
+                                        student=student,
+                                        group=group,
+                                        month=timezone.now().date().replace(day=1),
+                                        amount_due=amount_due,
+                                        amount_paid=amount,
+                                        payment_date=timezone.now(),
+                                        status=payment_status,
+                                    )
+                            except (ValueError, TypeError):
+                                pass
                     except Group.DoesNotExist:
                         pass
 
@@ -336,6 +359,11 @@ def student_update(request, student_id):
                         group_id=group_id
                     ).update(is_active=False)
 
+            ActivityLog.log(
+                user=request.user, action='student_update',
+                description=f'تعديل بيانات الطالب: {student.full_name} (كود: {student.student_code})',
+                target_model='Student', target_id=student.student_id, request=request
+            )
             messages.success(request, 'تم تحديث بيانات الطالب بنجاح')
             return redirect('students:detail', student_id=student.student_id)
     else:
@@ -452,6 +480,13 @@ def student_toggle_status(request, student_id):
     student = get_object_or_404(Student, pk=student_id)
     student.is_active = not student.is_active
     student.save()
+
+    status_text = 'تفعيل' if student.is_active else 'تعطيل'
+    ActivityLog.log(
+        user=request.user, action='student_toggle',
+        description=f'{status_text} طالب: {student.full_name} (كود: {student.student_code})',
+        target_model='Student', target_id=student.student_id, request=request
+    )
 
     return JsonResponse({
         'success': True,
