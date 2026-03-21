@@ -111,8 +111,9 @@ class SettlementServiceTest(TestCase):
         result = self.service.calculate_teacher_settlement(
             self.teacher.pk, now.year, now.month,
         )
-        self.assertIn('total_revenue', result)
-        self.assertIn('teacher_share', result)
+        self.assertTrue(result.get('success'))
+        self.assertIn('total_revenue', result['data'])
+        self.assertIn('teacher_share', result['data'])
 
     def test_calculate_group_revenue(self):
         """Test group revenue calculation"""
@@ -120,7 +121,7 @@ class SettlementServiceTest(TestCase):
         result = self.service.calculate_group_revenue(
             self.group.pk, now.year, now.month,
         )
-        self.assertIn('total_revenue', result)
+        self.assertIn('revenue', result)
 
     def test_calculate_settlement_with_different_center_percentage(self):
         """Test settlement with different center percentage"""
@@ -131,7 +132,7 @@ class SettlementServiceTest(TestCase):
         result = self.service.calculate_teacher_settlement(
             self.teacher.pk, now.year, now.month,
         )
-        self.assertIn('teacher_share', result)
+        self.assertIn('teacher_share', result['data'])
 
     def test_calculate_settlement_with_symbolic_students(self):
         """Test settlement with symbolic students"""
@@ -147,9 +148,10 @@ class SettlementServiceTest(TestCase):
             custom_fee=Decimal('100.00'),
         )
 
+        # Use a date that doesn't conflict with setUp sessions
         session = Session.objects.create(
             group=self.group,
-            session_date=timezone.now().date(),
+            session_date=timezone.now().date() + timedelta(days=1),
         )
 
         Attendance.objects.create(
@@ -162,7 +164,8 @@ class SettlementServiceTest(TestCase):
         result = self.service.calculate_teacher_settlement(
             self.teacher.pk, now.year, now.month,
         )
-        self.assertIn('total_revenue', result)
+        self.assertTrue(result.get('success'))
+        self.assertIn('total_revenue', result['data'])
 
 
 class PaymentModelTest(TestCase):
