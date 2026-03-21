@@ -35,24 +35,32 @@ class NotificationTimingTest(TestCase):
             hire_date=timezone.now().date()
         )
 
+        # Create room
+        from apps.teachers.models import Room
+        self.room = Room.objects.create(name='Notif Room', capacity=30)
+
         # Create group with session at 10:00 AM
         self.group = Group.objects.create(
             group_name='Test Group',
             teacher=self.teacher,
+            room=self.room,
             schedule_day='Saturday',
             schedule_time=time(10, 0),
-            grace_period=10,
             standard_fee=300.00,
             center_percentage=30.00
         )
 
         # Create student
         self.student = Student.objects.create(
+            student_code='NOTIF001',
             full_name='Test Student',
-            barcode='TEST123',
-            group=self.group,
             parent_phone='01234567891',
-            financial_status='normal'
+        )
+        from apps.students.models import StudentGroupEnrollment
+        StudentGroupEnrollment.objects.create(
+            student=self.student,
+            group=self.group,
+            financial_status='normal',
         )
 
         # Create session
@@ -213,8 +221,9 @@ class WhatsAppServiceTest(TestCase):
         """Test successful message sending"""
         # Mock successful API response
         mock_response = MagicMock()
+        mock_response.status_code = 200
         mock_response.json.return_value = {
-            'status': 'success',
+            'success': True,
             'message_id': '123456'
         }
         mock_post.return_value = mock_response
