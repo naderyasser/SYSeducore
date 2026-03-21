@@ -32,7 +32,19 @@ class Subject(models.Model):
     Subject model for managing subjects/specializations.
     موديل المواد الدراسية
     """
+    EDUCATION_STAGE_CHOICES = [
+        ('primary', 'ابتدائي'),
+        ('preparatory', 'إعدادي'),
+        ('secondary', 'ثانوي'),
+    ]
+
     name = models.CharField(max_length=100, unique=True, verbose_name="اسم المادة")
+    education_stage = models.CharField(
+        max_length=20,
+        choices=EDUCATION_STAGE_CHOICES,
+        blank=True,
+        verbose_name="المرحلة الدراسية"
+    )
 
     class Meta:
         db_table = 'subjects'
@@ -205,6 +217,10 @@ class Group(SoftDeleteModel):
         default=30.00,
         verbose_name="نسبة السنتر %"
     )
+    sessions_per_month = models.PositiveIntegerField(
+        default=4,
+        verbose_name="عدد الحصص في الشهر"
+    )
 
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -231,6 +247,20 @@ class Group(SoftDeleteModel):
         ولكن يمنع الحجز الساعة 12:00
         """
         super().clean()
+
+        # التحقق من صحة المرحلة والسنة الدراسية
+        STAGE_YEAR_MAP = {
+            'primary': ['1', '2', '3', '4', '5', '6'],
+            'preparatory': ['1', '2', '3'],
+            'secondary': ['1', '2', '3'],
+        }
+        if self.education_stage and self.education_year:
+            valid_years = STAGE_YEAR_MAP.get(self.education_stage, [])
+            if self.education_year not in valid_years:
+                stage_display = dict(self.EDUCATION_STAGE_CHOICES).get(self.education_stage, self.education_stage)
+                raise ValidationError({
+                    'education_year': f'الصف {self.education_year} غير متاح للمرحلة {stage_display}'
+                })
 
         if self.room and self.schedule_day and self.schedule_time:
             # حساب أوقات البداية والنهاية لهذه المجموعة

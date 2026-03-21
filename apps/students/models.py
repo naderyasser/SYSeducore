@@ -188,6 +188,22 @@ class Student(SoftDeleteModel):
             return "رقم الأب"
         return "رقم الأم/الأخت"
 
+    def clean(self):
+        super().clean()
+        STAGE_YEAR_MAP = {
+            'primary': ['1', '2', '3', '4', '5', '6'],
+            'preparatory': ['1', '2', '3'],
+            'secondary': ['1', '2', '3'],
+        }
+        if self.education_stage and self.education_year:
+            valid_years = STAGE_YEAR_MAP.get(self.education_stage, [])
+            if self.education_year not in valid_years:
+                from django.core.exceptions import ValidationError
+                stage_display = dict(self.EDUCATION_STAGE_CHOICES).get(self.education_stage, self.education_stage)
+                raise ValidationError({
+                    'education_year': f'الصف {self.education_year} غير متاح للمرحلة {stage_display}'
+                })
+
     def save(self, *args, **kwargs):
         """Auto-generate student code if not provided"""
         if not self.student_code:

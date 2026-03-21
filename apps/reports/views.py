@@ -29,6 +29,9 @@ def report_password_required(view_func):
     """
     @functools.wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
+        # Admin users bypass password requirement
+        if hasattr(request, 'user') and request.user.is_authenticated and request.user.role == 'admin':
+            return view_func(request, *args, **kwargs)
         if not request.session.get('report_authenticated'):
             # Save the original URL to redirect back after authentication
             request.session['report_redirect_after'] = request.get_full_path()
@@ -461,6 +464,49 @@ def financial_report(request):
     return render(request, 'reports/financial.html', context)
 
 
+# ==================== Activity Log ====================
+
+@login_required
+def activity_log(request):
+    """سجل النشاط - عرض جميع العمليات التي قام بها المستخدمون"""
+    from apps.accounts.models import User
+    from apps.accounts.decorators import admin_required
+
+    logs = ActivityLog.objects.select_related('user').order_by('-created_at')
+
+    # Filters
+    action_filter = request.GET.get('action', '')
+    user_filter = request.GET.get('user', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+
+    if action_filter:
+        logs = logs.filter(action=action_filter)
+    if user_filter:
+        logs = logs.filter(user_id=user_filter)
+    if date_from:
+        logs = logs.filter(created_at__date__gte=date_from)
+    if date_to:
+        logs = logs.filter(created_at__date__lte=date_to)
+
+    # Pagination
+    from django.core.paginator import Paginator
+    paginator = Paginator(logs, 50)
+    page = request.GET.get('page', 1)
+    logs_page = paginator.get_page(page)
+
+    context = {
+        'logs': logs_page,
+        'action_choices': ActivityLog.ACTION_CHOICES,
+        'users': User.objects.filter(is_active=True).order_by('username'),
+        'current_action': action_filter,
+        'current_user': user_filter,
+        'date_from': date_from,
+        'date_to': date_to,
+    }
+    return render(request, 'reports/activity_log.html', context)
+
+
 # ==================== Recycle Bin ====================
 
 @login_required
@@ -472,7 +518,7 @@ def recycle_bin(request):
     
     deleted_students = Student.all_objects.dead().select_related('deleted_by')
     deleted_teachers = Teacher.all_objects.dead().select_related('deleted_by')
-    deleted_groups = Group.all_objects.dead().select_related('teacher', 'deleted_by')
+    deleted_groups = Group.all_objects.dead().select_related('deleted_by')
     deleted_rooms = Room.all_objects.dead().select_related('deleted_by')
     
     context = {

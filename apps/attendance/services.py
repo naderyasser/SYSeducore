@@ -423,6 +423,17 @@ class AttendanceService:
         # - الشهور التالية: يدخل حصتين قبل الدفع (2 حصص سماح)
         allowed_sessions = 0 if is_first_month else 2
 
+        # التحقق من استنفاد الحصص الشهرية
+        sessions_limit = group.sessions_per_month
+        if sessions_count >= sessions_limit:
+            return {
+                'allowed': False,
+                'reason': f'تم استنفاد جميع الحصص ({sessions_limit} حصة) لهذا الشهر. يرجى تجديد الاشتراك.',
+                'error_type': 'sessions_exhausted',
+                'sessions_attended': sessions_count,
+                'sessions_limit': sessions_limit,
+            }
+
         # منع الدخول بعد الحصة المسموح إذا لم يدفع
         if sessions_count >= allowed_sessions:
             try:
@@ -432,31 +443,23 @@ class AttendanceService:
                     month=current_month
                 )
                 if payment.status != 'paid':
+                    reason = 'ممنوع الدخول: الدفع مطلوب'
                     if is_first_month:
-                        return {
-                            'allowed': False,
-                            'reason': 'ممنوع الدخول: الدفع مطلوب (الشهر الأول)',
-                            'error_type': 'payment_required'
-                        }
-                    else:
-                        return {
-                            'allowed': False,
-                            'reason': 'ممنوع الدخول: الدفع مطلوب',
-                            'error_type': 'payment_required'
-                        }
+                        reason += ' (الشهر الأول)'
+                    return {
+                        'allowed': False,
+                        'reason': reason,
+                        'error_type': 'payment_required'
+                    }
             except Payment.DoesNotExist:
+                reason = 'ممنوع الدخول: الدفع مطلوب'
                 if is_first_month:
-                    return {
-                        'allowed': False,
-                        'reason': 'ممنوع الدخول: الدفع مطلوب (الشهر الأول)',
-                        'error_type': 'payment_required'
-                    }
-                else:
-                    return {
-                        'allowed': False,
-                        'reason': 'ممنوع الدخول: الدفع مطلوب',
-                        'error_type': 'payment_required'
-                    }
+                    reason += ' (الشهر الأول)'
+                return {
+                    'allowed': False,
+                    'reason': reason,
+                    'error_type': 'payment_required'
+                }
 
         return {'allowed': True}
     
@@ -481,7 +484,8 @@ class AttendanceService:
             month=current_month,
             defaults={
                 'amount_due': student.get_monthly_fee_for_group(group),
-                'sessions_attended': sessions_count
+                'sessions_attended': sessions_count,
+                'sessions_total': group.sessions_per_month,
             }
         )
 

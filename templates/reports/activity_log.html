@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+
+{% block title %}سجل النشاط{% endblock %}
+{% block page_title %}سجل النشاط{% endblock %}
+
+{% block extra_css %}
+<style>
+    .log-container { max-width: 1200px; margin: 0 auto; }
+    .filter-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 20px 24px; margin-bottom: 20px; }
+    .filter-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; }
+    .filter-group { flex: 1; min-width: 150px; }
+    .filter-group label { display: block; font-weight: 600; color: #64748b; font-size: 0.8rem; margin-bottom: 4px; }
+    .filter-group select, .filter-group input { width: 100%; padding: 8px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; }
+    .log-table-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden; }
+    .log-table { width: 100%; border-collapse: collapse; }
+    .log-table th { background: #f8fafc; padding: 12px 16px; text-align: right; font-weight: 600; color: #64748b; font-size: 0.8rem; border-bottom: 2px solid #e2e8f0; }
+    .log-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; vertical-align: middle; }
+    .log-table tr:hover { background: #f8fafc; }
+    .action-badge { padding: 3px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .action-badge.create { background: #d1fae5; color: #059669; }
+    .action-badge.update { background: #dbeafe; color: #2563eb; }
+    .action-badge.delete { background: #fee2e2; color: #dc2626; }
+    .action-badge.other { background: #f3f4f6; color: #6b7280; }
+    .pagination-wrap { padding: 16px; display: flex; justify-content: center; gap: 4px; }
+    .pagination-wrap a, .pagination-wrap span { padding: 6px 12px; border-radius: 8px; text-decoration: none; font-size: 0.85rem; }
+    .pagination-wrap a { background: #f1f5f9; color: #374151; }
+    .pagination-wrap a:hover { background: #e2e8f0; }
+    .pagination-wrap .current { background: #3b82f6; color: #fff; }
+    @media (max-width: 768px) {
+        .log-table th:nth-child(4), .log-table td:nth-child(4),
+        .log-table th:nth-child(5), .log-table td:nth-child(5) { display: none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="log-container">
+    <div class="filter-card">
+        <form method="get" class="filter-row">
+            <div class="filter-group">
+                <label>نوع العملية</label>
+                <select name="action">
+                    <option value="">الكل</option>
+                    {% for value, label in action_choices %}
+                    <option value="{{ value }}" {% if current_action == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>المستخدم</label>
+                <select name="user">
+                    <option value="">الكل</option>
+                    {% for u in users %}
+                    <option value="{{ u.pk }}" {% if current_user == u.pk|stringformat:"d" %}selected{% endif %}>{{ u.get_full_name|default:u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>من تاريخ</label>
+                <input type="date" name="date_from" value="{{ date_from }}">
+            </div>
+            <div class="filter-group">
+                <label>إلى تاريخ</label>
+                <input type="date" name="date_to" value="{{ date_to }}">
+            </div>
+            <div class="filter-group" style="flex: 0;">
+                <button type="submit" class="btn btn-primary" style="border-radius: 8px; padding: 8px 20px;">
+                    <i class="bi bi-funnel me-1"></i> تصفية
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="log-table-card">
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th>التاريخ</th>
+                    <th>المستخدم</th>
+                    <th>العملية</th>
+                    <th>التفاصيل</th>
+                    <th>IP</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td style="white-space: nowrap; color: #6b7280;">{{ log.created_at|date:"Y/m/d H:i" }}</td>
+                    <td style="font-weight: 600;">{{ log.user.get_full_name|default:log.user.username|default:"-" }}</td>
+                    <td>
+                        <span class="action-badge {% if 'create' in log.action %}create{% elif 'update' in log.action %}update{% elif 'delete' in log.action %}delete{% else %}other{% endif %}">
+                            {{ log.get_action_display }}
+                        </span>
+                    </td>
+                    <td style="color: #374151;">{{ log.description|default:"-" }}</td>
+                    <td style="font-size: 0.8rem; color: #9ca3af; direction: ltr;">{{ log.ip_address|default:"-" }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4" style="color: #9ca3af;">لا توجد سجلات</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if logs.has_other_pages %}
+        <div class="pagination-wrap">
+            {% if logs.has_previous %}
+            <a href="?page={{ logs.previous_page_number }}&action={{ current_action }}&user={{ current_user }}&date_from={{ date_from }}&date_to={{ date_to }}">&laquo;</a>
+            {% endif %}
+            {% for num in logs.paginator.page_range %}
+                {% if logs.number == num %}
+                <span class="current">{{ num }}</span>
+                {% elif num > logs.number|add:"-3" and num < logs.number|add:"3" %}
+                <a href="?page={{ num }}&action={{ current_action }}&user={{ current_user }}&date_from={{ date_from }}&date_to={{ date_to }}">{{ num }}</a>
+                {% endif %}
+            {% endfor %}
+            {% if logs.has_next %}
+            <a href="?page={{ logs.next_page_number }}&action={{ current_action }}&user={{ current_user }}&date_from={{ date_from }}&date_to={{ date_to }}">&raquo;</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

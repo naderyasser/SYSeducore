@@ -18,6 +18,7 @@ class SoftDeleteQuerySet(models.QuerySet):
         """Return only non-deleted objects."""
         return self.filter(deleted_at__isnull=True)
 
+
     def dead(self):
         """Return only soft-deleted objects."""
         return self.filter(deleted_at__isnull=False)
@@ -30,7 +31,7 @@ class SoftDeleteManager(models.Manager):
         return SoftDeleteQuerySet(self.model, using=self._db).alive()
 
 
-class AllObjectsManager(models.Manager):
+class AllObjectsManager(models.Manager.from_queryset(SoftDeleteQuerySet)):
     """Manager that includes all objects, including soft-deleted ones."""
 
     def get_queryset(self):

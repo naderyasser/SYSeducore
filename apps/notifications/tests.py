@@ -254,8 +254,9 @@ class NotificationServiceTest(TestCase):
     """Test main notification service"""
 
     def setUp(self):
-        """Set up notification service"""
+        """Set up notification service with WhatsApp enabled"""
         self.service = NotificationService()
+        self.service.notification_method = 'whatsapp'
 
     @patch.object(WhatsAppService, 'send_attendance_notification')
     def test_send_attendance_notification_whatsapp(self, mock_send):

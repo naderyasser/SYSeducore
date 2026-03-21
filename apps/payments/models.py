@@ -42,7 +42,8 @@ class Payment(models.Model):
     )
 
     payment_date = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الدفع")
-    sessions_attended = models.PositiveIntegerField(default=0, verbose_name="عدد الحصص")
+    sessions_attended = models.PositiveIntegerField(default=0, verbose_name="عدد الحصص المحضورة")
+    sessions_total = models.PositiveIntegerField(default=4, verbose_name="إجمالي الحصص في الشهر")
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,

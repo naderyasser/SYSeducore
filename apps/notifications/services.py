@@ -369,14 +369,22 @@ class NotificationService:
     Main notification service with fallback strategy
     """
     
+    _disabled_response = {'success': True, 'skipped': True, 'message': 'Notifications disabled'}
+
     def __init__(self):
         self.whatsapp_service = WhatsAppService()
         self.notification_method = getattr(settings, 'NOTIFICATION_METHOD', 'whatsapp')
-    
+
+    @property
+    def is_disabled(self):
+        return self.notification_method not in ('whatsapp',)
+
     def send_attendance_notification(self, student_name, parent_phone, status, time):
         """
         Send attendance notification with fallback
         """
+        if self.is_disabled:
+            return self._disabled_response
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_attendance_notification(
                 student_name, parent_phone, status, time
@@ -390,6 +398,8 @@ class NotificationService:
         """
         Send monthly payment reminder with fallback
         """
+        if self.is_disabled:
+            return self._disabled_response
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_monthly_reminder(
                 student_name, parent_phone, group_name, amount
@@ -401,6 +411,8 @@ class NotificationService:
         """
         Send warning before blocking with fallback
         """
+        if self.is_disabled:
+            return self._disabled_response
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_warning_before_block(
                 student_name, parent_phone, amount
@@ -412,6 +424,8 @@ class NotificationService:
         """
         Send block notification with fallback
         """
+        if self.is_disabled:
+            return self._disabled_response
         if self.notification_method == 'whatsapp':
             return self.whatsapp_service.send_block_notification(
                 student_name, parent_phone, reason

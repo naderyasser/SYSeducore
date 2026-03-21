@@ -44,6 +44,23 @@
                     </small>
                 </div>
 
+                <div class="mb-3">
+                    <label for="{{ form.education_stage.id_for_label }}" class="form-label">
+                        <i class="bi bi-mortarboard"></i> المرحلة الدراسية
+                    </label>
+                    {{ form.education_stage }}
+                    {% if form.education_stage.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.education_stage.errors %}
+                        <i class="bi bi-exclamation-circle"></i> {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    <small class="form-text text-muted">
+                        <i class="bi bi-info-circle"></i> اختياري - حدد المرحلة الدراسية لهذه المادة
+                    </small>
+                </div>
+
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary">
                         <i class="bi bi-check-lg"></i> 

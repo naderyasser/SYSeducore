@@ -77,7 +77,7 @@ class GroupForm(forms.ModelForm):
         fields = [
             'group_name', 'teacher', 'room', 'schedule_day', 'schedule_time',
             'duration_minutes', 'gender_type', 'education_stage', 'education_year',
-            'standard_fee', 'center_percentage', 'is_active'
+            'standard_fee', 'center_percentage', 'sessions_per_month', 'is_active'
         ]
         widgets = {
             'group_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اسم المجموعة'}),
@@ -95,6 +95,7 @@ class GroupForm(forms.ModelForm):
             'education_year': forms.Select(attrs={'class': 'form-select'}),
             'standard_fee': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'السعر'}),
             'center_percentage': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '30'}),
+            'sessions_per_month': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '4', 'min': '1'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -113,13 +114,14 @@ class SubjectForm(forms.ModelForm):
     """
     class Meta:
         model = Subject
-        fields = ['name']
+        fields = ['name', 'education_stage']
         widgets = {
             'name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': 'اسم المادة الدراسية',
                 'autofocus': 'autofocus'
             }),
+            'education_stage': forms.Select(attrs={'class': 'form-select'}),
         }
 
     def clean_name(self):

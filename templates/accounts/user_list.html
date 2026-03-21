@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+
+{% block title %}إدارة المستخدمين{% endblock %}
+{% block page_title %}إدارة المستخدمين{% endblock %}
+
+{% block extra_css %}
+<style>
+    .users-container { max-width: 1100px; margin: 0 auto; }
+    .page-header { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 24px 30px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+    .page-header h2 { margin: 0; font-size: 1.4rem; font-weight: 700; color: #1f2937; display: flex; align-items: center; gap: 10px; }
+    .users-table-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden; }
+    .users-table { width: 100%; border-collapse: collapse; }
+    .users-table th { background: #f8fafc; padding: 14px 20px; text-align: right; font-weight: 600; color: #64748b; font-size: 0.85rem; border-bottom: 2px solid #e2e8f0; }
+    .users-table td { padding: 14px 20px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+    .users-table tr:hover { background: #f8fafc; }
+    .role-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+    .role-badge.admin { background: #fee2e2; color: #dc2626; }
+    .role-badge.supervisor { background: #dbeafe; color: #2563eb; }
+    .role-badge.teacher { background: #d1fae5; color: #059669; }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+    .status-badge.active { background: #d1fae5; color: #059669; }
+    .status-badge.inactive { background: #fee2e2; color: #dc2626; }
+    .action-btn { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; text-decoration: none; font-size: 0.9rem; }
+    .action-btn.edit { background: #dbeafe; color: #2563eb; }
+    .action-btn.edit:hover { background: #2563eb; color: #fff; }
+    .action-btn.toggle { background: #fef3c7; color: #d97706; }
+    .action-btn.toggle:hover { background: #d97706; color: #fff; }
+    @media (max-width: 768px) { .users-table th:nth-child(3), .users-table td:nth-child(3), .users-table th:nth-child(4), .users-table td:nth-child(4) { display: none; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="users-container">
+    <div class="page-header">
+        <h2><i class="bi bi-person-gear" style="color: #3b82f6;"></i> إدارة المستخدمين</h2>
+        <a href="{% url 'accounts:user_create' %}" class="btn btn-primary" style="border-radius: 10px;">
+            <i class="bi bi-person-plus me-1"></i> إضافة مستخدم
+        </a>
+    </div>
+
+    <div class="users-table-card">
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>المستخدم</th>
+                    <th>الدور</th>
+                    <th>البريد / الهاتف</th>
+                    <th>الحالة</th>
+                    <th>إجراءات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>
+                        <div style="font-weight: 600; color: #1f2937;">{{ u.get_full_name|default:u.username }}</div>
+                        <div style="font-size: 0.8rem; color: #9ca3af;">@{{ u.username }}</div>
+                    </td>
+                    <td>
+                        <span class="role-badge {{ u.role }}">{{ u.get_role_display }}</span>
+                    </td>
+                    <td>
+                        <div style="font-size: 0.85rem; color: #6b7280;">{{ u.email|default:"-" }}</div>
+                        <div style="font-size: 0.8rem; color: #9ca3af;">{{ u.phone|default:"" }}</div>
+                    </td>
+                    <td>
+                        <span class="status-badge {% if u.is_active %}active{% else %}inactive{% endif %}">
+                            {% if u.is_active %}نشط{% else %}معطل{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{% url 'accounts:user_update' user_id=u.pk %}" class="action-btn edit" title="تعديل">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        {% if u.pk != request.user.pk %}
+                        <form method="post" action="{% url 'accounts:user_toggle_status' user_id=u.pk %}" style="display: inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="action-btn toggle" title="{% if u.is_active %}تعطيل{% else %}تفعيل{% endif %}"
+                                onclick="return confirm('{% if u.is_active %}هل تريد تعطيل هذا المستخدم؟{% else %}هل تريد تفعيل هذا المستخدم؟{% endif %}')">
+                                <i class="bi bi-{% if u.is_active %}pause-circle{% else %}play-circle{% endif %}"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center py-4" style="color: #9ca3af;">لا يوجد مستخدمين</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
