@@ -769,20 +769,7 @@
                 </a>
             </div>
 
-            <!-- الاتصالات (Communications) -->
-            {% if NOTIFICATION_METHOD == 'whatsapp' %}
-            <div class="menu-section">
-                <div class="menu-header">
-                    <i class="bi bi-chat-quotes"></i>
-                    الاتصالات
-                </div>
-                <a href="{% url 'notifications:whatsapp_dashboard' %}" class="menu-item {% if 'whatsapp' in request.path %}active{% endif %}">
-                    <i class="bi bi-whatsapp"></i>
-                    <span>إدارة الواتساب</span>
-                    <span class="badge bg-primary">جديد</span>
-                </a>
-            </div>
-            {% endif %}
+            <!-- الاتصالات (Communications) - معطلة حالياً -->
 
             <!-- التقارير (Reports) -->
             <div class="menu-section">
