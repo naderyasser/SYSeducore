@@ -3,8 +3,11 @@ Django settings for attendance_system project.
 """
 
 import os
+import sys
 from pathlib import Path
 from decouple import config, Csv
+
+TESTING = 'test' in sys.argv
 
 # Optional Celery import
 try:
@@ -26,6 +29,8 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-produc
 DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
+if TESTING and 'testserver' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('testserver')
 
 
 # Application definition
@@ -277,7 +282,7 @@ GLM4_API_URL = config('GLM4_API_URL', default='https://api.glm4.example.com')
 
 
 # Security Settings (for production)
-if not DEBUG:
+if not DEBUG and not TESTING:
     SECURE_SSL_REDIRECT = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
