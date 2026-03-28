@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from django.db import models
 from django.db.models import Sum, Count, Q, F, Avg
+from django.db.models.deletion import ProtectedError
 from django.db.models.functions import TruncDate, TruncMonth
 from django.http import JsonResponse
 from datetime import timedelta, datetime
@@ -608,11 +609,10 @@ def recycle_permanent_delete(request):
         obj = model.all_objects.get(pk=item_id)
         if not obj.is_deleted:
             return JsonResponse({'success': False, 'message': 'لا يمكن حذف عنصر غير موجود في سلة المهملات'})
-        
+
         obj_name = str(obj)
-        # Use Django's actual delete, bypassing soft delete
-        models.Model.delete(obj)
-        
+        model.all_objects.filter(pk=item_id).hard_delete()
+
         ActivityLog.log(
             user=request.user,
             action='delete',
@@ -621,13 +621,15 @@ def recycle_permanent_delete(request):
             target_id=item_id,
             request=request
         )
-        
+
         return JsonResponse({
             'success': True,
-            'message': f'تم الحذف النهائي بنجاح'
+            'message': 'تم الحذف النهائي بنجاح'
         })
     except model.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
+    except ProtectedError:
+        return JsonResponse({'success': False, 'message': 'لا يمكن حذف هذا العنصر لأنه مرتبط بسجلات أخرى (مدفوعات أو حضور). يرجى حذف السجلات المرتبطة أولاً.'})
 
 
 @login_required

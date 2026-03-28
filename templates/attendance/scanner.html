@@ -110,80 +110,6 @@
         font-size: 0.95rem;
     }
 
-    .input-modes {
-        display: flex;
-        justify-content: center;
-        gap: 15px;
-        margin-bottom: 25px;
-    }
-
-    .input-mode-btn {
-        background: rgba(255, 255, 255, 0.2);
-        border: 2px solid rgba(255, 255, 255, 0.3);
-        color: #fff;
-        padding: 12px 24px;
-        border-radius: 10px;
-        cursor: pointer;
-        transition: all 0.3s;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    .input-mode-btn:hover {
-        background: rgba(255, 255, 255, 0.3);
-    }
-
-    .input-mode-btn.active {
-        background: #fff;
-        color: #2563eb;
-        border-color: #fff;
-    }
-
-    .code-input-wrapper {
-        max-width: 350px;
-        margin: 0 auto;
-    }
-
-    .code-input {
-        width: 100%;
-        padding: 18px;
-        font-size: 2.25rem;
-        font-weight: 700;
-        text-align: center;
-        border: none;
-        border-radius: 12px;
-        letter-spacing: 10px;
-        background: #fff;
-        color: #1e293b;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-    }
-
-    .code-input:focus {
-        outline: none;
-        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.4);
-    }
-
-    .input-status {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        margin-top: 15px;
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }
-
-    .status-dot {
-        width: 10px;
-        height: 10px;
-        background: #4ade80;
-        border-radius: 50%;
-        animation: pulse 2s infinite;
-    }
-
     /* Camera Scanner */
     .camera-scanner {
         display: none;
@@ -752,15 +678,6 @@
             font-size: 1.4rem;
         }
 
-        .code-input {
-            font-size: 1.75rem;
-            letter-spacing: 5px;
-        }
-
-        .input-modes {
-            flex-direction: column;
-        }
-
         .quick-actions {
             grid-template-columns: repeat(2, 1fr);
         }
@@ -891,38 +808,10 @@
             <!-- Scan Input Section -->
             <div class="scan-input-section">
                 <h2><i class="bi bi-qr-code-scan"></i> تسجيل حضور الطلاب</h2>
-                <p>اختر طريقة الإدخال: أدخل كود الطالب يدوياً أو امسح كود QR بالكاميرا</p>
-
-                <div class="input-modes">
-                    <button class="input-mode-btn active" id="manualModeBtn">
-                        <i class="bi bi-keyboard"></i>
-                        إدخال يدوي
-                    </button>
-                    <button class="input-mode-btn" id="cameraModeBtn">
-                        <i class="bi bi-camera"></i>
-                        الكاميرا
-                    </button>
-                </div>
-
-                <!-- Manual Input -->
-                <div class="code-input-wrapper" id="manualInput">
-                    <input
-                        type="text"
-                        id="studentCodeInput"
-                        class="code-input"
-                        placeholder="كود الطالب (يدوي أو مسدس الباركود)"
-                        autofocus
-                        autocomplete="off"
-                        maxlength="20"
-                    >
-                    <div class="input-status">
-                        <span class="status-dot"></span>
-                        <span>جاهز للإدخال - اضغط Enter</span>
-                    </div>
-                </div>
+                <p>امسح كود QR الخاص بالطالب بالكاميرا لتسجيل الحضور</p>
 
                 <!-- Camera Scanner -->
-                <div class="camera-scanner" id="cameraScanner">
+                <div class="camera-scanner active" id="cameraScanner">
                     <div class="camera-container">
                         <video id="cameraPreview" autoplay playsinline muted></video>
                         <div class="camera-overlay">
@@ -1093,7 +982,6 @@ let currentFilter = 'all';
 let todayStats = { present: 0, total: 0 };
 
 // DOM Elements
-const input = document.getElementById('studentCodeInput');
 const resultDisplay = document.getElementById('resultDisplay');
 const resultCard = document.getElementById('resultCard');
 const resultIcon = document.getElementById('resultIcon');
@@ -1118,41 +1006,14 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 async function initializeApp() {
-    // Focus input
-    input.focus();
-
-    // Setup event listeners
-    input.addEventListener('keypress', handleKeyPress);
-    input.addEventListener('input', handleInput);
-
-    // Keep focus on input for barcode scanner gun support
-    // Re-focus after a short delay when focus is lost (unless user is in a modal)
-    input.addEventListener('blur', function() {
-        setTimeout(function() {
-            if (!document.querySelector('.modal.show') && document.getElementById('manualInput').style.display !== 'none') {
-                input.focus();
-            }
-        }, 100);
-    });
-    
-    // Setup mode switch buttons
-    const manualModeBtn = document.getElementById('manualModeBtn');
-    const cameraModeBtn = document.getElementById('cameraModeBtn');
+    // Setup camera buttons
     const startCameraBtn = document.getElementById('startCameraBtn');
     const stopCameraBtn = document.getElementById('stopCameraBtn');
-    
-    if (manualModeBtn) {
-        manualModeBtn.addEventListener('click', () => switchMode('manual'));
-    }
-    
-    if (cameraModeBtn) {
-        cameraModeBtn.addEventListener('click', () => switchMode('camera'));
-    }
-    
+
     if (startCameraBtn) {
         startCameraBtn.addEventListener('click', startCamera);
     }
-    
+
     if (stopCameraBtn) {
         stopCameraBtn.addEventListener('click', stopCamera);
     }
@@ -1164,23 +1025,6 @@ async function initializeApp() {
     // Update time
     updateClock();
     setInterval(updateClock, 60000);
-}
-
-// Handle Input - allow alphanumeric for barcode scanner guns
-function handleInput(e) {
-    e.target.value = e.target.value.replace(/[^0-9a-zA-Z]/g, '');
-}
-
-// Handle Key Press
-async function handleKeyPress(e) {
-    if (e.key === 'Enter') {
-        const code = input.value.trim();
-        if (!code) return;
-
-        await processStudentCode(code);
-        input.value = '';
-        input.focus();
-    }
 }
 
 // Process Student Code
@@ -1446,28 +1290,6 @@ async function loadTodaySessions() {
     }
 }
 
-// Switch Mode
-function switchMode(mode) {
-    const manualBtn = document.getElementById('manualModeBtn');
-    const cameraBtn = document.getElementById('cameraModeBtn');
-    const manualInput = document.getElementById('manualInput');
-    const cameraScanner = document.getElementById('cameraScanner');
-
-    if (mode === 'manual') {
-        manualBtn.classList.add('active');
-        cameraBtn.classList.remove('active');
-        manualInput.style.display = 'block';
-        cameraScanner.classList.remove('active');
-        input.focus();
-        stopCamera();
-    } else {
-        cameraBtn.classList.add('active');
-        manualBtn.classList.remove('active');
-        manualInput.style.display = 'none';
-        cameraScanner.classList.add('active');
-    }
-}
-
 // Camera Functions
 let html5QrScanner = null;
 
@@ -1475,13 +1297,13 @@ async function startCamera() {
     try {
         // Check if running on HTTPS or localhost
         if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            alert('الكاميرا تتطلب اتصال آمن (HTTPS). يرجى استخدام الإدخال اليدوي.');
+            alert('الكاميرا تتطلب اتصال آمن (HTTPS). يرجى تفعيل HTTPS على الخادم.');
             return;
         }
 
         // Check if mediaDevices is supported
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('المتصفح لا يدعم الكاميرا. يرجى استخدام الإدخال اليدوي.');
+            alert('المتصفح لا يدعم الكاميرا. يرجى استخدام متصفح حديث.');
             return;
         }
 
