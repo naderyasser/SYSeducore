@@ -384,6 +384,7 @@ class StudentGroupEnrollment(models.Model):
         ('normal', 'عادي'),
         ('symbolic', 'مبلغ رمزي'),
         ('exempt', 'إعفاء كامل'),
+        ('per_session', 'دفع بالحصة'),
     ]
 
     student = models.ForeignKey(
@@ -399,7 +400,7 @@ class StudentGroupEnrollment(models.Model):
     )
 
     financial_status = models.CharField(
-        max_length=10,
+        max_length=15,
         choices=FINANCIAL_STATUS_CHOICES,
         default='normal',
         verbose_name="الحالة المالية"
