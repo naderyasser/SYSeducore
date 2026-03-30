@@ -1,7 +1,7 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Sum, Count, Q, F, Avg
 from django.db.models.deletion import ProtectedError
 from django.db.models.functions import TruncDate, TruncMonth
@@ -634,25 +634,64 @@ def recycle_permanent_delete(request):
 
 @login_required
 def recycle_empty(request):
-    """تفريغ سلة المهملات بالكامل"""
+    """تفريغ سلة المهملات بالكامل مع حذف السجلات المرتبطة تدريجياً"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'})
-    
+
+    from apps.attendance.models import Session
+    from apps.payments.models import Payment
+    from apps.students.models import StudentGroupEnrollment
+    from apps.attendance.models import Attendance as AttendanceModel
+
     count = 0
-    for model in [Student, Teacher, Group, Room]:
-        deleted_qs = model.all_objects.dead()
-        count += deleted_qs.count()
-        # Use the queryset hard_delete method
-        deleted_qs.hard_delete()
-    
+
+    try:
+        with transaction.atomic():
+            # ── Step 1: حذف الطلاب المحذوفين مع سجلاتهم ──────────────────
+            dead_students = Student.all_objects.dead()
+            student_ids = list(dead_students.values_list('pk', flat=True))
+            if student_ids:
+                AttendanceModel.objects.filter(student_id__in=student_ids).delete()
+                Payment.objects.filter(student_id__in=student_ids).delete()
+                StudentGroupEnrollment.objects.filter(student_id__in=student_ids).delete()
+                count += dead_students.count()
+                dead_students.hard_delete()
+
+            # ── Step 2: حذف المجموعات المحذوفة مع سجلاتها ───────────────
+            dead_groups = Group.all_objects.dead()
+            group_ids = list(dead_groups.values_list('pk', flat=True))
+            if group_ids:
+                session_ids = list(Session.objects.filter(group_id__in=group_ids).values_list('pk', flat=True))
+                if session_ids:
+                    AttendanceModel.objects.filter(session_id__in=session_ids).delete()
+                    Session.objects.filter(pk__in=session_ids).delete()
+                StudentGroupEnrollment.objects.filter(group_id__in=group_ids).delete()
+                Payment.objects.filter(group_id__in=group_ids).delete()
+                count += dead_groups.count()
+                dead_groups.hard_delete()
+
+            # ── Step 3: حذف المدرسين والقاعات المحذوفين ──────────────────
+            for model in [Teacher, Room]:
+                dead_qs = model.all_objects.dead()
+                count += dead_qs.count()
+                dead_qs.hard_delete()
+
+    except ProtectedError as e:
+        protected_names = ', '.join(str(obj) for obj in list(e.protected_objects)[:3])
+        messages.error(request, f'لا يمكن الحذف: بعض العناصر مرتبطة بسجلات أخرى ({protected_names}...)')
+        return redirect('reports:recycle_bin')
+    except Exception as e:
+        messages.error(request, f'حدث خطأ أثناء التفريغ: {str(e)}')
+        return redirect('reports:recycle_bin')
+
     ActivityLog.log(
         user=request.user,
-        action='delete',
+        action='student_delete',
         description=f'تفريغ سلة المهملات: {count} عنصر',
         target_model='RecycleBin',
         target_id=0,
         request=request
     )
-    
+
     messages.success(request, f'تم تفريغ سلة المهملات ({count} عنصر)')
     return redirect('reports:recycle_bin')

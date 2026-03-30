@@ -1,82 +1,451 @@
 {% extends 'base.html' %}
-
 {% block title %}المدفوعات{% endblock %}
+{% block page_title %}المدفوعات{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ── Page Layout ── */
+    .pay-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    /* ── Stats Row ── */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .stat-box {
+        background: #fff;
+        border-radius: 10px;
+        padding: 16px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+        text-align: center;
+    }
+
+    .stat-box .num {
+        font-size: 2rem;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+
+    .stat-box .lbl {
+        font-size: 0.8rem;
+        color: #6b7280;
+    }
+
+    .stat-box.paid   .num { color: #16a34a; }
+    .stat-box.unpaid .num { color: #dc2626; }
+    .stat-box.partial .num { color: #d97706; }
+    .stat-box.total  .num { color: #2563eb; }
+
+    /* ── Filter Bar ── */
+    .filter-bar {
+        background: #fff;
+        border-radius: 10px;
+        padding: 16px 20px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+        margin-bottom: 20px;
+    }
+
+    .filter-bar form {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+    }
+
+    .filter-bar .fg {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1;
+        min-width: 160px;
+    }
+
+    .filter-bar label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    /* ── Payment Cards Grid ── */
+    .cards-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+        gap: 14px;
+    }
+
+    .pay-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+        overflow: hidden;
+        border-right: 5px solid #e5e7eb;
+        transition: box-shadow 0.2s;
+    }
+
+    .pay-card:hover {
+        box-shadow: 0 4px 14px rgba(0,0,0,0.1);
+    }
+
+    .pay-card.status-paid    { border-right-color: #16a34a; }
+    .pay-card.status-unpaid  { border-right-color: #dc2626; }
+    .pay-card.status-partial { border-right-color: #d97706; }
+
+    .card-body {
+        padding: 16px 18px;
+    }
+
+    .student-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+    }
+
+    .avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.2rem;
+        flex-shrink: 0;
+    }
+
+    .student-info h6 {
+        margin: 0 0 2px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .student-info small {
+        color: #6b7280;
+        font-size: 0.78rem;
+    }
+
+    .amounts-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-top: 1px solid #f3f4f6;
+        border-bottom: 1px solid #f3f4f6;
+        margin-bottom: 12px;
+    }
+
+    .amount-block {
+        text-align: center;
+    }
+
+    .amount-block .val {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .amount-block .val.green  { color: #16a34a; }
+    .amount-block .val.red    { color: #dc2626; }
+    .amount-block .val.orange { color: #d97706; }
+
+    .amount-block .key {
+        font-size: 0.72rem;
+        color: #9ca3af;
+        margin-top: 2px;
+    }
+
+    /* Status Badge */
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .badge-paid    { background: #dcfce7; color: #166534; }
+    .badge-unpaid  { background: #fee2e2; color: #991b1b; }
+    .badge-partial { background: #fef3c7; color: #92400e; }
+
+    /* Pay Button */
+    .btn-pay {
+        width: 100%;
+        padding: 10px;
+        border-radius: 8px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .btn-pay.full {
+        background: #16a34a;
+        color: #fff;
+    }
+
+    .btn-pay.full:hover { background: #15803d; }
+
+    .btn-pay.partial {
+        background: #f59e0b;
+        color: #fff;
+    }
+
+    .btn-pay.partial:hover { background: #d97706; }
+
+    .btn-pay.done {
+        background: #f3f4f6;
+        color: #9ca3af;
+        cursor: default;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        color: #d1d5db;
+        display: block;
+        margin-bottom: 12px;
+    }
+
+    /* Month navigation */
+    .month-nav {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: #fff;
+        border-radius: 8px;
+        padding: 8px 14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+        font-weight: 600;
+        color: #1f2937;
+    }
+
+    .month-nav a {
+        color: #6b7280;
+        text-decoration: none;
+        font-size: 1.1rem;
+    }
+
+    .month-nav a:hover { color: #2563eb; }
+
+    @media (max-width: 640px) {
+        .cards-grid { grid-template-columns: 1fr; }
+        .filter-bar .fg { min-width: 100%; }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0"><i class="bi bi-wallet2 me-2"></i>سجل المدفوعات</h4>
-</div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
-                    <tr>
-                        <th>الطالب</th>
-                        <th>المجموعة</th>
-                        <th>المبلغ المستحق</th>
-                        <th>المبلغ المدفوع</th>
-                        <th>الحالة</th>
-                        <th>تاريخ الدفع</th>
-                        <th>الإجراءات</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for payment in payments %}
-                    <tr>
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px;">
-                                    <i class="bi bi-person-fill text-white" style="font-size: 0.875rem;"></i>
-                                </div>
-                                <span class="fw-semibold">{{ payment.student.full_name }}</span>
-                            </div>
-                        </td>
-                        <td>{{ payment.group.group_name|default:"-" }}</td>
-                        <td><span class="fw-semibold">{{ payment.amount_due }} ج.م</span></td>
-                        <td>{{ payment.amount_paid }} ج.م</td>
-                        <td>
-                            {% if payment.status == 'paid' %}
-                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>مدفوع</span>
-                            {% elif payment.status == 'partial' %}
-                            <span class="badge bg-warning"><i class="bi bi-exclamation-circle me-1"></i>جزئي</span>
-                            {% else %}
-                            <span class="badge bg-danger"><i class="bi bi-x-circle me-1"></i>غير مدفوع</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ payment.payment_date|date:"Y-m-d"|default:"-" }}</td>
-                        <td>
-                            {% if payment.status != 'paid' %}
-                            <button onclick="markAsPaidAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }})" 
-                                    class="btn btn-sm btn-success">
-                                <i class="bi bi-check-circle me-1"></i>تسديد + تفعيل
-                            </button>
-                            {% else %}
-                            <span class="text-success"><i class="bi bi-check-circle-fill"></i></span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="7" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                            <p class="mt-2 mb-0">لا يوجد سجلات مدفوعات</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+<!-- Header -->
+<div class="pay-header">
+    <h4 class="mb-0"><i class="bi bi-wallet2 me-2 text-primary"></i>المدفوعات</h4>
+    <div class="month-nav">
+        <a href="?month={{ current_month|date:'Y-m'|slice:':4' }}-{% if current_month.month == 1 %}12{% else %}{% widthratio current_month.month|add:"-1" 1 1 %}{% endif %}"
+           title="الشهر السابق">&#8250;</a>
+        <span>{{ current_month|date:"F Y" }}</span>
+        <a href="?month={{ current_month|date:'Y-m' }}" title="هذا الشهر" style="font-size:0.8rem;color:#2563eb;">اليوم</a>
     </div>
 </div>
 
+<!-- Stats -->
+<div class="stats-row">
+    <div class="stat-box paid">
+        <div class="num">{{ stats.paid }}</div>
+        <div class="lbl">مدفوع</div>
+    </div>
+    <div class="stat-box partial">
+        <div class="num">{{ stats.partial }}</div>
+        <div class="lbl">جزئي</div>
+    </div>
+    <div class="stat-box unpaid">
+        <div class="num">{{ stats.unpaid }}</div>
+        <div class="lbl">غير مدفوع</div>
+    </div>
+    <div class="stat-box total">
+        <div class="num">{{ stats.total }}</div>
+        <div class="lbl">إجمالي السجلات</div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-bar">
+    <form method="get">
+        <input type="hidden" name="month" value="{{ month_filter }}">
+        <div class="fg">
+            <label>بحث</label>
+            <input type="text" name="search" class="form-control form-control-sm"
+                   placeholder="اسم الطالب أو الكود..." value="{{ search }}">
+        </div>
+        <div class="fg">
+            <label>الحالة</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="">كل الحالات</option>
+                <option value="unpaid"  {% if status_filter == 'unpaid'  %}selected{% endif %}>غير مدفوع</option>
+                <option value="partial" {% if status_filter == 'partial' %}selected{% endif %}>مدفوع جزئياً</option>
+                <option value="paid"    {% if status_filter == 'paid'    %}selected{% endif %}>مدفوع</option>
+            </select>
+        </div>
+        <div class="fg">
+            <label>المجموعة</label>
+            <select name="group" class="form-select form-select-sm">
+                <option value="">كل المجموعات</option>
+                {% for g in groups %}
+                <option value="{{ g.group_id }}" {% if group_filter == g.group_id|stringformat:'s' %}selected{% endif %}>
+                    {{ g.group_name }}{% if g.teacher %} - {{ g.teacher.full_name }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="fg" style="flex: 0; min-width: auto;">
+            <label>&nbsp;</label>
+            <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-search me-1"></i>بحث
+            </button>
+        </div>
+        {% if search or status_filter or group_filter %}
+        <div class="fg" style="flex: 0; min-width: auto;">
+            <label>&nbsp;</label>
+            <a href="?month={{ month_filter }}" class="btn btn-outline-secondary btn-sm">مسح</a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Payment Cards -->
+{% if payments %}
+<div class="cards-grid">
+    {% for payment in payments %}
+    <div class="pay-card status-{{ payment.status }}" id="card-{{ payment.payment_id }}">
+        <div class="card-body">
+            <!-- Student Info -->
+            <div class="student-row">
+                <div class="avatar">
+                    <i class="bi bi-person-fill"></i>
+                </div>
+                <div class="student-info">
+                    <h6>{{ payment.student.full_name }}</h6>
+                    <small>
+                        <i class="bi bi-hash"></i>{{ payment.student.student_code }}
+                        &nbsp;|&nbsp;
+                        <i class="bi bi-collection"></i>{{ payment.group.group_name }}
+                    </small>
+                </div>
+            </div>
+
+            <!-- Amounts -->
+            <div class="amounts-row">
+                <div class="amount-block">
+                    <div class="val">{{ payment.amount_due }} <small>ج.م</small></div>
+                    <div class="key">المطلوب</div>
+                </div>
+                <div class="amount-block">
+                    <div class="val green">{{ payment.amount_paid }} <small>ج.م</small></div>
+                    <div class="key">المدفوع</div>
+                </div>
+                <div class="amount-block">
+                    {% with remaining=payment.amount_due|add:"-" %}
+                    <div class="val red">
+                        {% if payment.status == 'paid' %}
+                        0
+                        {% else %}
+                        {{ payment.amount_due }} <small>ج.م</small>
+                        {% endif %}
+                    </div>
+                    {% endwith %}
+                    <div class="key">المتبقي</div>
+                </div>
+                <div class="amount-block">
+                    {% if payment.status == 'paid' %}
+                    <span class="status-badge badge-paid"><i class="bi bi-check-circle-fill"></i> مدفوع</span>
+                    {% elif payment.status == 'partial' %}
+                    <span class="status-badge badge-partial"><i class="bi bi-dash-circle-fill"></i> جزئي</span>
+                    {% else %}
+                    <span class="status-badge badge-unpaid"><i class="bi bi-x-circle-fill"></i> غير مدفوع</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Action Button -->
+            {% if payment.status != 'paid' %}
+            <button class="btn-pay full"
+                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name }}', {{ payment.amount_due }})">
+                <i class="bi bi-check-circle-fill"></i>
+                تسديد كامل {{ payment.amount_due }} ج.م + تفعيل اشتراك
+            </button>
+            {% else %}
+            <div class="btn-pay done">
+                <i class="bi bi-check-circle-fill"></i>
+                تم التسديد في {{ payment.payment_date|date:"Y-m-d"|default:"—" }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-wallet2"></i>
+    <h5 class="text-muted mb-2">لا توجد سجلات مدفوعات</h5>
+    <p class="text-muted mb-0">لا يوجد سجلات مطابقة للفلاتر المختارة</p>
+</div>
+{% endif %}
+
+<!-- Loading Overlay -->
+<div id="loadingOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:30px 40px;text-align:center;">
+        <div class="spinner-border text-primary mb-3"></div>
+        <p class="mb-0" style="font-weight:600;">جاري التسديد...</p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
 <script>
-function markAsPaidAndActivate(paymentId, studentId) {
-    if (!confirm('هل تريد تسديد الدفعة وتفعيل اشتراك الطالب لمدة 30 يوم؟')) return;
-    
-    // Mark payment as paid
-    fetch(`/payments/api/${paymentId}/mark-paid/`, {
+function showLoading() {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+}
+
+function hideLoading() {
+    document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+function payAndActivate(paymentId, studentId, studentName, amountDue) {
+    if (!confirm(`هل تريد تسديد ${amountDue} ج.م وتفعيل اشتراك "${studentName}" لمدة 30 يوم؟`)) return;
+
+    showLoading();
+
+    // Step 1: Mark payment as paid
+    fetch(`/api/payments/${paymentId}/mark-paid/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -85,33 +454,61 @@ function markAsPaidAndActivate(paymentId, studentId) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            // Activate subscription
-            return fetch(`/students/api/${studentId}/subscription/activate/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: 'days=30'
-            });
-        } else {
-            throw new Error(data.message || 'فشل تسديد الدفعة');
-        }
+        if (!data.success) throw new Error(data.message || 'فشل تسديد الدفعة');
+        // Step 2: Activate subscription
+        return fetch(`/students/api/${studentId}/subscription/activate/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: 'days=30'
+        });
     })
     .then(response => response.json())
     .then(data => {
+        hideLoading();
         if (data.success) {
-            alert('✅ تم التسديد وتفعيل الاشتراك بنجاح!');
-            location.reload();
+            // Update card UI without full reload
+            const card = document.getElementById(`card-${paymentId}`);
+            if (card) {
+                card.className = 'pay-card status-paid';
+                const btn = card.querySelector('.btn-pay');
+                if (btn) {
+                    btn.className = 'btn-pay done';
+                    btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> تم التسديد والتفعيل';
+                    btn.disabled = true;
+                }
+                const badge = card.querySelector('.status-badge');
+                if (badge) {
+                    badge.className = 'status-badge badge-paid';
+                    badge.innerHTML = '<i class="bi bi-check-circle-fill"></i> مدفوع';
+                }
+            }
+            showToast('تم التسديد وتفعيل الاشتراك بنجاح', 'success');
         } else {
-            alert('تم التسديد ولكن فشل تفعيل الاشتراك: ' + data.message);
-            location.reload();
+            showToast('تم التسديد ولكن فشل تفعيل الاشتراك: ' + data.message, 'warning');
+            setTimeout(() => location.reload(), 1500);
         }
     })
     .catch(error => {
-        alert('خطأ: ' + error.message);
+        hideLoading();
+        showToast('خطأ: ' + error.message, 'danger');
     });
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+        background:${type === 'success' ? '#16a34a' : type === 'warning' ? '#d97706' : '#dc2626'};
+        color:#fff;padding:14px 24px;border-radius:10px;font-weight:600;
+        z-index:10000;font-size:0.95rem;box-shadow:0 4px 12px rgba(0,0,0,0.2);
+        animation:fadeIn 0.3s ease;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
 }
 </script>
 {% endblock %}
