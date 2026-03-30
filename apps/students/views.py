@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Count, Q, Prefetch, Exists, OuterRef
-from django.db import models, transaction
+from django.db import models, transaction, IntegrityError
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from datetime import timedelta
@@ -212,56 +212,71 @@ def student_create(request):
         selected_groups = request.POST.getlist('groups')
 
         if form.is_valid():
-            with transaction.atomic():
-                student = form.save()
+            try:
+                with transaction.atomic():
+                    # If no code provided, generate one fresh (avoids pre-fill race condition)
+                    if not form.cleaned_data.get('student_code'):
+                        form.instance.student_code = Student.generate_next_code()
+                    student = form.save()
 
-                # Add to selected groups if any, with financial status
-                for group_id in selected_groups:
-                    try:
-                        group = Group.objects.get(pk=group_id)
-                        financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
-                        if financial_status not in ('normal', 'symbolic', 'exempt'):
-                            financial_status = 'normal'
-                        custom_fee = None
-                        if financial_status == 'symbolic':
-                            try:
-                                custom_fee = request.POST.get(f'custom_fee_{group_id}')
-                                custom_fee = float(custom_fee) if custom_fee else None
-                            except (ValueError, TypeError):
-                                custom_fee = None
-                        enrollment = StudentGroupEnrollment.objects.create(
-                            student=student,
-                            group=group,
-                            financial_status=financial_status,
-                            custom_fee=custom_fee,
-                            is_active=True
-                        )
+                    # Add to selected groups if any, with financial status
+                    for group_id in selected_groups:
+                        try:
+                            group = Group.objects.get(pk=group_id)
+                            financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
+                            if financial_status not in ('normal', 'symbolic', 'exempt', 'per_session'):
+                                financial_status = 'normal'
+                            custom_fee = None
+                            if financial_status == 'symbolic':
+                                try:
+                                    custom_fee = request.POST.get(f'custom_fee_{group_id}')
+                                    custom_fee = float(custom_fee) if custom_fee else None
+                                except (ValueError, TypeError):
+                                    custom_fee = None
+                            StudentGroupEnrollment.objects.create(
+                                student=student,
+                                group=group,
+                                financial_status=financial_status,
+                                custom_fee=custom_fee,
+                                is_active=True
+                            )
 
-                        # Handle initial payment if provided
-                        initial_payment = request.POST.get(f'initial_payment_{group_id}')
-                        if initial_payment:
-                            try:
-                                amount = float(initial_payment)
-                                if amount > 0:
-                                    amount_due = float(custom_fee) if custom_fee else float(group.standard_fee)
-                                    if financial_status == 'exempt':
-                                        amount_due = 0
-                                    payment_status = 'paid' if amount >= amount_due else ('partial' if amount > 0 else 'unpaid')
-                                    Payment.objects.create(
-                                        student=student,
-                                        group=group,
-                                        month=timezone.now().date().replace(day=1),
-                                        amount_due=amount_due,
-                                        amount_paid=amount,
-                                        payment_date=timezone.now(),
-                                        status=payment_status,
-                                    )
-                            except (ValueError, TypeError):
-                                pass
-                    except Group.DoesNotExist:
-                        pass
+                            # Handle initial payment if provided
+                            initial_payment = request.POST.get(f'initial_payment_{group_id}')
+                            if initial_payment:
+                                try:
+                                    amount = float(initial_payment)
+                                    if amount > 0:
+                                        amount_due = float(custom_fee) if custom_fee else float(group.standard_fee)
+                                        if financial_status == 'exempt':
+                                            amount_due = 0
+                                        payment_status = 'paid' if amount >= amount_due else ('partial' if amount > 0 else 'unpaid')
+                                        Payment.objects.create(
+                                            student=student,
+                                            group=group,
+                                            month=timezone.now().date().replace(day=1),
+                                            amount_due=amount_due,
+                                            amount_paid=amount,
+                                            payment_date=timezone.now(),
+                                            status=payment_status,
+                                        )
+                                except (ValueError, TypeError):
+                                    pass
+                        except Group.DoesNotExist:
+                            pass
 
-            # Generate barcode image
+            except IntegrityError as e:
+                if 'student_code' in str(e).lower() or 'unique' in str(e).lower():
+                    messages.error(request, 'حدث تعارض في رقم الكود بسبب إضافة متزامنة. يرجى المحاولة مرة أخرى.')
+                else:
+                    messages.error(request, f'خطأ في حفظ البيانات: {str(e)}')
+                return render(request, 'students/form.html', {
+                    'form': form,
+                    'groups': groups,
+                    'is_create': True
+                })
+
+            # Generate QR code image
             try:
                 student.save_barcode_image()
             except Exception:
@@ -331,7 +346,7 @@ def student_update(request, student_id):
                     try:
                         group = Group.objects.get(pk=group_id)
                         financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
-                        if financial_status not in ('normal', 'symbolic', 'exempt'):
+                        if financial_status not in ('normal', 'symbolic', 'exempt', 'per_session'):
                             financial_status = 'normal'
                         custom_fee = None
                         if financial_status == 'symbolic':

@@ -571,23 +571,24 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const studentForm = document.getElementById('studentForm');
 const isNewStudent = studentForm?.dataset.isNewStudent === 'true';
 const enrollmentData = JSON.parse('{{ enrollment_data_json|default:"{}" |escapejs }}');
 
-// Generate next code
+// Generate next code (preview only - does NOT fill the input field)
 function generateCode() {
     fetch('{% url "students:next_code" %}')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                document.getElementById('id_student_code').value = data.next_code;
+                // Show code number in preview label only
                 document.getElementById('previewCodeValue').textContent = data.next_code;
                 document.getElementById('codePreview').style.display = 'block';
 
-                // Show code preview
-                showCodePreview(data.next_code);
+                // Show QR code preview
+                showQRPreview(data.next_code);
             }
         })
         .catch(error => {
@@ -595,15 +596,24 @@ function generateCode() {
         });
 }
 
-// Show code preview
-function showCodePreview(code) {
+// Show QR code preview using qrcode.js
+function showQRPreview(code) {
     const container = document.getElementById('barcodePreview');
     container.innerHTML = `
-        <div style="padding: 20px; background: #fff; border: 1px dashed #ccc; border-radius: 8px;">
-            <div style="font-size: 2rem; font-weight: bold; font-family: monospace; letter-spacing: 3px;">${code}</div>
-            <p class="text-muted mt-2 mb-0">الكود الذي سيتم إنشاؤه</p>
+        <div style="padding: 16px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; display: inline-block;">
+            <div id="qrPreviewCanvas"></div>
+            <p class="text-muted mt-2 mb-0" style="font-size:0.82rem;">كود QR للطالب: <strong style="font-family:monospace">${code}</strong></p>
+            <p class="text-muted mb-0" style="font-size:0.75rem;">سيتم إنشاؤه تلقائياً عند الحفظ</p>
         </div>
     `;
+    new QRCode(document.getElementById('qrPreviewCanvas'), {
+        text: code,
+        width: 140,
+        height: 140,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H
+    });
 }
 
 // Auto-generate code preview on page load for new students

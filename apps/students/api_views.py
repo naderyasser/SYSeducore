@@ -15,8 +15,7 @@ import base64
 import io
 import os
 import requests
-from barcode import Code128
-from barcode.writer import ImageWriter
+import qrcode
 from PIL import Image
 
 from .models import Student, StudentGroupEnrollment
@@ -25,45 +24,29 @@ from apps.attendance.models import Attendance
 from apps.notifications.services import WhatsAppService
 
 
-def generate_barcode_image(code):
-    """Helper function to generate Code128 barcode image"""
-    buffer = io.BytesIO()
-    
-    # Create Code128 barcode
-    code128 = Code128(code, writer=ImageWriter())
-    
-    # Save to buffer with options
-    code128.write(buffer, options={
-        'module_height': 15,
-        'module_width': 0.6,
-        'quiet_zone': 6,
-        'font_size': 12,
-        'text_distance': 5,
-        'background': 'white',
-        'foreground': 'black',
-    })
-    
-    buffer.seek(0)
-    return Image.open(buffer)
+def generate_qr_image(code):
+    """Helper function to generate QR code image"""
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=10,
+        border=3,
+    )
+    qr.add_data(code)
+    qr.make(fit=True)
+    return qr.make_image(fill_color="black", back_color="white").convert('RGB')
 
 
 @login_required
 @require_http_methods(["GET"])
 def student_barcode(request, student_id):
     """
-    Generate Code128 barcode for student as base64 image
+    Generate QR code for student as base64 image
     """
     student = get_object_or_404(Student, pk=student_id)
 
     try:
-        # Generate barcode image
-        img = generate_barcode_image(student.student_code)
-        
-        # Convert to RGB if necessary
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Convert to base64
+        img = generate_qr_image(student.student_code)
         buffer = io.BytesIO()
         img.save(buffer, format='PNG')
         img_str = base64.b64encode(buffer.getvalue()).decode()
@@ -77,7 +60,7 @@ def student_barcode(request, student_id):
     except Exception as e:
         return JsonResponse({
             'success': False,
-            'message': f'Failed to generate barcode: {str(e)}'
+            'message': f'Failed to generate QR code: {str(e)}'
         })
 
 
@@ -91,14 +74,8 @@ def send_barcode_whatsapp(request, student_id):
     student = get_object_or_404(Student, pk=student_id)
 
     try:
-        # Generate barcode image
-        img = generate_barcode_image(student.student_code)
-        
-        # Convert to RGB if necessary
-        if img.mode != 'RGB':
-            img = img.convert('RGB')
-        
-        # Save to buffer
+        # Generate QR code image
+        img = generate_qr_image(student.student_code)
         buffer = io.BytesIO()
         img.save(buffer, format='PNG')
         buffer.seek(0)
@@ -449,14 +426,8 @@ def whatsapp_barcode(request, student_id):
     """
     student = get_object_or_404(Student, pk=student_id)
 
-    # Generate barcode image
-    img = generate_barcode_image(student.student_code)
-    
-    # Convert to RGB if necessary
-    if img.mode != 'RGB':
-        img = img.convert('RGB')
-    
-    # Convert to base64
+    # Generate QR code image
+    img = generate_qr_image(student.student_code)
     buffer = io.BytesIO()
     img.save(buffer, format='PNG')
     img_str = base64.b64encode(buffer.getvalue()).decode()
