@@ -263,3 +263,81 @@ class StudentCodeConcurrencyTest(TestCase):
         self.assertNotEqual(s1.student_code, s2.student_code)
         self.assertTrue(s1.student_code.isdigit())
         self.assertTrue(s2.student_code.isdigit())
+
+
+class GroupCreatePostTest(TestCase):
+    """Test group creation via POST with multi-day schedule."""
+
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_user(
+            username='admin_gc', password='pass123', role='admin', is_superuser=True
+        )
+        self.client.login(username='admin_gc', password='pass123')
+        self.teacher = Teacher.objects.create(
+            full_name='GC Teacher', phone='0109', email='gc@t.com',
+            hire_date=datetime.date.today(),
+        )
+        self.room = Room.objects.create(name='GC Room', capacity=25)
+
+    def test_create_group_post(self):
+        """POST to group create should save group + schedules and redirect."""
+        resp = self.client.post('/teachers/groups/create/', {
+            'group_name': 'Math Group',
+            'teacher': self.teacher.pk,
+            'room': self.room.pk,
+            'duration_minutes': '90',
+            'gender_type': 'mixed',
+            'standard_fee': '200',
+            'center_percentage': '30',
+            'sessions_per_month': '4',
+            'is_active': 'on',
+            'schedule_days[]': ['Saturday', 'Monday'],
+            'schedule_time_Saturday': '14:00',
+            'schedule_time_Monday': '16:00',
+        })
+        self.assertEqual(resp.status_code, 302, f"Expected redirect, got {resp.status_code}")
+        # Group should exist
+        group = Group.objects.get(group_name='Math Group')
+        self.assertEqual(group.teacher, self.teacher)
+        self.assertEqual(group.schedule_day, 'Saturday')  # Legacy field = first day
+        # Schedules should exist
+        schedules = GroupSchedule.objects.filter(group=group).order_by('day_of_week')
+        self.assertEqual(schedules.count(), 2)
+        days = list(schedules.values_list('day_of_week', flat=True))
+        self.assertIn('Saturday', days)
+        self.assertIn('Monday', days)
+
+    def test_create_group_single_day(self):
+        """POST with a single day should also work."""
+        resp = self.client.post('/teachers/groups/create/', {
+            'group_name': 'Science Group',
+            'teacher': self.teacher.pk,
+            'duration_minutes': '120',
+            'gender_type': 'male',
+            'standard_fee': '150',
+            'center_percentage': '25',
+            'sessions_per_month': '4',
+            'is_active': 'on',
+            'schedule_days[]': ['Wednesday'],
+            'schedule_time_Wednesday': '10:00',
+        })
+        self.assertEqual(resp.status_code, 302)
+        group = Group.objects.get(group_name='Science Group')
+        self.assertEqual(group.schedules.count(), 1)
+        self.assertEqual(group.schedule_day, 'Wednesday')
+
+    def test_create_group_no_days_rejected(self):
+        """POST without any days should stay on form (not redirect)."""
+        resp = self.client.post('/teachers/groups/create/', {
+            'group_name': 'Empty Group',
+            'teacher': self.teacher.pk,
+            'duration_minutes': '120',
+            'gender_type': 'mixed',
+            'standard_fee': '100',
+            'center_percentage': '30',
+            'sessions_per_month': '4',
+            'is_active': 'on',
+        })
+        self.assertEqual(resp.status_code, 200)  # Stays on form
+        self.assertEqual(Group.objects.filter(group_name='Empty Group').count(), 0)
