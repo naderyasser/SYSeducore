@@ -3,6 +3,7 @@ from django.utils import timezone
 from .models import Attendance, Session
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.payments.models import Payment
+from apps.teachers.models import GroupSchedule
 
 
 class AttendanceService:
@@ -141,17 +142,28 @@ class AttendanceService:
 
         matching_group = None
         enrollment = None
+        matched_schedule = None
 
         # البحث عن المجموعة التي موعدها الآن (نفس اليوم + في نطاق مدة الحصة)
         for enr in enrollments:
             group = enr.group
 
-            # مطابقة اليوم
-            if group.schedule_day != current_day_name:
+            # Try GroupSchedule first
+            try:
+                schedule = GroupSchedule.objects.get(group=group, day_of_week=current_day_name)
+                schedule_time = schedule.start_time
+                duration = schedule.duration
+            except GroupSchedule.DoesNotExist:
+                # Fallback to legacy fields
+                if group.schedule_day != current_day_name:
+                    continue
+                schedule_time = group.schedule_time
+                duration = group.duration_minutes
+
+            if not schedule_time:
                 continue
 
             # مطابقة الوقت: التحقق من أن الوقت الحالي ضمن نطاق الحصة
-            # تحويل إلى التوقيت المحلي للمقارنة
             from django.conf import settings
             import pytz
             
@@ -159,15 +171,16 @@ class AttendanceService:
             current_time_local = current_time.astimezone(local_tz)
             
             session_start = local_tz.localize(
-                datetime.combine(current_time_local.date(), group.schedule_time)
+                datetime.combine(current_time_local.date(), schedule_time)
             )
-            session_end = session_start + timedelta(minutes=group.duration_minutes)
+            session_end = session_start + timedelta(minutes=duration)
             early_window = session_start - timedelta(minutes=AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES)
 
             # السماح بالمسح من 30 دقيقة قبل الحصة حتى نهاية الحصة
             if early_window <= current_time_local <= session_end:
                 matching_group = group
                 enrollment = enr
+                matched_schedule = {'time': schedule_time, 'duration': duration}
                 break
 
         if not matching_group:
@@ -186,10 +199,12 @@ class AttendanceService:
         # ========================================
         # الخطوة 3: قاعدة الـ 10 دقائق الصارمة
         # ========================================
+        schedule_time = matched_schedule['time']
+        schedule_duration = matched_schedule['duration']
         time_check = AttendanceService.check_strict_time(
             current_time,
-            matching_group.schedule_time,
-            matching_group.duration_minutes
+            schedule_time,
+            schedule_duration
         )
 
         if not time_check['allowed']:
@@ -268,8 +283,8 @@ class AttendanceService:
             'group': {
                 'group_id': matching_group.group_id,
                 'group_name': matching_group.group_name,
-                'schedule_day': matching_group.schedule_day,
-                'schedule_time': str(matching_group.schedule_time),
+                'schedule_day': current_day_name,
+                'schedule_time': str(matched_schedule['time']),
             },
             'attendance': {
                 'attendance_id': attendance.attendance_id,

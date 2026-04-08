@@ -12,6 +12,7 @@ urlpatterns = [
     path('<int:student_id>/delete/', views.student_delete, name='delete'),
     path('<int:student_id>/id-card/', views.student_id_card, name='id_card'),
     path('<int:student_id>/id-card/print/', views.student_id_card_print, name='id_card_print'),
+    path('<int:student_id>/qr-ticket/', views.student_qr_ticket, name='qr_ticket'),
     path('<int:student_id>/toggle-status/', views.student_toggle_status, name='toggle_status'),
 
     # Helper Views

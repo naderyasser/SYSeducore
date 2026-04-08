@@ -276,7 +276,7 @@
             {% endif %}
         </h2>
         <div style="display: flex; gap: 12px; align-items: center;">
-            {% if total_count > 0 %}
+            {% if total_count > 0 and is_admin %}
             <form method="post" action="{% url 'reports:recycle_empty' %}" style="display: inline;"
                 onsubmit="return confirm('⚠️ هل أنت متأكد من تفريغ سلة المهملات بالكامل؟\nسيتم حذف {{ total_count }} عنصر نهائياً ولا يمكن استعادتهم!')">
                 {% csrf_token %}
@@ -344,9 +344,11 @@
                 <button class="btn-restore" onclick="restoreItem('student', {{ student.student_id }})">
                     <i class="bi bi-arrow-counterclockwise"></i> استعادة
                 </button>
+                {% if is_admin %}
                 <button class="btn-permanent-delete" onclick="permanentDelete('student', {{ student.student_id }}, '{{ student.full_name|escapejs }}')">
                     <i class="bi bi-x-lg"></i> حذف نهائي
                 </button>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -379,9 +381,11 @@
                 <button class="btn-restore" onclick="restoreItem('teacher', {{ teacher.teacher_id }})">
                     <i class="bi bi-arrow-counterclockwise"></i> استعادة
                 </button>
+                {% if is_admin %}
                 <button class="btn-permanent-delete" onclick="permanentDelete('teacher', {{ teacher.teacher_id }}, '{{ teacher.full_name|escapejs }}')">
                     <i class="bi bi-x-lg"></i> حذف نهائي
                 </button>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -414,9 +418,11 @@
                 <button class="btn-restore" onclick="restoreItem('group', {{ group.group_id }})">
                     <i class="bi bi-arrow-counterclockwise"></i> استعادة
                 </button>
+                {% if is_admin %}
                 <button class="btn-permanent-delete" onclick="permanentDelete('group', {{ group.group_id }}, '{{ group.group_name|escapejs }}')">
                     <i class="bi bi-x-lg"></i> حذف نهائي
                 </button>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -449,9 +455,11 @@
                 <button class="btn-restore" onclick="restoreItem('room', {{ room.room_id }})">
                     <i class="bi bi-arrow-counterclockwise"></i> استعادة
                 </button>
+                {% if is_admin %}
                 <button class="btn-permanent-delete" onclick="permanentDelete('room', {{ room.room_id }}, '{{ room.name|escapejs }}')">
                     <i class="bi bi-x-lg"></i> حذف نهائي
                 </button>
+                {% endif %}
             </div>
         </div>
         {% endfor %}

@@ -808,10 +808,28 @@
             <!-- Scan Input Section -->
             <div class="scan-input-section">
                 <h2><i class="bi bi-qr-code-scan"></i> تسجيل حضور الطلاب</h2>
-                <p>امسح كود QR الخاص بالطالب بالكاميرا لتسجيل الحضور</p>
+                <p>امسح كود QR أو أدخل كود الطالب يدويًا</p>
+
+                <!-- Manual Code Input (always visible) -->
+                <div style="max-width: 500px; margin: 0 auto 20px;">
+                    <div class="input-group input-group-lg">
+                        <input type="text" class="form-control text-center" id="manualCodeInput"
+                               placeholder="أدخل كود الطالب هنا..."
+                               style="font-size: 1.3rem; font-weight: 700; letter-spacing: 2px; direction: ltr; border-radius: 0 10px 10px 0;"
+                               autocomplete="off" inputmode="numeric">
+                        <button class="btn btn-light" id="manualCodeSubmit"
+                                style="border-radius: 10px 0 0 10px; font-weight: 600; min-width: 110px;">
+                            <i class="bi bi-search me-1"></i> بحث
+                        </button>
+                    </div>
+                    <small style="opacity: 0.85; display: block; margin-top: 6px;">
+                        <i class="bi bi-keyboard me-1"></i>
+                        اكتب الكود واضغط Enter أو زر بحث
+                    </small>
+                </div>
 
                 <!-- Camera Scanner -->
-                <div class="camera-scanner active" id="cameraScanner">
+                <div class="camera-scanner" id="cameraScanner">
                     <div class="camera-container">
                         <video id="cameraPreview" autoplay playsinline muted></video>
                         <div class="camera-overlay">
@@ -822,7 +840,7 @@
                     </div>
                     <div class="camera-controls">
                         <button class="camera-btn" id="startCameraBtn">
-                            <i class="bi bi-play-fill"></i>
+                            <i class="bi bi-camera-video"></i>
                             تشغيل الكاميرا
                         </button>
                         <button class="camera-btn danger" id="stopCameraBtn" style="display: none;">
@@ -830,10 +848,10 @@
                             إيقاف الكاميرا
                         </button>
                     </div>
-                    <p style="margin-top: 15px; font-size: 0.85rem; opacity: 0.9;">
-                        <i class="bi bi-info-circle"></i>
-                        وجه الكاميرا نحو كود QR الطالب
-                    </p>
+                    <div id="cameraError" style="display:none; margin-top: 12px; background: rgba(239,68,68,0.15); border-radius: 8px; padding: 10px 16px; color: #fef2f2;">
+                        <i class="bi bi-exclamation-triangle me-1"></i>
+                        <span id="cameraErrorMsg"></span>
+                    </div>
                 </div>
             </div>
 
@@ -1018,6 +1036,24 @@ async function initializeApp() {
         stopCameraBtn.addEventListener('click', stopCamera);
     }
 
+    // Setup manual code input
+    const manualInput = document.getElementById('manualCodeInput');
+    const manualSubmit = document.getElementById('manualCodeSubmit');
+
+    if (manualInput) {
+        manualInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                submitManualCode();
+            }
+        });
+        // Auto-focus on load
+        manualInput.focus();
+    }
+    if (manualSubmit) {
+        manualSubmit.addEventListener('click', submitManualCode);
+    }
+
     // Load initial data
     await loadTodayStats();
     await loadTodaySessions();
@@ -1025,6 +1061,15 @@ async function initializeApp() {
     // Update time
     updateClock();
     setInterval(updateClock, 60000);
+}
+
+function submitManualCode() {
+    const input = document.getElementById('manualCodeInput');
+    const code = input.value.trim();
+    if (!code) return;
+    input.value = '';
+    input.focus();
+    processStudentCode(code);
 }
 
 // Process Student Code
@@ -1295,16 +1340,13 @@ let html5QrScanner = null;
 
 async function startCamera() {
     try {
-        // Check if running on HTTPS or localhost
-        if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
-            alert('الكاميرا تتطلب اتصال آمن (HTTPS). يرجى تفعيل HTTPS على الخادم.');
-            return;
-        }
+        // Hide previous error
+        const errBox = document.getElementById('cameraError');
+        if (errBox) errBox.style.display = 'none';
 
         // Check if mediaDevices is supported
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('المتصفح لا يدعم الكاميرا. يرجى استخدام متصفح حديث.');
-            return;
+            throw new Error('المتصفح لا يدعم الكاميرا. يرجى استخدام متصفح حديث.');
         }
 
         const video = document.getElementById('cameraPreview');
@@ -1367,11 +1409,21 @@ async function startCamera() {
             errorMessage += 'لم يتم العثور على كاميرا متصلة.';
         } else if (error.toString().includes('NotReadable')) {
             errorMessage += 'الكاميرا قيد الاستخدام من تطبيق آخر.';
+        } else if (error.toString().includes('Secure context') || error.toString().includes('https')) {
+            errorMessage += 'الكاميرا تتطلب اتصال آمن (HTTPS).';
         } else {
-            errorMessage += error.toString();
+            errorMessage += 'استخدم الإدخال اليدوي بدلاً من ذلك.';
         }
         
-        alert(errorMessage);
+        // Show inline error instead of alert
+        const errBox = document.getElementById('cameraError');
+        const errMsg = document.getElementById('cameraErrorMsg');
+        if (errBox && errMsg) {
+            errMsg.textContent = errorMessage;
+            errBox.style.display = 'block';
+        }
+        // Focus manual input
+        document.getElementById('manualCodeInput')?.focus();
     }
 }
 

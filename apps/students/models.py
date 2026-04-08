@@ -212,19 +212,23 @@ class Student(SoftDeleteModel):
 
     @classmethod
     def generate_next_code(cls):
-        """توليد الكود التالي (آخر كود رقمي + 1)، يبدأ من 1001"""
+        """توليد الكود التالي (آخر كود رقمي + 1)، يبدأ من 1001 - مع حماية من التزامن"""
+        from django.db import transaction
         from django.db.models import Max
         from django.db.models.functions import Cast
         from django.db.models import IntegerField
 
-        last_numeric = cls.objects.filter(
-            student_code__regex=r'^\d+$'
-        ).annotate(
-            code_int=Cast('student_code', IntegerField())
-        ).aggregate(max_code=Max('code_int'))
+        with transaction.atomic():
+            # Lock all numeric-code rows to prevent concurrent duplicate generation
+            locked_qs = cls.all_objects.select_for_update().filter(
+                student_code__regex=r'^\d+$'
+            )
+            last_numeric = locked_qs.annotate(
+                code_int=Cast('student_code', IntegerField())
+            ).aggregate(max_code=Max('code_int'))
 
-        last_code = last_numeric.get('max_code')
-        return str(last_code + 1) if last_code else '1001'
+            last_code = last_numeric.get('max_code')
+            return str(last_code + 1) if last_code else '1001'
 
     def generate_qr_image(self):
         """Generate QR code image for student"""

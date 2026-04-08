@@ -131,19 +131,17 @@ class TestReportPasswordBypass(TestRBACBase):
         response = self.client.get(reverse('reports:financial'))
         self.assertEqual(response.status_code, 200)
 
-    def test_supervisor_needs_password_for_payments_report(self):
-        """Supervisor should be redirected to password prompt."""
+    def test_supervisor_access_payments_report(self):
+        """Supervisor should access payment report without password (200)."""
         self.client.force_login(self.supervisor)
         response = self.client.get(reverse('reports:payments'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('password', response.url)
+        self.assertEqual(response.status_code, 200)
 
-    def test_teacher_needs_password_for_financial_report(self):
-        """Teacher should be redirected to password prompt."""
+    def test_teacher_access_financial_report(self):
+        """Teacher should access financial report without password (200)."""
         self.client.force_login(self.teacher)
         response = self.client.get(reverse('reports:financial'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('password', response.url)
+        self.assertEqual(response.status_code, 200)
 
 
 class TestWhatsAppBlocking(TestRBACBase):

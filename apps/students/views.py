@@ -473,6 +473,19 @@ def student_id_card_print(request, student_id):
 
 
 @login_required
+def student_qr_ticket(request, student_id):
+    """
+    طباعة تذكرة QR صغيرة (~5 × 8 سم) تحتوي فقط على كود الطالب و QR.
+    """
+    student = get_object_or_404(Student, pk=student_id)
+    barcode_base64 = student.get_barcode_base64()
+    return render(request, 'students/qr_ticket.html', {
+        'student': student,
+        'barcode_base64': barcode_base64,
+    })
+
+
+@login_required
 def get_next_code(request):
     """
     API endpoint to get next auto-generated student code.

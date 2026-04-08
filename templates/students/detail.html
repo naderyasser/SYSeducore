@@ -365,6 +365,9 @@
                     <a href="{% url 'students:id_card' student_id=student.student_id %}" target="_blank" class="btn btn-primary">
                         <i class="bi bi-card-heading me-1"></i>البطاقة
                     </a>
+                    <a href="{% url 'students:qr_ticket' student_id=student.student_id %}" target="_blank" class="btn btn-outline-dark">
+                        <i class="bi bi-qr-code me-1"></i>تذكرة QR
+                    </a>
                     <button onclick="openSubscriptionModal({{ student.student_id }})" class="btn btn-success">
                         <i class="bi bi-check-circle me-1"></i>تفعيل الاشتراك
                     </button>

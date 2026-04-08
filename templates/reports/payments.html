@@ -291,10 +291,6 @@
             <p class="mb-0 mt-2 opacity-75">متابعة وتتبع المدفوعات والمصروفات</p>
         </div>
         <div class="export-buttons">
-            <a href="{% url 'reports:logout' %}" class="btn-export" style="background: rgba(220, 38, 38, 0.9); color: #fff;">
-                <i class="bi bi-box-arrow-right"></i>
-                تسجيل الخروج
-            </a>
             <button class="btn-export excel" onclick="exportTableToExcel()">
                 <i class="bi bi-file-earmark-excel"></i>
                 تصدير Excel
@@ -350,11 +346,22 @@
         فلترة البيانات
     </div>
     <form method="get" class="row g-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label class="form-label">الشهر</label>
             <input type="month" name="month" class="form-control" value="{{ selected_month }}">
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <label class="form-label">المدرس</label>
+            <select name="teacher" class="form-select">
+                <option value="">جميع المدرسين</option>
+                {% for teacher in teachers %}
+                <option value="{{ teacher.teacher_id }}" {% if selected_teacher == teacher.teacher_id|stringformat:"s" %}selected{% endif %}>
+                    {{ teacher.full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
             <label class="form-label">المجموعة</label>
             <select name="group" class="form-select">
                 <option value="">جميع المجموعات</option>
@@ -365,7 +372,7 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label class="form-label">الحالة</label>
             <select name="status" class="form-select">
                 <option value="">جميع الحالات</option>
@@ -466,7 +473,7 @@
     {% if page_obj.has_other_pages %}
     <div class="pagination-modern">
         {% if page_obj.has_previous %}
-        <a href="?page={{ page_obj.previous_page_number }}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">
+        <a href="?page={{ page_obj.previous_page_number }}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if selected_teacher %}&teacher={{ selected_teacher }}{% endif %}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">
             <i class="bi bi-chevron-right"></i>
         </a>
         {% endif %}
@@ -475,12 +482,12 @@
         {% if page_obj.number == num %}
         <span class="current">{{ num }}</span>
         {% else %}
-        <a href="?page={{ num }}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">{{ num }}</a>
+        <a href="?page={{ num }}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if selected_teacher %}&teacher={{ selected_teacher }}{% endif %}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">{{ num }}</a>
         {% endif %}
         {% endfor %}
         
         {% if page_obj.has_next %}
-        <a href="?page={{ page_obj.next_page_number }}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">
+        <a href="?page={{ page_obj.next_page_number }}{% if selected_month %}&month={{ selected_month }}{% endif %}{% if selected_teacher %}&teacher={{ selected_teacher }}{% endif %}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">
             <i class="bi bi-chevron-left"></i>
         </a>
         {% endif %}
