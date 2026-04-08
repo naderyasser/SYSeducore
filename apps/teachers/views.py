@@ -8,11 +8,77 @@ from datetime import datetime, timedelta
 from django.http import JsonResponse
 import json
 
-from .models import Teacher, Group, Room, Subject
+from .models import Teacher, Group, Room, Subject, GroupSchedule
 from .forms import TeacherForm, GroupForm, RoomForm, SubjectForm
 
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Session, Attendance, ActivityLog
+
+
+def _parse_schedule_data(post_data, default_duration=120):
+    """
+    Parse schedule data from POST.
+    Expects: schedule_days[] with day names, and schedule_time_<DayName> for per-day times.
+    Falls back to a single schedule_day + schedule_time if the per-day format is not used.
+    """
+    from datetime import datetime as dt
+
+    schedule_data = []
+
+    # New format: per-day times
+    days = post_data.getlist('schedule_days[]') or post_data.getlist('schedule_days')
+    if days:
+        for day in days:
+            time_str = post_data.get(f'schedule_time_{day}', '').strip()
+            duration_str = post_data.get(f'schedule_duration_{day}', '').strip()
+
+            if not time_str:
+                # Fall back to default time
+                time_str = post_data.get('schedule_time', '').strip()
+
+            if time_str:
+                try:
+                    parsed_time = dt.strptime(time_str, '%H:%M').time()
+                except ValueError:
+                    continue
+
+                duration = int(duration_str) if duration_str else default_duration
+                schedule_data.append({
+                    'day': day,
+                    'time': parsed_time,
+                    'duration': duration,
+                })
+    else:
+        # Legacy single-day format
+        schedule_days_json = post_data.get('schedule_days_json', '')
+        if schedule_days_json:
+            try:
+                parsed = json.loads(schedule_days_json)
+                for entry in parsed:
+                    time_val = dt.strptime(entry['time'], '%H:%M').time()
+                    schedule_data.append({
+                        'day': entry['day'],
+                        'time': time_val,
+                        'duration': int(entry.get('duration', default_duration)),
+                    })
+            except (json.JSONDecodeError, KeyError, ValueError):
+                pass
+
+        if not schedule_data:
+            day = post_data.get('schedule_day', '').strip()
+            time_str = post_data.get('schedule_time', '').strip()
+            if day and time_str:
+                try:
+                    parsed_time = dt.strptime(time_str, '%H:%M').time()
+                    schedule_data.append({
+                        'day': day,
+                        'time': parsed_time,
+                        'duration': default_duration,
+                    })
+                except ValueError:
+                    pass
+
+    return schedule_data
 
 
 # ==================== Teachers ====================
@@ -229,75 +295,26 @@ def group_create(request):
     if request.method == 'POST':
         form = GroupForm(request.POST)
         if form.is_valid():
-            # Check if multiple days were selected
-            schedule_days_json = request.POST.get('schedule_days')
-            if schedule_days_json:
-                try:
-                    import json
-                    schedule_days = json.loads(schedule_days_json)
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    schedule_days = [form.cleaned_data.get('schedule_day')]
-            else:
-                schedule_days = [form.cleaned_data.get('schedule_day')]
+            # Parse schedule data from POST
+            schedule_data = _parse_schedule_data(request.POST, form.cleaned_data.get('duration_minutes', 120))
 
-            # Don't save the form yet - we'll create multiple groups
-            created_groups = []
-            errors = []
-            
-            for i, day in enumerate(schedule_days):
-                group_name = form.cleaned_data['group_name']
-                # Add day suffix if multiple days
-                if len(schedule_days) > 1:
-                    day_ar = {
-                        'Saturday': '(السبت)',
-                        'Sunday': '(الأحد)',
-                        'Monday': '(الاثنين)',
-                        'Tuesday': '(الثلاثاء)',
-                        'Wednesday': '(الأربعاء)',
-                        'Thursday': '(الخميس)',
-                        'Friday': '(الجمعة)',
-                    }.get(day, '')
-                    group_name = f"{group_name} {day_ar}"
+            if not schedule_data:
+                messages.error(request, 'يرجى اختيار يوم واحد على الأقل وتحديد الوقت')
+                return render(request, 'teachers/groups/form.html', {'form': form})
 
-                try:
-                    # Create group for each day
-                    group = Group.objects.create(
-                        group_name=group_name,
-                        teacher=form.cleaned_data['teacher'],
-                        room=form.cleaned_data.get('room'),
-                        schedule_day=day,
-                        schedule_time=form.cleaned_data['schedule_time'],
-                        duration_minutes=form.cleaned_data['duration_minutes'],
-                        gender_type=form.cleaned_data.get('gender_type', 'mixed'),
-                        education_stage=form.cleaned_data.get('education_stage'),
-                        education_year=form.cleaned_data.get('education_year'),
-                        standard_fee=form.cleaned_data['standard_fee'],
-                        center_percentage=form.cleaned_data.get('center_percentage', 30),
-                        sessions_per_month=form.cleaned_data.get('sessions_per_month', 4),
-                        is_active=form.cleaned_data.get('is_active', True),
-                    )
-                    ActivityLog.log(
-                        user=request.user, action='group_create',
-                        description=f'إنشاء مجموعة: {group.group_name}',
-                        target_model='Group', target_id=group.pk, request=request
-                    )
-                    created_groups.append(group)
-                except ValidationError as e:
-                    day_ar = dict(Group.DAYS_CHOICES).get(day, day)
-                    errors.append(f"{day_ar}: {e.message_dict.get('schedule_time', [str(e)])[0]}")
-
-            if created_groups:
-                if len(created_groups) > 1:
-                    messages.success(request, f'تم إضافة {len(created_groups)} مجموعات بنجاح')
-                else:
-                    messages.success(request, 'تم إضافة المجموعة بنجاح')
-                    
-            if errors:
-                for error in errors:
-                    messages.error(request, error)
-                    
-            if created_groups:
+            try:
+                group = form.save_with_schedules(schedule_data)
+                ActivityLog.log(
+                    user=request.user, action='group_create',
+                    description=f'إنشاء مجموعة: {group.group_name}',
+                    target_model='Group', target_id=group.pk, request=request
+                )
+                messages.success(request, 'تم إضافة المجموعة بنجاح')
                 return redirect('teachers:group_list')
+            except ValidationError as e:
+                for field, errs in e.message_dict.items():
+                    for err in errs:
+                        messages.error(request, err)
         else:
             messages.error(request, 'يرجى تصحيح الأخطاء في النموذج')
     else:
@@ -314,12 +331,14 @@ def group_detail(request, group_id):
     enrolled_students = StudentGroupEnrollment.objects.filter(
         group=group, is_active=True
     ).select_related('student')
+    schedules = group.schedules.all().order_by('day_of_week')
 
     context = {
         'group': group,
         'enrolled_students': enrolled_students,
         'enrolled_count': enrolled_students.count(),
         'capacity': group.room.capacity if group.room else 0,
+        'schedules': schedules,
     }
     return render(request, 'teachers/groups/detail.html', context)
 
@@ -330,17 +349,41 @@ def group_update(request, group_id):
     if request.method == 'POST':
         form = GroupForm(request.POST, instance=group)
         if form.is_valid():
-            form.save()
-            ActivityLog.log(
-                user=request.user, action='group_update',
-                description=f'تعديل بيانات المجموعة: {group.group_name}',
-                target_model='Group', target_id=group.pk, request=request
-            )
-            messages.success(request, 'تم تحديث بيانات المجموعة بنجاح')
-            return redirect('teachers:group_list')
+            schedule_data = _parse_schedule_data(request.POST, form.cleaned_data.get('duration_minutes', group.duration_minutes))
+
+            if not schedule_data:
+                messages.error(request, 'يرجى اختيار يوم واحد على الأقل وتحديد الوقت')
+                return render(request, 'teachers/groups/form.html', {'form': form, 'group': group})
+
+            try:
+                form.save_with_schedules(schedule_data)
+                ActivityLog.log(
+                    user=request.user, action='group_update',
+                    description=f'تعديل بيانات المجموعة: {group.group_name}',
+                    target_model='Group', target_id=group.pk, request=request
+                )
+                messages.success(request, 'تم تحديث بيانات المجموعة بنجاح')
+                return redirect('teachers:group_list')
+            except ValidationError as e:
+                for field, errs in e.message_dict.items():
+                    for err in errs:
+                        messages.error(request, err)
     else:
         form = GroupForm(instance=group)
-    return render(request, 'teachers/groups/form.html', {'form': form, 'group': group})
+
+    # Pre-load existing schedules for the template
+    existing_schedules = list(group.schedules.values('day_of_week', 'start_time', 'duration'))
+    import json
+    schedules_json = json.dumps([
+        {'day': s['day_of_week'], 'time': s['start_time'].strftime('%H:%M'), 'duration': s['duration']}
+        for s in existing_schedules
+    ], ensure_ascii=False)
+
+    return render(request, 'teachers/groups/form.html', {
+        'form': form,
+        'group': group,
+        'schedules_json': schedules_json,
+    })
 
 
 @login_required

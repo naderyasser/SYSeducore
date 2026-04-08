@@ -353,7 +353,6 @@ def attendance_report(request):
 
 
 @login_required
-@report_password_required
 def payment_report(request):
     """
     Comprehensive Payment Report with filters and statistics
@@ -364,10 +363,11 @@ def payment_report(request):
     month = request.GET.get('month')
     status = request.GET.get('status')
     group_id = request.GET.get('group')
+    teacher_id = request.GET.get('teacher')
     
     # Base queryset
     payments = Payment.objects.select_related(
-        'student', 'group'
+        'student', 'group', 'group__teacher'
     ).order_by('-month', '-payment_date')
     
     # Apply filters
@@ -377,6 +377,8 @@ def payment_report(request):
         payments = payments.filter(status=status)
     if group_id:
         payments = payments.filter(group__group_id=group_id)
+    if teacher_id:
+        payments = payments.filter(group__teacher__teacher_id=teacher_id)
     
     # Statistics
     total_due = payments.aggregate(Sum('amount_due'))['amount_due__sum'] or 0
@@ -388,8 +390,9 @@ def payment_report(request):
     partial_count = payments.filter(status='partial').count()
     unpaid_count = payments.filter(status='unpaid').count()
     
-    # Group filter options
+    # Group and teacher filter options
     groups = Group.objects.filter(is_active=True)
+    teachers = Teacher.objects.filter(is_active=True)
     
     # Pagination
     paginator = Paginator(payments, 25)
@@ -405,16 +408,17 @@ def payment_report(request):
         'partial_count': partial_count,
         'unpaid_count': unpaid_count,
         'groups': groups,
+        'teachers': teachers,
         'selected_month': month,
         'selected_status': status,
         'selected_group': group_id,
+        'selected_teacher': teacher_id,
     }
     
     return render(request, 'reports/payments.html', context)
 
 
 @login_required
-@report_password_required
 def financial_report(request):
     """
     Detailed Financial Report
@@ -533,6 +537,7 @@ def recycle_bin(request):
         'rooms_count': deleted_rooms.count(),
         'total_count': deleted_students.count() + deleted_teachers.count() + deleted_groups.count() + deleted_rooms.count(),
         'current_type': filter_type,
+        'is_admin': request.user.role == 'admin',
     }
     
     return render(request, 'reports/recycle_bin.html', context)
@@ -584,9 +589,13 @@ def recycle_restore(request):
 
 @login_required
 def recycle_permanent_delete(request):
-    """حذف نهائي من سلة المهملات"""
+    """حذف نهائي من سلة المهملات - للمدير فقط"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'})
+    
+    # Only admin can permanently delete
+    if request.user.role != 'admin':
+        return JsonResponse({'success': False, 'message': 'ليس لديك صلاحية الحذف النهائي. فقط المدير يمكنه ذلك.'})
     
     item_type = request.POST.get('type')
     item_id = request.POST.get('id')
@@ -634,9 +643,14 @@ def recycle_permanent_delete(request):
 
 @login_required
 def recycle_empty(request):
-    """تفريغ سلة المهملات بالكامل مع حذف السجلات المرتبطة تدريجياً"""
+    """تفريغ سلة المهملات بالكامل مع حذف السجلات المرتبطة تدريجياً - للمدير فقط"""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'})
+    
+    # Only admin can empty recycle bin
+    if request.user.role != 'admin':
+        messages.error(request, 'ليس لديك صلاحية تفريغ سلة المهملات. فقط المدير يمكنه ذلك.')
+        return redirect('reports:recycle_bin')
 
     from apps.attendance.models import Session
     from apps.payments.models import Payment

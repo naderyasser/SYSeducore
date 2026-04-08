@@ -314,3 +314,82 @@ class Group(SoftDeleteModel):
             return f"{hours} ساعة" if hours == 1 else f"{hours} ساعات"
         else:
             return f"{mins} دقيقة"
+
+    def get_schedules(self):
+        """الحصول على جداول المجموعة"""
+        return self.schedules.all().order_by('day_of_week')
+
+    def get_schedule_for_day(self, day_name):
+        """الحصول على جدول يوم معين"""
+        return self.schedules.filter(day_of_week=day_name).first()
+
+
+class GroupSchedule(models.Model):
+    """
+    جدول المجموعة - يوم بيوم مع وقت مستقل لكل يوم
+    يسمح بأن يكون لكل يوم في المجموعة وقت بداية ومدة مختلفة
+    """
+    DAYS_CHOICES = Group.DAYS_CHOICES
+
+    schedule_id = models.AutoField(primary_key=True)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name='schedules',
+        verbose_name="المجموعة"
+    )
+    day_of_week = models.CharField(
+        max_length=10,
+        choices=DAYS_CHOICES,
+        verbose_name="يوم الحصة"
+    )
+    start_time = models.TimeField(verbose_name="وقت بداية الحصة")
+    duration = models.PositiveIntegerField(
+        default=120,
+        verbose_name="مدة الحصة (بالدقائق)",
+        help_text="مدة الحصة بالدقائق"
+    )
+
+    class Meta:
+        db_table = 'group_schedules'
+        verbose_name = 'جدول مجموعة'
+        verbose_name_plural = 'جداول المجموعات'
+        unique_together = ['group', 'day_of_week']
+        ordering = ['day_of_week', 'start_time']
+
+    def __str__(self):
+        return f"{self.group.group_name} - {self.get_day_of_week_display()} {self.start_time.strftime('%I:%M %p')}"
+
+    def get_end_time(self):
+        """حساب وقت نهاية الحصة"""
+        start_dt = datetime.combine(datetime.today(), self.start_time)
+        end_dt = start_dt + timedelta(minutes=self.duration)
+        return end_dt.time()
+
+    def clean(self):
+        """التحقق من عدم تداخل القاعة في نفس اليوم والوقت"""
+        super().clean()
+        if self.group and self.group.room and self.day_of_week and self.start_time:
+            new_start = datetime.combine(datetime.today(), self.start_time)
+            new_end = new_start + timedelta(minutes=self.duration)
+
+            # البحث عن جداول أخرى في نفس القاعة + نفس اليوم
+            other_schedules = GroupSchedule.objects.filter(
+                group__room=self.group.room,
+                day_of_week=self.day_of_week,
+                group__is_active=True
+            ).exclude(pk=self.pk).exclude(group=self.group).select_related('group')
+
+            for other in other_schedules:
+                other_start = datetime.combine(datetime.today(), other.start_time)
+                other_end = other_start + timedelta(minutes=other.duration)
+
+                if new_start < other_end and other_start < new_end:
+                    raise ValidationError({
+                        'start_time': (
+                            f'تعارض في الجدول: القاعة "{self.group.room.name}" محجوزة لمجموعة '
+                            f'"{other.group.group_name}" من {other.start_time.strftime("%I:%M %p")} '
+                            f'إلى {other.get_end_time().strftime("%I:%M %p")}. '
+                            f'يمكنك الحجز بدءاً من {other.get_end_time().strftime("%I:%M %p")}'
+                        )
+                    })

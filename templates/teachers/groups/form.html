@@ -172,15 +172,12 @@
                                 <i class="bi bi-info-circle me-2"></i>
                                 <span id="selectedDaysText">لم يتم اختيار أي يوم</span>
                             </div>
-                            <input type="hidden" name="schedule_day" id="schedule_day_hidden" value="">
                         </div>
 
-                        <div class="col-md-6">
-                            <label class="form-label">وقت البداية <span class="text-danger">*</span></label>
-                            {{ form.schedule_time }}
-                            {% if form.schedule_time.errors %}
-                            <div class="text-danger small mt-1">{{ form.schedule_time.errors.0 }}</div>
-                            {% endif %}
+                        <!-- Per-day time inputs (shown when day is selected) -->
+                        <div class="col-md-12" id="perDayTimesContainer" style="display:none;">
+                            <label class="form-label">وقت البداية لكل يوم <span class="text-danger">*</span></label>
+                            <div id="perDayTimeInputs" class="row g-2"></div>
                         </div>
 
                         <div class="col-md-6">
@@ -268,14 +265,14 @@
 </div>
 
 <script>
-// Handle multi-day selection
+// Handle multi-day selection with per-day time inputs
 const dayCheckboxes = document.querySelectorAll('input[name="schedule_days"]');
 const selectedDaysInfo = document.getElementById('selectedDaysInfo');
 const selectedDaysText = document.getElementById('selectedDaysText');
-const scheduleDayHidden = document.getElementById('schedule_day_hidden');
+const perDayTimesContainer = document.getElementById('perDayTimesContainer');
+const perDayTimeInputs = document.getElementById('perDayTimeInputs');
 const form = document.querySelector('form');
 
-// Map day values to Arabic names
 const dayNamesAr = {
     'Saturday': 'السبت',
     'Sunday': 'الأحد',
@@ -286,69 +283,90 @@ const dayNamesAr = {
     'Friday': 'الجمعة'
 };
 
-// Update selected days info when checkboxes change
+// Pre-loaded schedule data (when editing)
+let preloadedSchedules = {};
+{% if schedules_json %}
+try {
+    const parsed = JSON.parse('{{ schedules_json|escapejs }}');
+    parsed.forEach(s => { preloadedSchedules[s.day] = s.time; });
+} catch(e) {}
+{% endif %}
+
 dayCheckboxes.forEach(checkbox => {
-    checkbox.addEventListener('change', updateSelectedDaysInfo);
+    checkbox.addEventListener('change', updateDayUI);
 });
 
-function updateSelectedDaysInfo() {
-    const selectedDays = Array.from(dayCheckboxes)
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
+function updateDayUI() {
+    const selectedDays = Array.from(dayCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
 
     if (selectedDays.length > 0) {
-        const arabicNames = selectedDays.map(day => dayNamesAr[day]);
-        selectedDaysText.textContent = `تم اختيار: ${arabicNames.join('، ')}`;
+        selectedDaysText.textContent = 'تم اختيار: ' + selectedDays.map(d => dayNamesAr[d]).join('، ');
         selectedDaysInfo.classList.add('show');
+        perDayTimesContainer.style.display = '';
     } else {
         selectedDaysText.textContent = 'لم يتم اختيار أي يوم';
         selectedDaysInfo.classList.remove('show');
+        perDayTimesContainer.style.display = 'none';
     }
+
+    // Build per-day time inputs
+    perDayTimeInputs.innerHTML = '';
+    selectedDays.forEach(day => {
+        const preTime = preloadedSchedules[day] || '';
+        const col = document.createElement('div');
+        col.className = 'col-md-4 col-sm-6';
+        col.innerHTML =
+            '<div class="input-group">' +
+            '<span class="input-group-text">' + dayNamesAr[day] + '</span>' +
+            '<input type="time" class="form-control" name="schedule_time_' + day + '" value="' + preTime + '" required>' +
+            '</div>';
+        perDayTimeInputs.appendChild(col);
+    });
 }
 
-// Handle form submission to create multiple groups
+// Form submit: add schedule_days[] hidden inputs
 form.addEventListener('submit', function(e) {
-    const selectedDays = Array.from(dayCheckboxes)
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-
+    const selectedDays = Array.from(dayCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
     if (selectedDays.length === 0) {
         e.preventDefault();
         alert('يرجى اختيار يوم واحد على الأقل');
         return;
     }
-
-    // Set the first selected day to the hidden field
-    scheduleDayHidden.value = selectedDays[0];
-
-    // Store all selected days for the backend to process
-    const schedulesInput = document.createElement('input');
-    schedulesInput.type = 'hidden';
-    schedulesInput.name = 'schedule_days';
-    schedulesInput.value = JSON.stringify(selectedDays);
-    form.appendChild(schedulesInput);
+    // Remove old hidden schedule_days[] inputs
+    form.querySelectorAll('input[name="schedule_days[]"]').forEach(el => el.remove());
+    selectedDays.forEach(day => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden';
+        inp.name = 'schedule_days[]';
+        inp.value = day;
+        form.appendChild(inp);
+    });
 });
 
-// If editing existing group, pre-select the day and disable others
-{% if group and group.schedule_day %}
+// Pre-select days when editing
+{% if schedules_json %}
 (function() {
-    const currentDay = '{{ group.schedule_day }}';
-    const checkbox = document.querySelector(`input[value="${currentDay}"]`);
-    if (checkbox) {
-        checkbox.checked = true;
-        // Disable other checkboxes when editing
-        dayCheckboxes.forEach(cb => {
-            if (cb.value !== currentDay) {
-                cb.disabled = true;
-                cb.parentElement.style.opacity = '0.5';
-            }
+    try {
+        const parsed = JSON.parse('{{ schedules_json|escapejs }}');
+        parsed.forEach(s => {
+            const cb = document.querySelector('input[value="' + s.day + '"]');
+            if (cb) cb.checked = true;
         });
-        updateSelectedDaysInfo();
+        updateDayUI();
+    } catch(e) {}
+})();
+{% elif group and group.schedule_day %}
+(function() {
+    const cb = document.querySelector('input[value="{{ group.schedule_day }}"]');
+    if (cb) {
+        cb.checked = true;
+        preloadedSchedules['{{ group.schedule_day }}'] = '{{ group.schedule_time|time:"H:i" }}';
+        updateDayUI();
     }
 })();
 {% endif %}
 
-// Stage/Year filtering - filter year options based on selected stage
+// Stage/Year filtering
 const STAGE_YEAR_MAP = {
     'primary': ['1', '2', '3', '4', '5', '6'],
     'preparatory': ['1', '2', '3'],
@@ -365,7 +383,7 @@ function filterYearsByStage() {
     const validYears = STAGE_YEAR_MAP[stage] || [];
 
     Array.from(yearSelect.options).forEach(opt => {
-        if (!opt.value) return; // skip empty option
+        if (!opt.value) return;
         if (!stage || validYears.includes(opt.value)) {
             opt.style.display = '';
             opt.disabled = false;

@@ -1,5 +1,5 @@
 from django import forms
-from .models import Teacher, Group, Room, Subject
+from .models import Teacher, Group, Room, Subject, GroupSchedule
 
 
 class TeacherForm(forms.ModelForm):
@@ -60,11 +60,7 @@ class RoomForm(forms.ModelForm):
 
 class GroupForm(forms.ModelForm):
     """
-    Form للمجموعة مع الحقول الجديدة:
-    - مدة الحصة
-    - تصنيف الجنس
-    - المرحلة والسنة الدراسية
-    - متعدد الأيام (يتم التعامل مع schedule_day بالكاستوم شيكبكس)
+    Form للمجموعة مع دعم الجداول المتعددة
     """
     schedule_day = forms.ChoiceField(
         choices=Group.DAYS_CHOICES,
@@ -106,6 +102,36 @@ class GroupForm(forms.ModelForm):
         self.fields['room'].required = False
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
+        self.fields['schedule_time'].required = False
+
+    def save_with_schedules(self, schedule_data, commit=True):
+        """
+        Save group and create/update GroupSchedule records.
+        schedule_data: list of dicts [{'day': 'Saturday', 'time': '14:00', 'duration': 120}, ...]
+        """
+        group = super().save(commit=commit)
+
+        if commit and schedule_data:
+            # Set the first schedule's data as the Group's legacy fields
+            first = schedule_data[0]
+            group.schedule_day = first['day']
+            group.schedule_time = first['time']
+            group.duration_minutes = first.get('duration', group.duration_minutes)
+            group.save(skip_validation=True)
+
+            # Clear old schedules and create new ones
+            GroupSchedule.objects.filter(group=group).delete()
+            for entry in schedule_data:
+                schedule = GroupSchedule(
+                    group=group,
+                    day_of_week=entry['day'],
+                    start_time=entry['time'],
+                    duration=entry.get('duration', group.duration_minutes),
+                )
+                schedule.full_clean()
+                schedule.save()
+
+        return group
 
 class SubjectForm(forms.ModelForm):
     """
