@@ -270,24 +270,32 @@
         body {
             background: #fff;
             padding: 0;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
-        .sidebar, .top-header, .actions-section, .back-card {
+        .sidebar, .top-header, .actions-section, .back-card, .sidebar-overlay {
             display: none !important;
         }
 
         .main-wrapper {
             margin: 0;
+            width: 100% !important;
+            padding: 0;
+        }
+
+        .content-area {
+            padding: 0 !important;
+        }
+
+        .id-card-container {
+            max-width: 100%;
         }
 
         .id-card {
             box-shadow: none;
             page-break-inside: avoid;
-            margin: 0;
-        }
-
-        .id-card::before {
-            display: none;
+            margin: 0 auto;
         }
     }
 
@@ -466,4 +474,12 @@
         </ul>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    window.addEventListener('load', function() {
+        setTimeout(function() { window.print(); }, 500);
+    });
+</script>
 {% endblock %}

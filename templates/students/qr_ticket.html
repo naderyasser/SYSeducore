@@ -22,6 +22,8 @@
             align-items: center;
             min-height: 100vh;
             gap: 20px;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         .card {
@@ -204,5 +206,11 @@
         <div class="card-footer-line"></div>
         <div class="card-brand">SYSeducore</div>
     </div>
+
+    <script>
+        window.addEventListener('load', function() {
+            setTimeout(function() { window.print(); }, 500);
+        });
+    </script>
 </body>
 </html>
