@@ -62,16 +62,11 @@ class GroupForm(forms.ModelForm):
     """
     Form للمجموعة مع دعم الجداول المتعددة
     """
-    schedule_day = forms.ChoiceField(
-        choices=Group.DAYS_CHOICES,
-        required=False,
-        widget=forms.HiddenInput()
-    )
 
     class Meta:
         model = Group
         fields = [
-            'group_name', 'teacher', 'room', 'schedule_day', 'schedule_time',
+            'group_name', 'teacher', 'room',
             'duration_minutes', 'gender_type', 'education_stage', 'education_year',
             'standard_fee', 'center_percentage', 'sessions_per_month', 'is_active'
         ]
@@ -79,7 +74,6 @@ class GroupForm(forms.ModelForm):
             'group_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اسم المجموعة'}),
             'teacher': forms.Select(attrs={'class': 'form-select'}),
             'room': forms.Select(attrs={'class': 'form-select'}),
-            'schedule_time': forms.TimeInput(attrs={'class': 'form-control', 'type': 'time'}),
             'duration_minutes': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '120',
@@ -102,34 +96,33 @@ class GroupForm(forms.ModelForm):
         self.fields['room'].required = False
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
-        self.fields['schedule_time'].required = False
 
     def save_with_schedules(self, schedule_data, commit=True):
         """
         Save group and create/update GroupSchedule records.
-        schedule_data: list of dicts [{'day': 'Saturday', 'time': '14:00', 'duration': 120}, ...]
+        schedule_data: list of dicts [{'day': 'Saturday', 'time': time_obj, 'duration': 120}, ...]
         """
-        group = super().save(commit=commit)
+        group = super().save(commit=False)
 
-        if commit and schedule_data:
-            # Set the first schedule's data as the Group's legacy fields
+        # Set legacy fields from schedule data BEFORE save (model requires them)
+        if schedule_data:
             first = schedule_data[0]
             group.schedule_day = first['day']
             group.schedule_time = first['time']
-            group.duration_minutes = first.get('duration', group.duration_minutes)
-            group.save(skip_validation=True)
+            group.duration_minutes = first.get('duration', group.duration_minutes or 120)
+
+        if commit:
+            group.save()
 
             # Clear old schedules and create new ones
             GroupSchedule.objects.filter(group=group).delete()
             for entry in schedule_data:
-                schedule = GroupSchedule(
+                GroupSchedule.objects.create(
                     group=group,
                     day_of_week=entry['day'],
                     start_time=entry['time'],
                     duration=entry.get('duration', group.duration_minutes),
                 )
-                schedule.full_clean()
-                schedule.save()
 
         return group
 
