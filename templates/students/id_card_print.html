@@ -10,9 +10,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {
-            font-family: 'Cairo', sans-serif;
-        }
+        * { font-family: 'Cairo', sans-serif; }
 
         body {
             background: #f5f6fa;
@@ -31,6 +29,7 @@
             box-shadow: 0 20px 60px rgba(0,0,0,0.3);
             position: relative;
             overflow: hidden;
+            page-break-inside: avoid;
         }
 
         .id-card::before {
@@ -48,6 +47,9 @@
             z-index: 1;
             text-align: center;
             margin-bottom: 25px;
+            background: none;
+            border: none;
+            padding: 0;
         }
 
         .card-logo {
@@ -97,6 +99,8 @@
             font-weight: 700;
             color: #1e293b;
             margin-bottom: 10px;
+            word-break: break-word;
+            overflow-wrap: break-word;
         }
 
         .student-code {
@@ -123,6 +127,7 @@
             padding: 10px;
             border-radius: 8px;
             text-align: center;
+            page-break-inside: avoid;
         }
 
         .info-item .label {
@@ -135,6 +140,7 @@
             font-size: 0.85rem;
             font-weight: 600;
             color: #1e293b;
+            word-break: break-word;
         }
 
         .barcode-container {
@@ -144,6 +150,7 @@
             background: #fff;
             border-radius: 12px;
             border: 2px dashed #cbd5e1;
+            page-break-inside: avoid;
         }
 
         .barcode-container img {
@@ -165,6 +172,7 @@
 
         .groups-section {
             margin-top: 15px;
+            page-break-inside: avoid;
         }
 
         .groups-section h6 {
@@ -182,11 +190,10 @@
             margin-bottom: 6px;
             font-size: 0.8rem;
             border-right: 3px solid #3b82f6;
+            page-break-inside: avoid;
         }
 
-        .group-item:last-child {
-            margin-bottom: 0;
-        }
+        .group-item:last-child { margin-bottom: 0; }
 
         .group-name {
             font-weight: 600;
@@ -206,6 +213,7 @@
             margin-top: 15px;
             padding-top: 15px;
             border-top: 1px solid rgba(255,255,255,0.2);
+            background: none;
         }
 
         .card-footer p {
@@ -219,28 +227,38 @@
             margin-top: 30px;
         }
 
-        .actions .btn {
-            margin: 0 5px;
+        .actions .btn { margin: 0 5px; }
+
+        /* ==================== PRINT ==================== */
+        @page {
+            size: A4 portrait;
+            margin: 10mm;
         }
 
         @media print {
-            body {
-                background: #fff;
-                padding: 0;
-            }
-
-            .id-card {
-                box-shadow: none;
-                margin: 0;
-                page-break-inside: avoid;
+            html, body {
+                background: #fff !important;
+                padding: 0 !important;
+                margin: 0 !important;
             }
 
             .actions {
-                display: none;
+                display: none !important;
+            }
+
+            .id-card {
+                box-shadow: none !important;
+                margin: 0 auto;
+                page-break-inside: avoid;
+                max-width: 400px;
             }
 
             .id-card::before {
                 display: none;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr 1fr !important;
             }
         }
     </style>
@@ -296,7 +314,9 @@
             </div>
 
             <div class="barcode-container">
+                {% if barcode_base64 %}
                 <img src="data:image/png;base64,{{ barcode_base64 }}" alt="Student Barcode">
+                {% endif %}
                 <div class="barcode-label">
                     <i class="bi bi-upc-scan me-1"></i>
                     امسح للتسجيل

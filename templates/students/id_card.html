@@ -19,6 +19,7 @@
         position: relative;
         overflow: hidden;
         margin-bottom: 30px;
+        page-break-inside: avoid;
     }
 
     .id-card::before {
@@ -29,12 +30,6 @@
         width: 200%;
         height: 200%;
         background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
-        animation: rotate 30s linear infinite;
-    }
-
-    @keyframes rotate {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
     }
 
     .card-header-section {
@@ -92,6 +87,8 @@
         font-weight: 700;
         color: #1f2937;
         margin-bottom: 10px;
+        word-break: break-word;
+        overflow-wrap: break-word;
     }
 
     .student-code-badge {
@@ -120,6 +117,7 @@
         border-radius: 12px;
         text-align: center;
         border: 1px solid #e2e8f0;
+        page-break-inside: avoid;
     }
 
     .info-item.full-width {
@@ -138,6 +136,7 @@
         font-size: 1rem;
         font-weight: 600;
         color: #1e293b;
+        word-break: break-word;
     }
 
     .barcode-section {
@@ -147,6 +146,7 @@
         border-radius: 12px;
         border: 2px dashed #cbd5e1;
         margin-bottom: 20px;
+        page-break-inside: avoid;
     }
 
     .barcode-section img {
@@ -168,6 +168,7 @@
 
     .groups-section {
         margin-top: 20px;
+        page-break-inside: avoid;
     }
 
     .groups-section h6 {
@@ -184,6 +185,7 @@
         border-radius: 10px;
         margin-bottom: 8px;
         border-right: 4px solid #3b82f6;
+        page-break-inside: avoid;
     }
 
     .group-item:last-child {
@@ -234,6 +236,8 @@
         padding: 30px;
         box-shadow: 0 10px 40px rgba(0,0,0,0.1);
         margin-top: 20px;
+        page-break-before: always;
+        page-break-inside: avoid;
     }
 
     .back-card h6 {
@@ -266,36 +270,73 @@
         color: #3b82f6;
     }
 
+    /* ==================== PRINT STYLES ==================== */
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+
     @media print {
-        body {
-            background: #fff;
-            padding: 0;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+        html, body {
+            background: #fff !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
         }
 
-        .sidebar, .top-header, .actions-section, .back-card, .sidebar-overlay {
+        /* Hide ALL non-printable elements */
+        .sidebar,
+        .sidebar-overlay,
+        .top-header,
+        .actions-section,
+        nav,
+        footer,
+        .breadcrumb,
+        .page-header,
+        .alert {
             display: none !important;
         }
 
         .main-wrapper {
-            margin: 0;
+            margin: 0 !important;
+            padding: 0 !important;
             width: 100% !important;
-            padding: 0;
         }
 
         .content-area {
             padding: 0 !important;
+            margin: 0 !important;
         }
 
         .id-card-container {
-            max-width: 100%;
+            max-width: 100% !important;
+            width: 100% !important;
+            margin: 0 !important;
         }
 
         .id-card {
-            box-shadow: none;
+            box-shadow: none !important;
+            border-radius: 12px;
+            margin: 0 auto 0;
+            max-width: 500px;
             page-break-inside: avoid;
+            page-break-after: auto;
+        }
+
+        .id-card::before {
+            display: none;
+        }
+
+        .info-grid {
+            grid-template-columns: repeat(2, 1fr) !important;
+        }
+
+        .back-card {
+            box-shadow: none !important;
+            max-width: 500px;
             margin: 0 auto;
+            page-break-before: always;
         }
     }
 
@@ -386,7 +427,9 @@
             </div>
 
             <div class="barcode-section">
+                {% if barcode_base64 %}
                 <img src="data:image/png;base64,{{ barcode_base64 }}" alt="Student Barcode">
+                {% endif %}
                 <div class="barcode-label">
                     <i class="bi bi-upc-scan me-1"></i>
                     امسح للتسجيل
@@ -443,43 +486,17 @@
 
         <h6 class="mt-4"><i class="bi bi-info-circle me-2"></i>تعليمات استخدام البطاقة</h6>
         <ul>
-            <li>
-                <i class="bi bi-check-circle-fill"></i>
-                يرجى إبراز هذه البطاقة عند دخول المركز
-            </li>
-            <li>
-                <i class="bi bi-check-circle-fill"></i>
-                يتم مسح الباركود لتسجيل الحضور والانصراف
-            </li>
-            <li>
-                <i class="bi bi-check-circle-fill"></i>
-                في حالة فقدان البطاقة يرجى الإبلاغ فوراً
-            </li>
-            <li>
-                <i class="bi bi-check-circle-fill"></i>
-                البطاقة شخصية ولا يجوز استخدامها من قبل آخرين
-            </li>
+            <li><i class="bi bi-check-circle-fill"></i>يرجى إبراز هذه البطاقة عند دخول المركز</li>
+            <li><i class="bi bi-check-circle-fill"></i>يتم مسح الباركود لتسجيل الحضور والانصراف</li>
+            <li><i class="bi bi-check-circle-fill"></i>في حالة فقدان البطاقة يرجى الإبلاغ فوراً</li>
+            <li><i class="bi bi-check-circle-fill"></i>البطاقة شخصية ولا يجوز استخدامها من قبل آخرين</li>
         </ul>
 
         <h6 class="mt-4"><i class="bi bi-telephone me-2"></i>للتواصل</h6>
         <ul>
-            <li>
-                <i class="bi bi-geo-alt-fill"></i>
-                العنوان: [عنوان المركز]
-            </li>
-            <li>
-                <i class="bi bi-phone-fill"></i>
-                الهاتف: [رقم الهاتف]
-            </li>
+            <li><i class="bi bi-geo-alt-fill"></i>العنوان: [عنوان المركز]</li>
+            <li><i class="bi bi-phone-fill"></i>الهاتف: [رقم الهاتف]</li>
         </ul>
     </div>
 </div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    window.addEventListener('load', function() {
-        setTimeout(function() { window.print(); }, 500);
-    });
-</script>
 {% endblock %}
