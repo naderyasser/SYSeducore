@@ -173,15 +173,50 @@
         }
 
         @media print {
+            @page {
+                size: 62mm auto;
+                margin: 2mm;
+            }
+
             body {
+                width: 62mm;
+                margin: 0;
+                padding: 0;
                 background: #fff;
                 min-height: auto;
-                padding: 0;
             }
-            .no-print { display: none; }
+
+            .no-print { display: none !important; }
+
+            body > *:not(#barcode-print-area) {
+                display: none !important;
+            }
+
+            #barcode-print-area {
+                display: flex !important;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+            }
+
+            #barcode-print-area img {
+                width: 58mm;
+                height: auto;
+            }
+
+            #barcode-print-area .student-name {
+                font-size: 10pt;
+                font-family: 'Cairo', sans-serif;
+                text-align: center;
+            }
+
+            #barcode-print-area .student-code {
+                font-size: 8pt;
+                letter-spacing: 2px;
+            }
+
             .card {
-                box-shadow: none;
-                border-radius: 0;
+                display: none !important;
             }
         }
     </style>
@@ -192,6 +227,15 @@
         <button class="btn-print" onclick="window.print()">🖨️ طباعة الكارت</button>
     </div>
 
+    <!-- Thermal label print area -->
+    <div id="barcode-print-area" style="display:none;">
+        <div class="student-name">{{ student.full_name }}</div>
+        {% if barcode_base64 %}
+        <img src="data:image/png;base64,{{ barcode_base64 }}" alt="باركود {{ student.student_code }}">
+        {% endif %}
+        <div class="student-code">{{ student.student_code }}</div>
+    </div>
+
     <div class="card">
         <div class="card-info">
             <div class="card-title">بطاقة طالب</div>
@@ -200,7 +244,7 @@
         </div>
         <div class="card-qr">
             {% if barcode_base64 %}
-            <img src="data:image/png;base64,{{ barcode_base64 }}" alt="QR {{ student.student_code }}">
+            <img src="data:image/png;base64,{{ barcode_base64 }}" alt="باركود {{ student.student_code }}">
             {% endif %}
         </div>
         <div class="card-footer-line"></div>
@@ -208,8 +252,12 @@
     </div>
 
     <script>
-        window.addEventListener('load', function() {
-            setTimeout(function() { window.print(); }, 500);
+        // Show barcode-print-area only in print media
+        window.addEventListener('beforeprint', function() {
+            document.getElementById('barcode-print-area').style.display = 'flex';
+        });
+        window.addEventListener('afterprint', function() {
+            document.getElementById('barcode-print-area').style.display = 'none';
         });
     </script>
 </body>
