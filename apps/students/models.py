@@ -242,11 +242,12 @@ class Student(SoftDeleteModel):
         buffer = io.BytesIO()
         code128 = Code128(self.student_code, writer=ImageWriter())
         code128.write(buffer, options={
-            'module_height': 15,
-            'module_width': 0.6,
-            'quiet_zone': 6,
-            'font_size': 12,
+            'module_height': 20,
+            'module_width': 0.8,
+            'quiet_zone': 8,
+            'font_size': 14,
             'text_distance': 5,
+            'dpi': 300,
             'background': 'white',
             'foreground': 'black',
         })
