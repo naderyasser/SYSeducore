@@ -4,7 +4,8 @@ from .models import Teacher, Group, Room, Subject
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ['name']
+    list_display = ['name', 'education_stage']
+    list_filter = ['education_stage']
     search_fields = ['name']
     ordering = ['name']
 
