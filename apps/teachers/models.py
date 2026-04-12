@@ -38,11 +38,12 @@ class Subject(models.Model):
         ('secondary', 'ثانوي'),
     ]
 
-    name = models.CharField(max_length=100, unique=True, verbose_name="اسم المادة")
+    name = models.CharField(max_length=100, verbose_name="اسم المادة")
     education_stage = models.CharField(
         max_length=20,
         choices=EDUCATION_STAGE_CHOICES,
         blank=True,
+        default='',
         verbose_name="المرحلة الدراسية"
     )
 
@@ -50,6 +51,7 @@ class Subject(models.Model):
         db_table = 'subjects'
         verbose_name = 'مادة دراسية'
         verbose_name_plural = 'المواد الدراسية'
+        unique_together = [('name', 'education_stage')]
         ordering = ['name']
 
     def __str__(self):

@@ -143,14 +143,15 @@ class SubjectForm(forms.ModelForm):
             'education_stage': forms.Select(attrs={'class': 'form-select'}),
         }
 
-    def clean_name(self):
-        """Validate that the name is unique"""
-        name = self.cleaned_data.get('name')
+    def clean(self):
+        """Validate that the (name, education_stage) combination is unique"""
+        cleaned_data = super().clean()
+        name = cleaned_data.get('name')
+        education_stage = cleaned_data.get('education_stage', '')
         if name:
-            # Check if another subject with this name exists (excluding current edit)
-            queryset = Subject.objects.filter(name=name)
+            queryset = Subject.objects.filter(name=name, education_stage=education_stage)
             if self.instance.pk:
                 queryset = queryset.exclude(pk=self.instance.pk)
             if queryset.exists():
-                raise forms.ValidationError('هذه المادة موجودة بالفعل')
-        return name
+                raise forms.ValidationError('هذه المادة موجودة بالفعل لنفس المرحلة الدراسية')
+        return cleaned_data
