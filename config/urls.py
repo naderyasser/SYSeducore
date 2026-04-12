@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/', include([
         path('attendance/', include('apps.attendance.api_urls')),
         path('payments/', include('apps.payments.api_urls')),
+        path('groups/filter/', include('apps.teachers.api_filter_urls')),
     ])),
 ]
 

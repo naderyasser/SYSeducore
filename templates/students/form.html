@@ -373,25 +373,8 @@
                             </select>
                         </div>
 
-                        <div class="col-md-6">
-                            <label for="id_school_name" class="form-label">اسم المدرسة</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-building"></i></span>
-                                <input type="text" name="school_name" id="id_school_name" class="form-control"
-                                    value="{{ form.school_name.value|default:'' }}"
-                                    placeholder="اسم المدرسة">
-                            </div>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label for="id_grade" class="form-label">الصف الدراسي (تفصيل)</label>
-                            <div class="input-group">
-                                <span class="input-group-text"><i class="bi bi-mortarboard"></i></span>
-                                <input type="text" name="grade" id="id_grade" class="form-control"
-                                    value="{{ form.grade.value|default:'' }}"
-                                    placeholder="مثال: الصف الثالث الثانوي">
-                            </div>
-                        </div>
+                        <!-- school_name hidden -->
+                        <input type="hidden" name="school_name" id="id_school_name" value="{{ form.school_name.value|default:'' }}">
                     </div>
                 </div>
 
@@ -464,9 +447,56 @@
                     {% if groups %}
                     <p class="text-muted mb-3">اختر المجموعات التي سيشترك فيها الطالب وحدد حالة الدفع لكل مجموعة:</p>
 
-                    <div class="groups-grid">
+                    <!-- Cascading Filters -->
+                    <div class="row g-3 mb-3" id="group-cascade-filters">
+                        <div class="col-md-3">
+                            <label for="filter_stage" class="form-label">المرحلة الدراسية</label>
+                            <select id="filter_stage" class="form-select">
+                                <option value="">-- الكل --</option>
+                                <option value="primary">ابتدائي</option>
+                                <option value="preparatory">إعدادي</option>
+                                <option value="secondary">ثانوي</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filter_grade" class="form-label">السنة الدراسية</label>
+                            <select id="filter_grade" class="form-select">
+                                <option value="">-- الكل --</option>
+                                <option value="1">الأول</option>
+                                <option value="2">الثاني</option>
+                                <option value="3">الثالث</option>
+                                <option value="4">الرابع</option>
+                                <option value="5">الخامس</option>
+                                <option value="6">السادس</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filter_teacher" class="form-label">المدرس</label>
+                            <select id="filter_teacher" class="form-select">
+                                <option value="">-- الكل --</option>
+                                {% for group in groups %}
+                                {% if group.teacher %}
+                                <option value="{{ group.teacher.teacher_id }}" data-teacher="{{ group.teacher.full_name }}">{{ group.teacher.full_name }}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="filter_search" class="form-label">بحث في المجموعات</label>
+                            <input type="text" id="filter_search" class="form-control" placeholder="ابحث بالاسم...">
+                        </div>
+                    </div>
+
+                    <div class="groups-grid" id="groups-grid-container">
                         {% for group in groups %}
-                        <div class="group-checkbox" style="flex-direction: column; align-items: stretch;">
+                        <div class="group-checkbox" style="flex-direction: column; align-items: stretch;"
+                             data-group-id="{{ group.group_id }}"
+                             data-stage="{{ group.education_stage }}"
+                             data-grade="{{ group.education_year }}"
+                             data-teacher-id="{{ group.teacher.teacher_id|default:'' }}"
+                             data-teacher-name="{{ group.teacher.full_name|default:'' }}"
+                             data-group-name="{{ group.group_name }}"
+                        >
                             <div style="display: flex; align-items: flex-start;">
                                 <input type="checkbox" name="groups" value="{{ group.group_id }}"
                                     {% if student and group.group_id in current_group_ids %}checked{% endif %}
@@ -547,7 +577,7 @@
                 <div class="form-section">
                     <h6><i class="bi bi-upc me-2"></i>معاينة الباركود</h6>
                     <div class="barcode-preview-container" id="barcodePreview">
-                        <p class="text-muted">سيتم إنشاء الباركود تلقائياً بعد حفظ الطالب</p>
+                        <p class="text-muted">سيتم إنشاء الباركود (Code128) تلقائياً بعد حفظ الطالب</p>
                     </div>
                 </div>
                 {% endif %}
@@ -571,11 +601,58 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 const studentForm = document.getElementById('studentForm');
 const isNewStudent = studentForm?.dataset.isNewStudent === 'true';
 const enrollmentData = JSON.parse('{{ enrollment_data_json|default:"{}" |escapejs }}');
+
+// ==========================================
+// Cascading Group Filters (client-side)
+// ==========================================
+(function() {
+    const filterStage = document.getElementById('filter_stage');
+    const filterGrade = document.getElementById('filter_grade');
+    const filterTeacher = document.getElementById('filter_teacher');
+    const filterSearch = document.getElementById('filter_search');
+    const groupCards = document.querySelectorAll('#groups-grid-container .group-checkbox');
+
+    // Deduplicate teacher options
+    if (filterTeacher) {
+        const seen = new Set();
+        Array.from(filterTeacher.querySelectorAll('option')).forEach(opt => {
+            if (opt.value && seen.has(opt.value)) {
+                opt.remove();
+            } else if (opt.value) {
+                seen.add(opt.value);
+            }
+        });
+    }
+
+    function applyFilters() {
+        const stage = filterStage ? filterStage.value : '';
+        const grade = filterGrade ? filterGrade.value : '';
+        const teacher = filterTeacher ? filterTeacher.value : '';
+        const search = filterSearch ? filterSearch.value.trim().toLowerCase() : '';
+
+        groupCards.forEach(function(card) {
+            var show = true;
+            if (stage && card.dataset.stage !== stage) show = false;
+            if (grade && card.dataset.grade !== grade) show = false;
+            if (teacher && card.dataset.teacherId !== teacher) show = false;
+            if (search) {
+                var name = (card.dataset.groupName || '').toLowerCase();
+                var tname = (card.dataset.teacherName || '').toLowerCase();
+                if (name.indexOf(search) === -1 && tname.indexOf(search) === -1) show = false;
+            }
+            card.style.display = show ? '' : 'none';
+        });
+    }
+
+    if (filterStage) filterStage.addEventListener('change', applyFilters);
+    if (filterGrade) filterGrade.addEventListener('change', applyFilters);
+    if (filterTeacher) filterTeacher.addEventListener('change', applyFilters);
+    if (filterSearch) filterSearch.addEventListener('input', applyFilters);
+})();
 
 // Generate next code (preview only - does NOT fill the input field)
 function generateCode() {
@@ -596,24 +673,16 @@ function generateCode() {
         });
 }
 
-// Show QR code preview using qrcode.js
+// Show barcode preview (text-only preview; actual Code128 generated server-side)
 function showQRPreview(code) {
     const container = document.getElementById('barcodePreview');
     container.innerHTML = `
         <div style="padding: 16px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; display: inline-block;">
-            <div id="qrPreviewCanvas"></div>
-            <p class="text-muted mt-2 mb-0" style="font-size:0.82rem;">كود QR للطالب: <strong style="font-family:monospace">${code}</strong></p>
-            <p class="text-muted mb-0" style="font-size:0.75rem;">سيتم إنشاؤه تلقائياً عند الحفظ</p>
+            <p class="mb-1" style="font-size:0.82rem; color:#6b7280;">باركود Code128 للطالب:</p>
+            <p style="font-family:monospace; font-size:1.5rem; font-weight:700; color:#3b82f6; letter-spacing:3px; margin:0;">${code}</p>
+            <p class="text-muted mb-0 mt-1" style="font-size:0.75rem;">سيتم إنشاء الباركود تلقائياً عند الحفظ</p>
         </div>
     `;
-    new QRCode(document.getElementById('qrPreviewCanvas'), {
-        text: code,
-        width: 140,
-        height: 140,
-        colorDark: '#000000',
-        colorLight: '#ffffff',
-        correctLevel: QRCode.CorrectLevel.H
-    });
 }
 
 // Auto-generate code preview on page load for new students
