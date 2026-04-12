@@ -128,11 +128,6 @@ class Student(SoftDeleteModel):
         blank=True,
         verbose_name="اسم المدرسة"
     )
-    grade = models.CharField(
-        max_length=50,
-        blank=True,
-        verbose_name="الصف الدراسي"
-    )
     address = models.TextField(
         blank=True,
         verbose_name="العنوان"
@@ -243,7 +238,7 @@ class Student(SoftDeleteModel):
         return qr.make_image(fill_color="black", back_color="white").convert('RGB')
 
     def generate_barcode_image(self):
-        """Generate Code128 barcode image for student (legacy)"""
+        """Generate Code128 barcode image for student (primary)"""
         buffer = io.BytesIO()
         code128 = Code128(self.student_code, writer=ImageWriter())
         code128.write(buffer, options={
@@ -259,31 +254,26 @@ class Student(SoftDeleteModel):
         return Image.open(buffer)
 
     def get_barcode_base64(self):
-        """Get QR code as base64 string"""
+        """Get Code128 barcode as base64 string"""
         try:
-            img = self.generate_qr_image()
+            img = self.generate_barcode_image()
+            if img.mode != 'RGB':
+                img = img.convert('RGB')
             buffer = io.BytesIO()
             img.save(buffer, format='PNG')
             return base64.b64encode(buffer.getvalue()).decode()
         except Exception:
-            # Fallback to Code128 barcode
-            try:
-                img = self.generate_barcode_image()
-                if img.mode != 'RGB':
-                    img = img.convert('RGB')
-                buffer = io.BytesIO()
-                img.save(buffer, format='PNG')
-                return base64.b64encode(buffer.getvalue()).decode()
-            except Exception:
-                return ''
+            return ''
 
     def save_barcode_image(self):
-        """Save QR code image to media directory"""
+        """Save Code128 barcode image to media directory"""
         barcode_dir = os.path.join(settings.MEDIA_ROOT, 'barcodes')
         os.makedirs(barcode_dir, exist_ok=True)
 
         filepath = os.path.join(barcode_dir, f'{self.student_code}.png')
-        img = self.generate_qr_image()
+        img = self.generate_barcode_image()
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
         img.save(filepath)
         return filepath
 

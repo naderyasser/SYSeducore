@@ -27,7 +27,7 @@ class StudentAdmin(admin.ModelAdmin):
             'fields': ('full_name', 'student_code', 'gender', 'is_active')
         }),
         ('المرحلة الدراسية', {
-            'fields': ('education_stage', 'education_year', 'education_type', 'school_name', 'grade'),
+            'fields': ('education_stage', 'education_year', 'education_type', 'school_name'),
         }),
         ('أرقام التواصل (إجباري رقمين)', {
             'fields': ('student_phone', 'parent_phone', 'parent_name'),
