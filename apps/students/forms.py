@@ -15,7 +15,7 @@ class StudentForm(forms.ModelForm):
             'student_code', 'full_name', 'gender',
             'education_stage', 'education_year', 'education_type',
             'student_phone', 'parent_phone', 'parent_name',
-            'date_of_birth', 'school_name', 'grade', 'address', 'is_active'
+            'date_of_birth', 'school_name', 'address', 'is_active'
         ]
         widgets = {
             'full_name': forms.TextInput(attrs={
@@ -54,14 +54,7 @@ class StudentForm(forms.ModelForm):
                 'class': 'form-control',
                 'type': 'date'
             }),
-            'school_name': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'اسم المدرسة'
-            }),
-            'grade': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'مثال: الصف الثالث الثانوي'
-            }),
+            'school_name': forms.HiddenInput(),
             'address': forms.Textarea(attrs={
                 'class': 'form-control',
                 'placeholder': 'عنوان السكن',
@@ -74,7 +67,6 @@ class StudentForm(forms.ModelForm):
         self.fields['student_code'].required = False
         self.fields['date_of_birth'].required = False
         self.fields['school_name'].required = False
-        self.fields['grade'].required = False
         self.fields['address'].required = False
         self.fields['parent_name'].required = False
         # Both phones are required
