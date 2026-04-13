@@ -41,15 +41,14 @@ def generate_qr_image(code):
 @require_http_methods(["GET"])
 def student_barcode(request, student_id):
     """
-    Generate QR code for student as base64 image
+    Generate Code128 barcode for student as base64 image
     """
     student = get_object_or_404(Student, pk=student_id)
 
     try:
-        img = generate_qr_image(student.student_code)
-        buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
-        img_str = base64.b64encode(buffer.getvalue()).decode()
+        img_str = student.get_barcode_base64()
+        if not img_str:
+            raise ValueError('Failed to generate barcode')
 
         return JsonResponse({
             'success': True,
@@ -60,7 +59,7 @@ def student_barcode(request, student_id):
     except Exception as e:
         return JsonResponse({
             'success': False,
-            'message': f'Failed to generate QR code: {str(e)}'
+            'message': f'Failed to generate barcode: {str(e)}'
         })
 
 
