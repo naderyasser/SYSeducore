@@ -128,13 +128,16 @@
         background: #000;
         border-radius: 12px;
         overflow: hidden;
-        aspect-ratio: 16/9;
+        aspect-ratio: 4/3;
+        max-width: 500px;
+        margin: 0 auto;
     }
 
     #cameraPreview {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
+        display: block;
     }
 
     .camera-overlay {
@@ -150,10 +153,12 @@
     }
 
     .scan-frame {
-        width: 70%;
-        height: 60%;
-        border: 3px solid rgba(255, 255, 255, 0.8);
-        border-radius: 16px;
+        /* Barcode-shaped — wider than tall */
+        width: 80%;
+        max-width: 320px;
+        aspect-ratio: 2.5 / 1;
+        border: 2px solid rgba(255, 255, 255, 0.9);
+        border-radius: 8px;
         position: relative;
     }
 
@@ -161,40 +166,42 @@
     .scan-frame::after {
         content: '';
         position: absolute;
-        width: 40px;
-        height: 40px;
+        width: 24px;
+        height: 24px;
         border: 4px solid #3b82f6;
     }
 
     .scan-frame::before {
-        top: -4px;
-        left: -4px;
+        top: -3px;
+        left: -3px;
         border-right: none;
         border-bottom: none;
-        border-radius: 16px 0 0 0;
+        border-radius: 8px 0 0 0;
     }
 
     .scan-frame::after {
-        bottom: -4px;
-        right: -4px;
+        bottom: -3px;
+        right: -3px;
         border-left: none;
         border-top: none;
-        border-radius: 0 0 16px 0;
+        border-radius: 0 0 8px 0;
     }
 
     .scan-line {
         position: absolute;
-        top: 0;
-        left: 10%;
-        right: 10%;
-        height: 3px;
-        background: linear-gradient(90deg, transparent, #3b82f6, transparent);
-        animation: scanMove 2s ease-in-out infinite;
+        left: 4px;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        height: 2px;
+        background: #3b82f6;
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.8), 0 0 16px rgba(59, 130, 246, 0.4);
+        animation: scan-pulse 1.5s ease-in-out infinite;
     }
 
-    @keyframes scanMove {
-        0%, 100% { top: 0; }
-        50% { top: calc(100% - 3px); }
+    @keyframes scan-pulse {
+        0%, 100% { opacity: 0.3; transform: translateY(-12px); }
+        50% { opacity: 1; transform: translateY(12px); }
     }
 
     .camera-controls {
@@ -227,10 +234,13 @@
         border-color: #ef4444;
     }
 
-    /* Result Display */
+    /* Result Display — sticky so it stays visible while browsing groups */
     .result-display {
         display: none;
         margin-bottom: 25px;
+        position: sticky;
+        top: 10px;
+        z-index: 100;
     }
 
     .result-display.show {
@@ -680,8 +690,140 @@
         background: #d1d5db;
     }
 
-    /* Mobile Adjustments */
+    /* Student Dossier Card */
+    .dossier-card { padding: 4px 0; }
+
+    .dossier-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        margin-bottom: 14px;
+    }
+
+    .dossier-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        color: #fff;
+        font-size: 1.1rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        letter-spacing: 1px;
+    }
+
+    .dossier-info { flex: 1; min-width: 0; }
+
+    .dossier-name {
+        font-size: 1.05rem;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .dossier-meta {
+        font-size: 0.8rem;
+        color: #64748b;
+        margin-bottom: 5px;
+    }
+
+    .dossier-code {
+        font-family: monospace;
+        font-weight: 700;
+        color: #2563eb;
+        letter-spacing: 1px;
+    }
+
+    .dossier-section { margin-bottom: 10px; }
+
+    .dossier-section-title {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 6px;
+    }
+
+    .dossier-group-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        padding: 7px 0;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        gap: 8px;
+    }
+
+    .dossier-group-row:last-child { border-bottom: none; }
+    .dossier-group-row > div { min-width: 0; flex: 1; }
+
+    .dossier-stats {
+        display: flex;
+        gap: 12px;
+        margin: 10px 0;
+        padding: 10px;
+        background: rgba(0,0,0,0.04);
+        border-radius: 8px;
+    }
+
+    .dossier-stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        flex: 1;
+    }
+
+    .dossier-stat-val {
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .dossier-stat-lbl {
+        font-size: 0.68rem;
+        color: #64748b;
+        text-align: center;
+    }
+
+    .dossier-contact {
+        margin-top: 8px;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    /* Mobile collapsible stats */
+    .stats-toggle-btn {
+        display: none;
+        width: 100%;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px 16px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #374151;
+        cursor: pointer;
+        text-align: center;
+        margin-bottom: 12px;
+    }
+
+    /* Mobile action drawer */
     @media (max-width: 768px) {
+        .stats-toggle-btn { display: block; }
+        .stats-row { margin-bottom: 0; }
+        .stats-row.collapsed { display: none; }
+
+        .camera-container { max-height: 60vh; }
+
+        .quick-actions { grid-template-columns: repeat(2, 1fr); }
+
         .stats-row {
             grid-template-columns: repeat(2, 1fr);
         }
@@ -692,10 +834,6 @@
 
         .scan-input-section h2 {
             font-size: 1.4rem;
-        }
-
-        .quick-actions {
-            grid-template-columns: repeat(2, 1fr);
         }
     }
 
@@ -774,8 +912,13 @@
 
 {% block content %}
 <div class="scanner-container">
+    <!-- Mobile: toggle stats row -->
+    <button class="stats-toggle-btn" id="statsToggleBtn" onclick="toggleStats()">
+        <i class="bi bi-bar-chart me-2"></i>إحصائيات اليوم ▾
+    </button>
+
     <!-- Stats Row -->
-    <div class="stats-row">
+    <div class="stats-row" id="statsRow">
         <div class="stat-card">
             <div class="stat-icon blue">
                 <i class="bi bi-people"></i>
@@ -1135,109 +1278,158 @@ async function processStudentCode(code) {
     }
 }
 
+// Mobile stats toggle
+function toggleStats() {
+    const row = document.getElementById('statsRow');
+    const btn = document.getElementById('statsToggleBtn');
+    if (!row) return;
+    const collapsed = row.classList.toggle('collapsed');
+    btn.innerHTML = collapsed
+        ? '<i class="bi bi-bar-chart me-2"></i>إحصائيات اليوم ▸'
+        : '<i class="bi bi-bar-chart me-2"></i>إحصائيات اليوم ▾';
+}
+
+// Collapse stats by default on mobile
+if (window.innerWidth <= 768) {
+    const row = document.getElementById('statsRow');
+    const btn = document.getElementById('statsToggleBtn');
+    if (row) row.classList.add('collapsed');
+    if (btn) btn.innerHTML = '<i class="bi bi-bar-chart me-2"></i>إحصائيات اليوم ▸';
+}
+
+// HTML escaping helper
+function escHtml(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
+}
+
+// Render rich student dossier card
+function renderDossier(d) {
+    // Avatar initials (first 2 words)
+    const initials = (d.full_name || '').split(' ')
+        .filter(Boolean).slice(0, 2).map(w => w[0]).join('');
+
+    // Subscription badge
+    const subColors = {
+        active: 'success', expiring_soon: 'warning',
+        expires_today: 'warning', expired: 'danger', inactive: 'secondary'
+    };
+    const subBadge = `<span class="badge bg-${subColors[d.subscription?.status] || 'secondary'}">${escHtml(d.subscription?.status_display || '-')}</span>`;
+
+    // Last scan relative time
+    let lastScanStr = 'لا يوجد';
+    if (d.attendance_month?.last_scan) {
+        const daysDiff = Math.floor(
+            (Date.now() - new Date(d.attendance_month.last_scan).getTime()) / 86400000
+        );
+        lastScanStr = daysDiff === 0 ? 'اليوم' : `منذ ${daysDiff} يوم`;
+    }
+
+    // Enrollment rows with payment pills
+    const payIcons  = { paid: '🟢', partial: '🟡', unpaid: '🔴', exempt: '⚫' };
+    const payColors = { paid: 'success', partial: 'warning', unpaid: 'danger', exempt: 'secondary' };
+    let enrollHtml = '';
+    (d.enrollments || []).forEach(enr => {
+        const p = enr.payment;
+        const icon  = payIcons[p.status]  || '⚫';
+        const cls   = payColors[p.status] || 'secondary';
+        let payText = p.status_display;
+        if (p.status === 'partial') payText += `: ${p.amount_paid} من ${p.amount_due} ج.م`;
+        else if (p.status === 'unpaid' && p.amount_due > 0) payText += `: ${p.amount_due} ج.م`;
+        enrollHtml += `
+            <div class="dossier-group-row">
+                <div>
+                    <strong>${escHtml(enr.group_name)}</strong>
+                    <small class="text-muted d-block">${escHtml(enr.teacher_name)} · ${escHtml(enr.schedule)}</small>
+                    <small class="text-muted">${escHtml(enr.financial_status)}</small>
+                </div>
+                <span class="badge bg-${cls} text-wrap text-start" style="max-width:140px;">${icon} ${escHtml(payText)}</span>
+            </div>`;
+    });
+
+    // Parent contact
+    let contactHtml = '';
+    if (d.parent_phone) {
+        const phone = d.parent_phone.replace(/\D/g, '');
+        const waPhone = phone.startsWith('0') ? '2' + phone : phone;
+        contactHtml = `
+            <div class="dossier-contact">
+                <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener" class="btn btn-sm btn-success">
+                    <i class="bi bi-whatsapp"></i> واتساب
+                </a>
+                <button class="btn btn-sm btn-outline-secondary"
+                    onclick="navigator.clipboard.writeText('${escHtml(d.parent_phone)}').then(()=>{ this.textContent='\u2713 \u062a\u0645 \u0627\u0644\u0646\u0633\u062e'; setTimeout(()=>{ this.innerHTML='<i class=\\"bi bi-clipboard\\"></i> ${escHtml(d.parent_phone)}'; },2000); })">
+                    <i class="bi bi-clipboard"></i> ${escHtml(d.parent_phone)}
+                </button>
+            </div>`;
+    }
+
+    return `
+        <div class="dossier-card">
+            <div class="dossier-header">
+                <div class="dossier-avatar">${escHtml(initials)}</div>
+                <div class="dossier-info">
+                    <div class="dossier-name">${escHtml(d.full_name)}</div>
+                    <div class="dossier-meta">
+                        <span class="dossier-code">${escHtml(d.student_code)}</span>
+                        ${d.education && d.education !== '-' ? ' · ' + escHtml(d.education) : ''}
+                    </div>
+                    ${subBadge}
+                </div>
+            </div>
+            ${enrollHtml ? `<div class="dossier-section"><div class="dossier-section-title">المجموعات والدفع</div>${enrollHtml}</div>` : ''}
+            <div class="dossier-stats">
+                <div class="dossier-stat">
+                    <span class="dossier-stat-val">${d.attendance_month?.total ?? 0}</span>
+                    <span class="dossier-stat-lbl">حضور الشهر</span>
+                </div>
+                <div class="dossier-stat">
+                    <span class="dossier-stat-val" style="font-size:0.9rem;">${escHtml(lastScanStr)}</span>
+                    <span class="dossier-stat-lbl">آخر حضور</span>
+                </div>
+            </div>
+            ${contactHtml}
+        </div>`;
+}
+
 // Display Result
 function displayResult(data, code) {
     resultDisplay.classList.add('show');
+    resultCard.style.background = ''; // reset loading style
+
+    const dossier = data.dossier || null;
 
     if (data.success && data.status === 'already_registered') {
-        // Bug 1 fix: repeat scan shows info, not error
         resultCard.className = 'result-card info';
         resultIcon.innerHTML = '<i class="bi bi-info-circle-fill"></i>';
         resultTitle.textContent = 'تم تسجيل الحضور مسبقاً';
         resultMessage.textContent = data.message || 'الطالب مسجل بالفعل';
-
-        let details = `
+        resultDetails.innerHTML = dossier ? renderDossier(dossier) : `
             <div class="detail-row">
                 <span class="detail-label">كود الطالب</span>
-                <span class="detail-value highlight">${code}</span>
+                <span class="detail-value highlight">${escHtml(code)}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">اسم الطالب</span>
-                <span class="detail-value">${data.student?.full_name || data.student?.name || '-'}</span>
-            </div>
-        `;
-        if (data.attendance) {
-            const scanTime = new Date(data.attendance.scan_time);
-            details += `
-                <div class="detail-row">
-                    <span class="detail-label">وقت التسجيل الأصلي</span>
-                    <span class="detail-value">${scanTime.toLocaleTimeString('ar-EG')}</span>
-                </div>
-            `;
-        }
-        // Show all already-registered groups (Bug 2)
-        if (data.already_registered && data.already_registered.length) {
-            data.already_registered.forEach(function(r) {
-                details += `
-                    <div class="detail-row">
-                        <span class="detail-label">مجموعة</span>
-                        <span class="detail-value">${r.group_name} <span class="badge bg-info">مسجل مسبقاً</span></span>
-                    </div>`;
-            });
-        }
-        resultDetails.innerHTML = details;
+                <span class="detail-value">${escHtml(data.student?.full_name || data.student?.name || '-')}</span>
+            </div>`;
 
     } else if (data.success) {
         resultCard.className = 'result-card success';
         resultIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
         resultTitle.textContent = 'تم تسجيل الحضور بنجاح';
-
-        let details = `
+        resultMessage.textContent = data.message || 'مرحباً!';
+        resultDetails.innerHTML = dossier ? renderDossier(dossier) : `
             <div class="detail-row">
                 <span class="detail-label">كود الطالب</span>
-                <span class="detail-value highlight">${code}</span>
+                <span class="detail-value highlight">${escHtml(code)}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">اسم الطالب</span>
-                <span class="detail-value">${data.student?.full_name || data.student?.name || '-'}</span>
-            </div>
-        `;
-
-        // Show all newly registered groups (Bug 2)
-        if (data.newly_registered && data.newly_registered.length) {
-            data.newly_registered.forEach(function(r) {
-                details += `
-                    <div class="detail-row">
-                        <span class="detail-label">مجموعة</span>
-                        <span class="detail-value">${r.group_name} <span class="badge bg-success">${r.status_display}</span></span>
-                    </div>`;
-            });
-        } else if (data.group) {
-            details += `
-                <div class="detail-row">
-                    <span class="detail-label">المجموعة</span>
-                    <span class="detail-value">${data.group.group_name || data.group.name}</span>
-                </div>
-            `;
-        }
-
-        // Also show already-registered if mixed
-        if (data.already_registered && data.already_registered.length) {
-            data.already_registered.forEach(function(r) {
-                details += `
-                    <div class="detail-row">
-                        <span class="detail-label">مجموعة</span>
-                        <span class="detail-value">${r.group_name} <span class="badge bg-info">مسجل مسبقاً</span></span>
-                    </div>`;
-            });
-        }
-
-        if (data.attendance) {
-            const scanTime = new Date(data.attendance.scan_time);
-            details += `
-                <div class="detail-row">
-                    <span class="detail-label">وقت التسجيل</span>
-                    <span class="detail-value">${scanTime.toLocaleTimeString('ar-EG')}</span>
-                </div>
-                <div class="detail-row">
-                    <span class="detail-label">الحالة</span>
-                    <span class="detail-value">${getStatusText(data.attendance.status)}</span>
-                </div>
-            `;
-        }
-
-        resultDetails.innerHTML = details;
-        resultMessage.textContent = data.message || 'مرحباً!';
+                <span class="detail-value">${escHtml(data.student?.full_name || data.student?.name || '-')}</span>
+            </div>`;
 
     } else {
         resultCard.className = 'result-card error';
@@ -1247,18 +1439,34 @@ function displayResult(data, code) {
         resultDetails.innerHTML = `
             <div class="detail-row">
                 <span class="detail-label">الكود المدخل</span>
-                <span class="detail-value highlight">${code}</span>
-            </div>
-        `;
+                <span class="detail-value highlight">${escHtml(code)}</span>
+            </div>`;
+        if (data.student_name) {
+            resultDetails.innerHTML += `
+            <div class="detail-row">
+                <span class="detail-label">الطالب</span>
+                <span class="detail-value">${escHtml(data.student_name)}</span>
+            </div>`;
+        }
+        if (data.skipped && data.skipped.length) {
+            data.skipped.forEach(s => {
+                resultDetails.innerHTML += `
+            <div class="detail-row">
+                <span class="detail-label">${escHtml(s.group_name || 'سبب')}</span>
+                <span class="detail-value text-danger">${escHtml(s.reason)}</span>
+            </div>`;
+            });
+        }
     }
 
     // Add to history
     addToHistory(data, code);
 
-    // Auto hide after 5 seconds
-    setTimeout(() => {
+    // Auto hide — longer timeout so dossier is readable
+    clearTimeout(window._resultTimer);
+    window._resultTimer = setTimeout(() => {
         resultDisplay.classList.remove('show');
-    }, 5000);
+    }, 10000);
 }
 
 // Get Status Text
@@ -1471,7 +1679,11 @@ async function startCamera() {
         };
 
         await html5QrScanner.start(
-            { facingMode: 'environment' },
+            {
+                facingMode: { ideal: 'environment' },  // back camera preferred
+                width: { ideal: 1280 },
+                height: { ideal: 720 }
+            },
             config,
             async (decodedText) => {
                 // Prevent duplicate scans (3 second cooldown)

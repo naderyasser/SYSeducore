@@ -376,13 +376,17 @@ class TestSubscriptionExpiry(AttendanceTestMixin, TestCase):
 
         self.assertTrue(self.student.is_subscription_active())
 
-    def test_no_subscription_inactive(self):
-        """Student with no subscription date — should be inactive."""
+    def test_no_subscription_active_when_no_date(self):
+        """Student with no subscription_expiry_date — treated as 'no restriction', returns True.
+        Business rule: no date set = subscription system not configured for this student = allow entry.
+        (Changed from inactive to active in Feb 2026 fix to avoid blocking students who simply
+        haven't had a subscription date configured yet.)
+        """
         self.student.subscription_expiry_date = None
         self.student.last_payment_date = None
         self.student.save()
 
-        self.assertFalse(self.student.is_subscription_active())
+        self.assertTrue(self.student.is_subscription_active())
 
 
 class TestUpdatePaymentSessions(AttendanceTestMixin, TestCase):

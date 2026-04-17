@@ -1,9 +1,12 @@
+import logging
 from datetime import datetime, timedelta
 from django.utils import timezone
 from .models import Attendance, Session
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.payments.models import Payment
 from apps.teachers.models import GroupSchedule
+
+logger = logging.getLogger('attendance')
 
 
 class AttendanceService:
@@ -25,7 +28,7 @@ class AttendanceService:
         - هل دفع الشهر الجديد؟
         - هل عليه متأخرات؟
         """
-        current_month = timezone.now().date().replace(day=1)
+        current_month = timezone.localtime().date().replace(day=1)
 
         # Check current month payment
         current_payment = None
@@ -99,6 +102,12 @@ class AttendanceService:
         5. فحص مالي
         + الكشف الفوري للحالة المالية
         """
+        # ========================================
+        # تنظيف الكود: إزالة المسافات وأي بادئة/لاحقة يضيفها القارئ
+        # ========================================
+        student_code = str(student_code).strip().strip('*').strip()
+        logger.info(f"SCAN_RECEIVED code={repr(student_code)} supervisor={getattr(supervisor, 'id', '?')}")
+
         # ========================================
         # الخطوة 1: التعريف - جلب الطالب
         # ========================================
@@ -228,7 +237,7 @@ class AttendanceService:
             # التسجيل النهائي — get_or_create للحصة
             session, _ = Session.objects.get_or_create(
                 group=matching_group,
-                session_date=timezone.now().date(),
+                session_date=timezone.localtime().date(),
                 defaults={'teacher_attended': False}
             )
 
@@ -305,6 +314,12 @@ class AttendanceService:
         # الرد الرئيسي (أول مجموعة مسجلة — للتوافق مع الواجهة القديمة)
         first_result = (newly_registered + already_registered)[0]
 
+        logger.info(
+            f"SCAN_RESULT code={student.student_code} status={status_key} "
+            f"new={len(newly_registered)} already={len(already_registered)} "
+            f"skipped={len(skipped)}"
+        )
+
         return {
             'success': True,
             'status': status_key,
@@ -330,6 +345,7 @@ class AttendanceService:
             'already_registered': already_registered,
             'skipped': skipped,
             'instant_status': combined_instant_status.get(first_result['group_name'], {}),
+            'dossier': AttendanceService.build_student_dossier(student),
         }
     
     @staticmethod
@@ -416,7 +432,7 @@ class AttendanceService:
         """
         تحديد هل هذا هو الشهر الأول للطالب في مجموعة معينة
         """
-        current_month = timezone.now().date().replace(day=1)
+        current_month = timezone.localtime().date().replace(day=1)
 
         # البحث عن أول حضور للطالب في هذه المجموعة
         first_attendance = Attendance.objects.filter(
@@ -461,7 +477,7 @@ class AttendanceService:
             return {'allowed': True, 'exempt': True}
 
         # الحصول على الشهر الحالي
-        current_month = timezone.now().date().replace(day=1)
+        current_month = timezone.localtime().date().replace(day=1)
 
         # عدد الحصص المسجلة هذا الشهر لهذه المجموعة فقط
         sessions_count = Attendance.objects.filter(
@@ -524,11 +540,114 @@ class AttendanceService:
         return {'allowed': True}
     
     @staticmethod
+    def build_student_dossier(student):
+        """
+        بناء ملف الطالب الشامل — يُعرض بعد كل مسح ناجح
+        يشمل: البيانات الشخصية، المجموعات، حالة الدفع، إحصائيات الحضور
+        """
+        now = timezone.localtime()
+        current_month = now.date().replace(day=1)
+
+        # كل التسجيلات النشطة مع معلومات الدفع للشهر الحالي
+        enrollments_data = []
+        for enr in student.group_enrollments.filter(
+            is_active=True
+        ).select_related('group', 'group__teacher'):
+            group = enr.group
+            payment = Payment.objects.filter(
+                student=student, group=group, month=current_month
+            ).first()
+
+            if enr.financial_status == 'exempt':
+                pay_status = 'exempt'
+                pay_status_display = 'إعفاء كامل'
+                amount_due = 0.0
+                amount_paid = 0.0
+                remaining = 0.0
+            elif payment:
+                pay_status = payment.status
+                pay_status_display = payment.get_status_display()
+                amount_due = float(payment.amount_due)
+                amount_paid = float(payment.amount_paid)
+                remaining = float(payment.amount_due - payment.amount_paid)
+            else:
+                fee = student.get_monthly_fee_for_group(group)
+                pay_status = 'unpaid'
+                pay_status_display = 'غير مدفوع'
+                amount_due = float(fee)
+                amount_paid = 0.0
+                remaining = float(fee)
+
+            # معلومات الجدول
+            schedule_str = '-'
+            if group.schedule_time:
+                day_display = dict(group.SCHEDULE_DAY_CHOICES).get(
+                    group.schedule_day, group.schedule_day
+                ) if hasattr(group, 'SCHEDULE_DAY_CHOICES') else group.schedule_day
+                schedule_str = f"{day_display} {group.schedule_time.strftime('%I:%M %p')}"
+
+            enrollments_data.append({
+                'group_id': group.group_id,
+                'group_name': group.group_name,
+                'teacher_name': group.teacher.full_name if group.teacher else '—',
+                'schedule': schedule_str,
+                'financial_status': enr.get_financial_status_display(),
+                'financial_status_code': enr.financial_status,
+                'payment': {
+                    'status': pay_status,
+                    'status_display': pay_status_display,
+                    'amount_due': amount_due,
+                    'amount_paid': amount_paid,
+                    'remaining': remaining,
+                },
+            })
+
+        # حالة الاشتراك
+        sub_status = student.get_subscription_status()
+
+        # إحصائيات الحضور هذا الشهر
+        month_attendances = Attendance.objects.filter(
+            student=student,
+            session__session_date__gte=current_month
+        )
+        total_this_month = month_attendances.count()
+        last_att = month_attendances.order_by('-scan_time').first()
+        last_scan_iso = (
+            timezone.localtime(last_att.scan_time).isoformat()
+            if last_att else None
+        )
+
+        return {
+            'student_id': student.student_id,
+            'student_code': student.student_code,
+            'full_name': student.full_name,
+            'gender': student.get_gender_display(),
+            'education': student.get_education_display_full(),
+            'student_phone': student.student_phone or None,
+            'parent_phone': student.parent_phone or None,
+            'parent_name': student.parent_name or None,
+            'subscription': {
+                'status': sub_status.get('status'),
+                'status_display': sub_status.get('message'),
+                'days_remaining': sub_status.get('days_remaining'),
+                'expiry_date': (
+                    student.subscription_expiry_date.isoformat()
+                    if student.subscription_expiry_date else None
+                ),
+            },
+            'enrollments': enrollments_data,
+            'attendance_month': {
+                'total': total_this_month,
+                'last_scan': last_scan_iso,
+            },
+        }
+
+    @staticmethod
     def update_payment_sessions(student, group):
         """
         تحديث عدد الحصص في سجل الدفع لمجموعة معينة
         """
-        current_month = timezone.now().date().replace(day=1)
+        current_month = timezone.localtime().date().replace(day=1)
 
         # عدد الحصص المسجلة في هذه المجموعة
         sessions_count = Attendance.objects.filter(
