@@ -1338,11 +1338,14 @@ function renderDossier(d) {
         let payText = p.status_display;
         if (p.status === 'partial') payText += `: ${p.amount_paid} من ${p.amount_due} ج.م`;
         else if (p.status === 'unpaid' && p.amount_due > 0) payText += `: ${p.amount_due} ج.م`;
+        const schedInfo = enr.schedule_day_ar && enr.schedule_time
+            ? `${enr.schedule_day_ar} ${enr.schedule_time}`
+            : (enr.schedule || '');
         enrollHtml += `
             <div class="dossier-group-row">
                 <div>
                     <strong>${escHtml(enr.group_name)}</strong>
-                    <small class="text-muted d-block">${escHtml(enr.teacher_name)} · ${escHtml(enr.schedule)}</small>
+                    <small class="text-muted d-block">${escHtml(enr.teacher_name)} · ${escHtml(schedInfo)}</small>
                     <small class="text-muted">${escHtml(enr.financial_status)}</small>
                 </div>
                 <span class="badge bg-${cls} text-wrap text-start" style="max-width:140px;">${icon} ${escHtml(payText)}</span>
@@ -1436,13 +1439,15 @@ function displayResult(data, code) {
         resultIcon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
         resultTitle.textContent = 'فشل تسجيل الحضور';
         resultMessage.textContent = data.message || 'حدث خطأ ما';
-        resultDetails.innerHTML = `
+
+        // Build detail rows
+        let detailHtml = `
             <div class="detail-row">
                 <span class="detail-label">الكود المدخل</span>
                 <span class="detail-value highlight">${escHtml(code)}</span>
             </div>`;
         if (data.student_name) {
-            resultDetails.innerHTML += `
+            detailHtml += `
             <div class="detail-row">
                 <span class="detail-label">الطالب</span>
                 <span class="detail-value">${escHtml(data.student_name)}</span>
@@ -1450,23 +1455,29 @@ function displayResult(data, code) {
         }
         if (data.skipped && data.skipped.length) {
             data.skipped.forEach(s => {
-                resultDetails.innerHTML += `
+                detailHtml += `
             <div class="detail-row">
                 <span class="detail-label">${escHtml(s.group_name || 'سبب')}</span>
                 <span class="detail-value text-danger">${escHtml(s.reason)}</span>
             </div>`;
             });
         }
+        // Render dossier below the error details when student data is available
+        if (data.dossier) {
+            detailHtml += renderDossier(data.dossier);
+        }
+        resultDetails.innerHTML = detailHtml;
     }
 
     // Add to history
     addToHistory(data, code);
 
-    // Auto hide — longer timeout so dossier is readable
+    // Auto hide — longer timeout when dossier is shown so supervisor can read
     clearTimeout(window._resultTimer);
+    const hideDelay = data.dossier ? 15000 : 10000;
     window._resultTimer = setTimeout(() => {
         resultDisplay.classList.remove('show');
-    }, 10000);
+    }, hideDelay);
 }
 
 // Get Status Text
