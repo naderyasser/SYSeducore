@@ -1642,6 +1642,11 @@ async function startCamera() {
         const errBox = document.getElementById('cameraError');
         if (errBox) errBox.style.display = 'none';
 
+        // Check library loaded
+        if (typeof Html5Qrcode === 'undefined') {
+            throw new Error('LIB_MISSING: مكتبة الماسح لم يتم تحميلها. أعد تحميل الصفحة.');
+        }
+
         // Check if mediaDevices is supported
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             throw new Error('المتصفح لا يدعم الكاميرا. يرجى استخدام متصفح حديث.');
@@ -1662,13 +1667,17 @@ async function startCamera() {
             video.parentNode.insertBefore(scannerContainer, video);
         }
 
+        // Clean up any previous scanner instance
+        if (html5QrScanner) {
+            try { await html5QrScanner.stop(); } catch (_) {}
+            html5QrScanner = null;
+        }
+
         html5QrScanner = new Html5Qrcode('html5QrReader');
 
-        const config = {
+        const scanConfig = {
             fps: 10,
-            // Wider scan box to fit Code128 linear barcodes on student cards
             qrbox: { width: 350, height: 150 },
-            aspectRatio: 1.0,
             formatsToSupport: [
                 Html5QrcodeSupportedFormats.QR_CODE,
                 Html5QrcodeSupportedFormats.CODE_128,
@@ -1678,24 +1687,55 @@ async function startCamera() {
             ]
         };
 
-        await html5QrScanner.start(
-            {
-                facingMode: { ideal: 'environment' },  // back camera preferred
-                width: { ideal: 1280 },
-                height: { ideal: 720 }
-            },
-            config,
-            async (decodedText) => {
-                // Prevent duplicate scans (3 second cooldown)
-                if (decodedText === lastScannedCode && Date.now() - lastScanTime < 3000) {
-                    return;
+        const onScan = async (decodedText) => {
+            if (decodedText === lastScannedCode && Date.now() - lastScanTime < 3000) return;
+            lastScannedCode = decodedText;
+            lastScanTime = Date.now();
+            await processStudentCode(decodedText);
+        };
+        const onScanErr = () => {};
+
+        // Try back camera first, fall back to front, then any camera
+        const cameraConfigs = [
+            { facingMode: "environment" },
+            { facingMode: "user" },
+        ];
+
+        let started = false;
+        let lastErr = null;
+        for (const camCfg of cameraConfigs) {
+            try {
+                await html5QrScanner.start(camCfg, scanConfig, onScan, onScanErr);
+                started = true;
+                break;
+            } catch (e) {
+                lastErr = e;
+                console.warn('Camera config failed:', camCfg, e);
+            }
+        }
+
+        // If facingMode configs failed, try listing cameras and using a device ID
+        if (!started) {
+            try {
+                const cameras = await Html5Qrcode.getCameras();
+                if (cameras && cameras.length > 0) {
+                    // Prefer back camera by label, else use first
+                    const back = cameras.find(c => /back|rear|environment/i.test(c.label));
+                    const cam = back || cameras[0];
+                    await html5QrScanner.start(cam.id, scanConfig, onScan, onScanErr);
+                    started = true;
+                } else {
+                    throw new Error('DevicesNotFound');
                 }
-                lastScannedCode = decodedText;
-                lastScanTime = Date.now();
-                await processStudentCode(decodedText);
-            },
-            () => {} // ignore scan failures (normal when no code in view)
-        );
+            } catch (e) {
+                lastErr = e;
+                console.error('Camera list fallback failed:', e);
+            }
+        }
+
+        if (!started) {
+            throw lastErr || new Error('UnknownCameraError');
+        }
 
         document.getElementById('startCameraBtn').style.display = 'none';
         document.getElementById('stopCameraBtn').style.display = 'flex';
@@ -1704,18 +1744,23 @@ async function startCamera() {
     } catch (error) {
         console.error('Error starting camera:', error);
         
+        const errStr = String(error);
         let errorMessage = 'تعذر تشغيل الكاميرا. ';
         
-        if (error.toString().includes('NotAllowed') || error.toString().includes('Permission')) {
+        if (errStr.includes('LIB_MISSING')) {
+            errorMessage = error.message;
+        } else if (errStr.includes('NotAllowed') || errStr.includes('Permission')) {
             errorMessage += 'يرجى السماح بالوصول للكاميرا من إعدادات المتصفح.';
-        } else if (error.toString().includes('NotFound') || error.toString().includes('DevicesNotFound')) {
+        } else if (errStr.includes('NotFound') || errStr.includes('DevicesNotFound')) {
             errorMessage += 'لم يتم العثور على كاميرا متصلة.';
-        } else if (error.toString().includes('NotReadable')) {
-            errorMessage += 'الكاميرا قيد الاستخدام من تطبيق آخر.';
-        } else if (error.toString().includes('Secure context') || error.toString().includes('https')) {
+        } else if (errStr.includes('NotReadable') || errStr.includes('AbortError')) {
+            errorMessage += 'الكاميرا قيد الاستخدام من تطبيق آخر. أغلق أي تطبيق يستخدم الكاميرا وحاول مرة أخرى.';
+        } else if (errStr.includes('OverConstrained') || errStr.includes('Overconstrained')) {
+            errorMessage += 'إعدادات الكاميرا غير مدعومة. حاول مرة أخرى.';
+        } else if (errStr.includes('Secure context') || errStr.includes('https')) {
             errorMessage += 'الكاميرا تتطلب اتصال آمن (HTTPS).';
         } else {
-            errorMessage += 'استخدم الإدخال اليدوي بدلاً من ذلك.';
+            errorMessage += errStr.length < 200 ? errStr : 'استخدم الإدخال اليدوي بدلاً من ذلك.';
         }
         
         // Show inline error instead of alert
