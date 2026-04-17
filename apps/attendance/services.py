@@ -8,6 +8,13 @@ from apps.teachers.models import GroupSchedule
 
 logger = logging.getLogger('attendance')
 
+# Arabic day names for user-facing messages
+DAY_NAMES_AR = {
+    'Saturday': 'السبت', 'Sunday': 'الأحد', 'Monday': 'الاثنين',
+    'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء',
+    'Thursday': 'الخميس', 'Friday': 'الجمعة',
+}
+
 
 class AttendanceService:
     """
@@ -119,22 +126,27 @@ class AttendanceService:
         except Student.DoesNotExist:
             return {
                 'success': False,
-                'message': 'كود غير صالح',
+                'message': f'طالب غير موجود بالكود: {student_code}',
                 'sound': 'error'
             }
+
+        # Build dossier ONCE — included in every subsequent response
+        dossier = AttendanceService.build_student_dossier(student)
 
         # ========================================
         # الخطوة 1.5: التحقق من صلاحية الاشتراك
         # ========================================
         if not student.is_subscription_active():
             subscription_status = student.get_subscription_status()
+            days_expired = abs(subscription_status.get('days_remaining', 0))
             return {
                 'success': False,
-                'message': f'عفواً، اشتراك الطالب منتهي. {subscription_status["message"]}',
+                'message': f'اشتراك الطالب {student.full_name} منتهي منذ {days_expired} يوم — يجب التجديد قبل تسجيل الحضور',
                 'sound': 'error',
                 'error_type': 'subscription_expired',
                 'student_name': student.full_name,
-                'subscription_status': subscription_status
+                'subscription_status': subscription_status,
+                'dossier': dossier,
             }
 
         # ========================================
@@ -187,11 +199,16 @@ class AttendanceService:
                 matching_entries.append((group, enr, {'time': schedule_time, 'duration': duration}))
 
         if not matching_entries:
+            rejection = AttendanceService._build_schedule_rejection(
+                student, enrollments, current_day_name, current_time_local, local_tz
+            )
             return {
                 'success': False,
-                'message': 'ممنوع الدخول: مجموعة خاطئة أو لا توجد حصة الآن',
+                'message': rejection['message'],
                 'sound': 'error',
-                'error_type': 'wrong_schedule'
+                'error_type': rejection['type'],
+                'student_name': student.full_name,
+                'dossier': dossier,
             }
 
         # ========================================
@@ -297,18 +314,21 @@ class AttendanceService:
             # All groups skipped due to time/financial
             return {
                 'success': False,
-                'message': skipped[0]['reason'],
+                'message': f'{student.full_name}: {skipped[0]["reason"]}',
                 'sound': 'error',
                 'error_type': 'skipped',
                 'student_name': student.full_name,
                 'skipped': skipped,
+                'dossier': dossier,
             }
         else:
             return {
                 'success': False,
-                'message': 'لا توجد حصة متاحة الآن',
+                'message': f'لا توجد حصة متاحة الآن للطالب {student.full_name}',
                 'sound': 'error',
-                'error_type': 'no_session'
+                'error_type': 'no_session',
+                'student_name': student.full_name,
+                'dossier': dossier,
             }
 
         # الرد الرئيسي (أول مجموعة مسجلة — للتوافق مع الواجهة القديمة)
@@ -345,9 +365,95 @@ class AttendanceService:
             'already_registered': already_registered,
             'skipped': skipped,
             'instant_status': combined_instant_status.get(first_result['group_name'], {}),
-            'dossier': AttendanceService.build_student_dossier(student),
+            'dossier': dossier,
         }
     
+    @staticmethod
+    def _build_schedule_rejection(student, enrollments, current_day_name, now_local, local_tz):
+        """
+        Build a specific, actionable rejection message when no session matches.
+        Distinguishes: no groups, wrong day, too early, too late (session ended).
+        """
+        name = student.full_name
+        today_ar = DAY_NAMES_AR.get(current_day_name, current_day_name)
+
+        if not enrollments.exists():
+            return {
+                'type': 'no_groups',
+                'message': f'الطالب {name} غير مسجل في أي مجموعة نشطة',
+            }
+
+        # Collect all groups and check which are today vs other days
+        today_groups = []
+        other_groups = []
+        for enr in enrollments:
+            group = enr.group
+            # Check GroupSchedule first, then legacy field
+            try:
+                schedule = GroupSchedule.objects.get(group=group, day_of_week=current_day_name)
+                today_groups.append((group, schedule.start_time, schedule.duration))
+            except GroupSchedule.DoesNotExist:
+                if group.schedule_day == current_day_name and group.schedule_time:
+                    today_groups.append((group, group.schedule_time, group.duration_minutes or 120))
+                else:
+                    other_groups.append(group)
+
+        if not today_groups:
+            # Student has groups but none scheduled today — show their schedule
+            schedules = []
+            for enr in enrollments:
+                g = enr.group
+                day_ar = DAY_NAMES_AR.get(g.schedule_day, g.schedule_day)
+                time_str = g.schedule_time.strftime('%I:%M %p') if g.schedule_time else ''
+                teacher = g.teacher.full_name if g.teacher else ''
+                label = f'{g.group_name} ({day_ar} {time_str}' + (f' - {teacher}' if teacher else '') + ')'
+                schedules.append(label)
+            schedules_text = ' ، '.join(schedules)
+            return {
+                'type': 'no_session_today',
+                'message': f'الطالب {name} ليس له حصة اليوم ({today_ar}). مواعيده: {schedules_text}',
+            }
+
+        # Student has groups today but none match the time window —
+        # figure out if we're too early or too late
+        earliest_upcoming = None  # (group, mins_until, time_str)
+        most_recent_ended = None  # (group, mins_since, time_str)
+
+        for group, sched_time, duration in today_groups:
+            session_start = local_tz.localize(
+                datetime.combine(now_local.date(), sched_time)
+            )
+            session_end = session_start + timedelta(minutes=duration)
+            early_window = session_start - timedelta(minutes=AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES)
+
+            if now_local < early_window:
+                mins = int((session_start - now_local).total_seconds() / 60)
+                if earliest_upcoming is None or mins < earliest_upcoming[1]:
+                    earliest_upcoming = (group, mins, sched_time.strftime('%I:%M %p'))
+            elif now_local > session_end:
+                mins = int((now_local - session_start).total_seconds() / 60)
+                if most_recent_ended is None or mins < most_recent_ended[1]:
+                    most_recent_ended = (group, mins, sched_time.strftime('%I:%M %p'))
+
+        if earliest_upcoming:
+            group, mins, time_str = earliest_upcoming
+            return {
+                'type': 'too_early',
+                'message': f'مبكر جداً! حصة {group.group_name} للطالب {name} تبدأ الساعة {time_str} (بعد {mins} دقيقة)',
+            }
+
+        if most_recent_ended:
+            group, mins, time_str = most_recent_ended
+            return {
+                'type': 'too_late',
+                'message': f'الحصة انتهت! حصة {group.group_name} للطالب {name} كانت الساعة {time_str} (منذ {mins} دقيقة)',
+            }
+
+        return {
+            'type': 'wrong_schedule',
+            'message': f'لا توجد حصة متاحة الآن للطالب {name}',
+        }
+
     @staticmethod
     def get_current_day_name():
         """
@@ -591,6 +697,9 @@ class AttendanceService:
                 'group_name': group.group_name,
                 'teacher_name': group.teacher.full_name if group.teacher else '—',
                 'schedule': schedule_str,
+                'schedule_day_en': group.schedule_day,
+                'schedule_day_ar': DAY_NAMES_AR.get(group.schedule_day, group.schedule_day),
+                'schedule_time': group.schedule_time.strftime('%H:%M') if group.schedule_time else '',
                 'financial_status': enr.get_financial_status_display(),
                 'financial_status_code': enr.financial_status,
                 'payment': {

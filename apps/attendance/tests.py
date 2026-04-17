@@ -366,7 +366,7 @@ class ProcessScanIntegrationTest(TestCase):
         """اختبار: كود طالب غير صحيح"""
         result = AttendanceService.process_scan('9999', self.supervisor)
         self.assertFalse(result['success'])
-        self.assertIn('غير صالح', result['message'])
+        self.assertIn('غير موجود', result['message'])
 
     def test_process_scan_no_class_today(self):
         """اختبار: لا توجد حصة مجدولة اليوم"""
@@ -533,22 +533,22 @@ class BarcodeNormalizationTest(TestCase):
     def test_whitespace_stripped(self):
         """Leading/trailing spaces must be stripped before lookup."""
         result = AttendanceService.process_scan(' 9999 ', self.supervisor)
-        # Student doesn't exist — but the failure should be 'كود غير صالح'
+        # Student doesn't exist — but the failure should reference the code
         # NOT a server error (which would mean normalization blew up)
         self.assertFalse(result['success'])
-        self.assertEqual(result.get('message'), 'كود غير صالح')
+        self.assertIn('9999', result.get('message', ''))
 
     def test_newline_stripped(self):
         """Barcode reader may append \\n — should be stripped."""
         result = AttendanceService.process_scan('9999\n', self.supervisor)
         self.assertFalse(result['success'])
-        self.assertEqual(result.get('message'), 'كود غير صالح')
+        self.assertIn('9999', result.get('message', ''))
 
     def test_asterisk_padding_stripped(self):
         """Code128 asterisk delimiters should be stripped."""
         result = AttendanceService.process_scan('*9999*', self.supervisor)
         self.assertFalse(result['success'])
-        self.assertEqual(result.get('message'), 'كود غير صالح')
+        self.assertIn('9999', result.get('message', ''))
 
     def test_empty_code_handled(self):
         """Empty code after stripping should return useful error, not crash."""
