@@ -15,6 +15,75 @@ DAY_NAMES_AR = {
     'Thursday': 'الخميس', 'Friday': 'الجمعة',
 }
 
+# Maps error_type → UI severity for the frontend card color
+SEVERITY_MAP = {
+    'not_found': 'error',
+    'invalid_code': 'error',
+    'subscription_expired': 'error',
+    'payment_required': 'warning',
+    'sessions_exhausted': 'warning',
+    'too_early': 'info',
+    'too_late': 'warning',
+    'no_session_today': 'info',
+    'no_groups': 'warning',
+    'wrong_schedule': 'info',
+    'skipped': 'warning',
+    'no_session': 'info',
+}
+
+
+def _calculate_age(dob):
+    """Calculate age from date of birth."""
+    if not dob:
+        return None
+    today = timezone.localtime().date()
+    return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+
+
+def _count_overdue_months(student):
+    """Count months with unpaid/partial payment before current month."""
+    current_month = timezone.localtime().date().replace(day=1)
+    return Payment.objects.filter(
+        student=student,
+        month__lt=current_month,
+        status__in=['unpaid', 'partial'],
+    ).count()
+
+
+def _count_last_month_attendance(student):
+    """Count attendance records from last month."""
+    now = timezone.localtime().date()
+    first_of_current = now.replace(day=1)
+    last_month_end = first_of_current - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    return Attendance.objects.filter(
+        student=student,
+        session__session_date__gte=last_month_start,
+        session__session_date__lte=last_month_end,
+    ).count()
+
+
+def _calculate_attendance_rate(student):
+    """Percentage of sessions attended this month out of sessions that occurred."""
+    now = timezone.localtime().date()
+    current_month = now.replace(day=1)
+    enrolled_group_ids = student.group_enrollments.filter(
+        is_active=True
+    ).values_list('group_id', flat=True)
+    total_sessions = Session.objects.filter(
+        group_id__in=enrolled_group_ids,
+        session_date__gte=current_month,
+        session_date__lte=now,
+    ).count()
+    if total_sessions == 0:
+        return None
+    attended = Attendance.objects.filter(
+        student=student,
+        session__session_date__gte=current_month,
+        status__in=['present', 'late'],
+    ).count()
+    return round((attended / total_sessions) * 100, 1)
+
 
 class AttendanceService:
     """
@@ -127,7 +196,8 @@ class AttendanceService:
             return {
                 'success': False,
                 'message': f'طالب غير موجود بالكود: {student_code}',
-                'sound': 'error'
+                'sound': 'error',
+                'severity': 'error',
             }
 
         # Build dossier ONCE — included in every subsequent response
@@ -144,6 +214,7 @@ class AttendanceService:
                 'message': f'اشتراك الطالب {student.full_name} منتهي منذ {days_expired} يوم — يجب التجديد قبل تسجيل الحضور',
                 'sound': 'error',
                 'error_type': 'subscription_expired',
+                'severity': 'error',
                 'student_name': student.full_name,
                 'subscription_status': subscription_status,
                 'dossier': dossier,
@@ -207,6 +278,7 @@ class AttendanceService:
                 'message': rejection['message'],
                 'sound': 'error',
                 'error_type': rejection['type'],
+                'severity': SEVERITY_MAP.get(rejection['type'], 'error'),
                 'student_name': student.full_name,
                 'dossier': dossier,
             }
@@ -317,6 +389,7 @@ class AttendanceService:
                 'message': f'{student.full_name}: {skipped[0]["reason"]}',
                 'sound': 'error',
                 'error_type': 'skipped',
+                'severity': 'warning',
                 'student_name': student.full_name,
                 'skipped': skipped,
                 'dossier': dossier,
@@ -327,6 +400,7 @@ class AttendanceService:
                 'message': f'لا توجد حصة متاحة الآن للطالب {student.full_name}',
                 'sound': 'error',
                 'error_type': 'no_session',
+                'severity': 'info',
                 'student_name': student.full_name,
                 'dossier': dossier,
             }
@@ -343,6 +417,7 @@ class AttendanceService:
         return {
             'success': True,
             'status': status_key,
+            'severity': 'success',
             'message': message,
             'sound': sound,
             'student': {
@@ -735,6 +810,14 @@ class AttendanceService:
             'student_phone': student.student_phone or None,
             'parent_phone': student.parent_phone or None,
             'parent_name': student.parent_name or None,
+            'personal': {
+                'address': student.address or '',
+                'date_of_birth': student.date_of_birth.isoformat() if student.date_of_birth else None,
+                'age': _calculate_age(student.date_of_birth),
+                'school_name': student.school_name or '',
+                'parent_name': student.parent_name or '',
+                'registration_date': student.created_at.strftime('%Y-%m-%d') if student.created_at else None,
+            },
             'subscription': {
                 'status': sub_status.get('status'),
                 'status_display': sub_status.get('message'),
@@ -745,9 +828,18 @@ class AttendanceService:
                 ),
             },
             'enrollments': enrollments_data,
+            'financial_summary': {
+                'total_due': sum(e['payment']['amount_due'] for e in enrollments_data),
+                'total_paid': sum(e['payment']['amount_paid'] for e in enrollments_data),
+                'total_remaining': sum(e['payment']['remaining'] for e in enrollments_data),
+                'overdue_months': _count_overdue_months(student),
+            },
             'attendance_month': {
                 'total': total_this_month,
                 'last_scan': last_scan_iso,
+                'last_scan_group': last_att.session.group.group_name if last_att else None,
+                'last_month': _count_last_month_attendance(student),
+                'rate': _calculate_attendance_rate(student),
             },
         }
 
