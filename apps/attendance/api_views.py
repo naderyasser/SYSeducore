@@ -1,11 +1,13 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
+from django_ratelimit.decorators import ratelimit
 import json
 from .services import AttendanceService
 
 
 @login_required
+@ratelimit(key='ip', rate='30/m', block=True)
 @require_http_methods(["POST"])
 def process_scan(request):
     """

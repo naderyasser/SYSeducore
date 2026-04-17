@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.utils import timezone
+from django_ratelimit.decorators import ratelimit
 from .models import Session, Attendance
 from .services import AttendanceService
 from apps.students.models import Student
@@ -20,6 +21,7 @@ def scanner_page(request):
 
 
 @login_required
+@ratelimit(key='ip', rate='30/m', block=True)
 @require_http_methods(["POST"])
 def process_student_code(request):
     """

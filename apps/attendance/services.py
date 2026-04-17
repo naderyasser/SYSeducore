@@ -337,6 +337,7 @@ class AttendanceService:
         """
         الحصول على اسم اليوم الحالي بالإنجليزي
         Python's weekday(): Monday=0, Tuesday=1, ..., Sunday=6
+        Uses localtime() to get correct day in Africa/Cairo timezone.
         """
         days_map = {
             0: 'Monday',
@@ -347,7 +348,7 @@ class AttendanceService:
             5: 'Saturday',
             6: 'Sunday',
         }
-        today = timezone.now().weekday()
+        today = timezone.localtime().weekday()
         return days_map.get(today, '')
 
     @staticmethod
@@ -439,6 +440,8 @@ class AttendanceService:
         الخطوة 4: فحص الحالة المالية
         يتحقق من الحالة المالية للطالب في المجموعة المحددة
         """
+        from django.conf import settings as django_settings
+
         # جلب معلومات التسجيل في المجموعة
         try:
             enrollment = StudentGroupEnrollment.objects.get(
@@ -471,9 +474,14 @@ class AttendanceService:
         is_first_month = AttendanceService.is_student_first_month_in_group(student, group)
 
         # القاعدة:
-        # - الشهر الأول: لازم يدفع قبل الدخول (0 حصص سماح)
+        # - الشهر الأول مع تفعيل الدفع الصارم: لازم يدفع قبل الدخول (0 حصص سماح)
+        # - الشهر الأول بدون دفع صارم: يدخل حصتين قبل الدفع (2 حصص سماح)
         # - الشهور التالية: يدخل حصتين قبل الدفع (2 حصص سماح)
-        allowed_sessions = 0 if is_first_month else 2
+        strict_first_month = getattr(django_settings, 'ENABLE_FIRST_MONTH_STRICT_PAYMENT', True)
+        if is_first_month and strict_first_month:
+            allowed_sessions = 0
+        else:
+            allowed_sessions = 2
 
         # التحقق من استنفاد الحصص الشهرية
         sessions_limit = group.sessions_per_month

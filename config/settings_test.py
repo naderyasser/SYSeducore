@@ -33,3 +33,6 @@ CELERY_TASK_EAGER_PROPAGATES = True
 
 # Disable SSL redirect for tests
 SECURE_SSL_REDIRECT = False
+
+# Disable rate limiting for tests (except explicit rate-limit tests)
+RATELIMIT_ENABLE = False

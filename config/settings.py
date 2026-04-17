@@ -274,6 +274,9 @@ ULTRAMSG_TOKEN = config('ULTRAMSG_TOKEN', default='')
 
 # Notification Settings
 NOTIFICATION_METHOD = config('NOTIFICATION_METHOD', default='whatsapp')
+
+# If True, block attendance for first-month students who haven't paid.
+# If False, give first-month students the same 2-session grace period as returning students.
 ENABLE_FIRST_MONTH_STRICT_PAYMENT = config('ENABLE_FIRST_MONTH_STRICT_PAYMENT', default=True, cast=bool)
 
 
