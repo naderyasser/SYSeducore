@@ -1102,6 +1102,18 @@ async function processStudentCode(code) {
             body: JSON.stringify({ student_code: code })
         });
 
+        // Handle rate limiting (429)
+        if (response.status === 429) {
+            displayResult({
+                success: false,
+                message: 'تم تجاوز الحد المسموح من الطلبات، انتظر قليلاً',
+                student: null,
+                group: null
+            }, code);
+            playSound('error');
+            return;
+        }
+
         const data = await response.json();
         displayResult(data, code);
 

@@ -85,12 +85,12 @@ def clear_report_session(request):
 
 
 def AttendanceService_get_day_name():
-    """Helper to get current day name"""
+    """Helper to get current day name (uses local timezone)"""
     days_map = {
         0: 'Monday', 1: 'Tuesday', 2: 'Wednesday',
         3: 'Thursday', 4: 'Friday', 5: 'Saturday', 6: 'Sunday',
     }
-    return days_map.get(timezone.now().weekday(), '')
+    return days_map.get(timezone.localtime().weekday(), '')
 
 
 @login_required

@@ -4,6 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.cache import never_cache
 from django.http import JsonResponse
+from django_ratelimit.decorators import ratelimit
 
 from .forms import LoginForm, UserCreateForm, UserUpdateForm
 from .decorators import admin_required
@@ -19,6 +20,7 @@ def csrf_failure(request, reason=''):
 
 
 @never_cache
+@ratelimit(key='ip', rate='5/m', block=True)
 def login_view(request):
     if request.user.is_authenticated:
         return redirect('reports:dashboard')
