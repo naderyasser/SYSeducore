@@ -129,10 +129,16 @@ class AttendanceService:
             }
 
         # ========================================
-        # الخطوة 2: مطابقة الجدول
+        # الخطوة 2: مطابقة الجدول — جمع كل الحصص المطابقة
+        # (Bug 2 fix: collect ALL matching sessions, not just the first)
         # ========================================
         current_time = timezone.now()
         current_day_name = AttendanceService.get_current_day_name()
+
+        from django.conf import settings
+        import pytz
+        local_tz = pytz.timezone(settings.TIME_ZONE)
+        current_time_local = current_time.astimezone(local_tz)
 
         # جلب كل المجموعات المسجل فيها الطالب
         enrollments = StudentGroupEnrollment.objects.filter(
@@ -140,11 +146,9 @@ class AttendanceService:
             is_active=True
         ).select_related('group')
 
-        matching_group = None
-        enrollment = None
-        matched_schedule = None
+        # جمع كل المجموعات المطابقة للجدول الآن
+        matching_entries = []  # list of (group, enrollment, schedule_dict)
 
-        # البحث عن المجموعة التي موعدها الآن (نفس اليوم + في نطاق مدة الحصة)
         for enr in enrollments:
             group = enr.group
 
@@ -163,13 +167,6 @@ class AttendanceService:
             if not schedule_time:
                 continue
 
-            # مطابقة الوقت: التحقق من أن الوقت الحالي ضمن نطاق الحصة
-            from django.conf import settings
-            import pytz
-            
-            local_tz = pytz.timezone(settings.TIME_ZONE)
-            current_time_local = current_time.astimezone(local_tz)
-            
             session_start = local_tz.localize(
                 datetime.combine(current_time_local.date(), schedule_time)
             )
@@ -178,12 +175,9 @@ class AttendanceService:
 
             # السماح بالمسح من 30 دقيقة قبل الحصة حتى نهاية الحصة
             if early_window <= current_time_local <= session_end:
-                matching_group = group
-                enrollment = enr
-                matched_schedule = {'time': schedule_time, 'duration': duration}
-                break
+                matching_entries.append((group, enr, {'time': schedule_time, 'duration': duration}))
 
-        if not matching_group:
+        if not matching_entries:
             return {
                 'success': False,
                 'message': 'ممنوع الدخول: مجموعة خاطئة أو لا توجد حصة الآن',
@@ -192,88 +186,130 @@ class AttendanceService:
             }
 
         # ========================================
-        # الكشف الفوري - Instant Status
+        # الخطوات 3-5 لكل مجموعة مطابقة
         # ========================================
-        instant_status = AttendanceService.get_instant_status(student, matching_group)
+        newly_registered = []
+        already_registered = []
+        skipped = []
+        combined_instant_status = {}
+
+        for matching_group, enrollment, matched_schedule in matching_entries:
+            # الكشف الفوري
+            instant_status = AttendanceService.get_instant_status(student, matching_group)
+            combined_instant_status[matching_group.group_name] = instant_status
+
+            # قاعدة الـ 10 دقائق الصارمة
+            time_check = AttendanceService.check_strict_time(
+                current_time,
+                matched_schedule['time'],
+                matched_schedule['duration']
+            )
+
+            if not time_check['allowed']:
+                skipped.append({
+                    'group_name': matching_group.group_name,
+                    'reason': time_check['reason'],
+                })
+                continue
+
+            # الفحص المالي
+            financial_check = AttendanceService.check_financial_status(
+                student,
+                matching_group
+            )
+
+            if not financial_check['allowed']:
+                skipped.append({
+                    'group_name': matching_group.group_name,
+                    'reason': financial_check['reason'],
+                })
+                continue
+
+            # التسجيل النهائي — get_or_create للحصة
+            session, _ = Session.objects.get_or_create(
+                group=matching_group,
+                session_date=timezone.now().date(),
+                defaults={'teacher_attended': False}
+            )
+
+            # Bug 1 fix: use get_or_create — repeat scan = success, not error
+            attendance, created = Attendance.objects.get_or_create(
+                student=student,
+                session=session,
+                defaults={
+                    'scan_time': timezone.now(),
+                    'status': time_check['status'],
+                    'supervisor': supervisor,
+                }
+            )
+
+            if created:
+                AttendanceService.update_payment_sessions(student, matching_group)
+                newly_registered.append({
+                    'group_id': matching_group.group_id,
+                    'group_name': matching_group.group_name,
+                    'attendance_id': attendance.attendance_id,
+                    'status': attendance.status,
+                    'status_display': attendance.get_status_display(),
+                    'scan_time': attendance.scan_time.isoformat(),
+                })
+            else:
+                already_registered.append({
+                    'group_id': matching_group.group_id,
+                    'group_name': matching_group.group_name,
+                    'attendance_id': attendance.attendance_id,
+                    'status': attendance.status,
+                    'status_display': attendance.get_status_display(),
+                    'scan_time': attendance.scan_time.isoformat(),
+                })
 
         # ========================================
-        # الخطوة 3: قاعدة الـ 10 دقائق الصارمة
+        # بناء الرد — كل التسجيلات تُعتبر نجاح
         # ========================================
-        schedule_time = matched_schedule['time']
-        schedule_duration = matched_schedule['duration']
-        time_check = AttendanceService.check_strict_time(
-            current_time,
-            schedule_time,
-            schedule_duration
-        )
+        has_new = len(newly_registered) > 0
+        has_already = len(already_registered) > 0
+        has_skipped = len(skipped) > 0
 
-        if not time_check['allowed']:
+        # تحديد حالة الرد
+        if has_new and has_already:
+            status_key = 'registered'
+            message = f'مرحباً {student.full_name} — تم تسجيل {len(newly_registered)} حصة، و{len(already_registered)} مسجلة مسبقاً'
+            sound = 'success'
+        elif has_new:
+            group_names = '، '.join(r['group_name'] for r in newly_registered)
+            status_key = 'registered'
+            message = f'مرحباً {student.full_name} — {group_names}'
+            sound = 'success'
+        elif has_already:
+            status_key = 'already_registered'
+            message = f'{student.full_name} — تم تسجيل الحضور مسبقاً'
+            sound = 'info'
+        elif has_skipped:
+            # All groups skipped due to time/financial
             return {
                 'success': False,
-                'message': time_check['reason'],
+                'message': skipped[0]['reason'],
                 'sound': 'error',
-                'error_type': time_check.get('error_type', 'time_error'),
-                'instant_status': instant_status,
+                'error_type': 'skipped',
                 'student_name': student.full_name,
-                'group_name': matching_group.group_name,
+                'skipped': skipped,
             }
-
-        # ========================================
-        # الخطوة 4: الفحص المالي
-        # ========================================
-        financial_check = AttendanceService.check_financial_status(
-            student,
-            matching_group
-        )
-
-        if not financial_check['allowed']:
+        else:
             return {
                 'success': False,
-                'message': financial_check['reason'],
+                'message': 'لا توجد حصة متاحة الآن',
                 'sound': 'error',
-                'error_type': financial_check.get('error_type', 'financial_error'),
-                'instant_status': instant_status,
-                'student_name': student.full_name,
-                'group_name': matching_group.group_name,
-                'can_override': True,
+                'error_type': 'no_session'
             }
 
-        # ========================================
-        # التسجيل النهائي
-        # ========================================
-        # الحصول على أو إنشاء الحصة
-        session, _ = Session.objects.get_or_create(
-            group=matching_group,
-            session_date=timezone.now().date(),
-            defaults={'teacher_attended': False}
-        )
-
-        # التحقق من عدم التسجيل المسبق
-        if Attendance.objects.filter(student=student, session=session).exists():
-            return {
-                'success': False,
-                'message': 'تم تسجيل الحضور مسبقاً',
-                'sound': 'error',
-                'instant_status': instant_status,
-            }
-
-        # تسجيل الحضور
-        attendance = Attendance.objects.create(
-            student=student,
-            session=session,
-            scan_time=timezone.now(),
-            status=time_check['status'],
-            supervisor=supervisor
-        )
-
-        # تحديث عدد الحصص في Payment
-        AttendanceService.update_payment_sessions(student, matching_group)
+        # الرد الرئيسي (أول مجموعة مسجلة — للتوافق مع الواجهة القديمة)
+        first_result = (newly_registered + already_registered)[0]
 
         return {
             'success': True,
-            'message': f'مرحباً {student.full_name} - {matching_group.group_name}',
-            'sound': 'success',
-            'status': time_check['status'],
+            'status': status_key,
+            'message': message,
+            'sound': sound,
             'student': {
                 'student_id': student.student_id,
                 'full_name': student.full_name,
@@ -281,18 +317,19 @@ class AttendanceService:
                 'phone': student.student_phone,
             },
             'group': {
-                'group_id': matching_group.group_id,
-                'group_name': matching_group.group_name,
-                'schedule_day': current_day_name,
-                'schedule_time': str(matched_schedule['time']),
+                'group_id': first_result['group_id'],
+                'group_name': first_result['group_name'],
             },
             'attendance': {
-                'attendance_id': attendance.attendance_id,
-                'status': attendance.status,
-                'status_display': attendance.get_status_display(),
-                'scan_time': attendance.scan_time.isoformat(),
+                'attendance_id': first_result['attendance_id'],
+                'status': first_result['status'],
+                'status_display': first_result['status_display'],
+                'scan_time': first_result['scan_time'],
             },
-            'instant_status': instant_status,
+            'newly_registered': newly_registered,
+            'already_registered': already_registered,
+            'skipped': skipped,
+            'instant_status': combined_instant_status.get(first_result['group_name'], {}),
         }
     
     @staticmethod

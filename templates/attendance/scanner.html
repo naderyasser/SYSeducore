@@ -258,6 +258,11 @@
         border: 2px solid #f59e0b;
     }
 
+    .result-card.info {
+        background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+        border: 2px solid #3b82f6;
+    }
+
     .result-header {
         padding: 20px;
         text-align: center;
@@ -271,6 +276,7 @@
     .result-card.success .result-icon { color: #10b981; }
     .result-card.error .result-icon { color: #ef4444; }
     .result-card.warning .result-icon { color: #f59e0b; }
+    .result-card.info .result-icon { color: #3b82f6; }
 
     .result-title {
         font-size: 1.5rem;
@@ -464,6 +470,11 @@
         background: #fef2f2;
     }
 
+    .scan-item.info {
+        border-right-color: #3b82f6;
+        background: #eff6ff;
+    }
+
     .scan-item-icon {
         width: 40px;
         height: 40px;
@@ -482,6 +493,11 @@
     .scan-item.error .scan-item-icon {
         background: #fee2e2;
         color: #ef4444;
+    }
+
+    .scan-item.info .scan-item-icon {
+        background: #dbeafe;
+        color: #3b82f6;
     }
 
     .scan-item-info {
@@ -1093,8 +1109,8 @@ async function processStudentCode(code) {
         await loadTodayStats();
         await loadTodaySessions();
 
-        // Play sound
-        playSound(data.success ? 'success' : 'error');
+        // Play sound — info for already_registered, success for new, error for fail
+        playSound(data.sound || (data.success ? 'success' : 'error'));
 
     } catch (error) {
         displayResult({
@@ -1111,7 +1127,45 @@ async function processStudentCode(code) {
 function displayResult(data, code) {
     resultDisplay.classList.add('show');
 
-    if (data.success) {
+    if (data.success && data.status === 'already_registered') {
+        // Bug 1 fix: repeat scan shows info, not error
+        resultCard.className = 'result-card info';
+        resultIcon.innerHTML = '<i class="bi bi-info-circle-fill"></i>';
+        resultTitle.textContent = 'تم تسجيل الحضور مسبقاً';
+        resultMessage.textContent = data.message || 'الطالب مسجل بالفعل';
+
+        let details = `
+            <div class="detail-row">
+                <span class="detail-label">كود الطالب</span>
+                <span class="detail-value highlight">${code}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">اسم الطالب</span>
+                <span class="detail-value">${data.student?.full_name || data.student?.name || '-'}</span>
+            </div>
+        `;
+        if (data.attendance) {
+            const scanTime = new Date(data.attendance.scan_time);
+            details += `
+                <div class="detail-row">
+                    <span class="detail-label">وقت التسجيل الأصلي</span>
+                    <span class="detail-value">${scanTime.toLocaleTimeString('ar-EG')}</span>
+                </div>
+            `;
+        }
+        // Show all already-registered groups (Bug 2)
+        if (data.already_registered && data.already_registered.length) {
+            data.already_registered.forEach(function(r) {
+                details += `
+                    <div class="detail-row">
+                        <span class="detail-label">مجموعة</span>
+                        <span class="detail-value">${r.group_name} <span class="badge bg-info">مسجل مسبقاً</span></span>
+                    </div>`;
+            });
+        }
+        resultDetails.innerHTML = details;
+
+    } else if (data.success) {
         resultCard.className = 'result-card success';
         resultIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
         resultTitle.textContent = 'تم تسجيل الحضور بنجاح';
@@ -1123,17 +1177,37 @@ function displayResult(data, code) {
             </div>
             <div class="detail-row">
                 <span class="detail-label">اسم الطالب</span>
-                <span class="detail-value">${data.student?.name || '-'}</span>
+                <span class="detail-value">${data.student?.full_name || data.student?.name || '-'}</span>
             </div>
         `;
 
-        if (data.group) {
+        // Show all newly registered groups (Bug 2)
+        if (data.newly_registered && data.newly_registered.length) {
+            data.newly_registered.forEach(function(r) {
+                details += `
+                    <div class="detail-row">
+                        <span class="detail-label">مجموعة</span>
+                        <span class="detail-value">${r.group_name} <span class="badge bg-success">${r.status_display}</span></span>
+                    </div>`;
+            });
+        } else if (data.group) {
             details += `
                 <div class="detail-row">
                     <span class="detail-label">المجموعة</span>
-                    <span class="detail-value">${data.group.name}</span>
+                    <span class="detail-value">${data.group.group_name || data.group.name}</span>
                 </div>
             `;
+        }
+
+        // Also show already-registered if mixed
+        if (data.already_registered && data.already_registered.length) {
+            data.already_registered.forEach(function(r) {
+                details += `
+                    <div class="detail-row">
+                        <span class="detail-label">مجموعة</span>
+                        <span class="detail-value">${r.group_name} <span class="badge bg-info">مسجل مسبقاً</span></span>
+                    </div>`;
+            });
         }
 
         if (data.attendance) {
@@ -1201,8 +1275,9 @@ function addToHistory(data, code) {
     const scan = {
         code: code,
         success: data.success,
+        status: data.status || (data.success ? 'registered' : 'error'),
         message: data.message,
-        student: data.student?.name || '-',
+        student: data.student?.full_name || data.student?.name || '-',
         time: new Date().toLocaleTimeString('ar-EG'),
         timestamp: Date.now()
     };
@@ -1234,10 +1309,13 @@ function renderScansList() {
         return;
     }
 
-    scansList.innerHTML = filtered.slice(0, 20).map(scan => `
-        <div class="scan-item ${scan.success ? 'success' : 'error'}">
+    scansList.innerHTML = filtered.slice(0, 20).map(scan => {
+        let itemClass = scan.success ? (scan.status === 'already_registered' ? 'info' : 'success') : 'error';
+        let icon = scan.success ? (scan.status === 'already_registered' ? 'info' : 'check') : 'x';
+        return `
+        <div class="scan-item ${itemClass}">
             <div class="scan-item-icon">
-                <i class="bi bi-${scan.success ? 'check' : 'x'}-circle-fill"></i>
+                <i class="bi bi-${icon}-circle-fill"></i>
             </div>
             <div class="scan-item-info">
                 <h6>${scan.student}</h6>
@@ -1245,7 +1323,7 @@ function renderScansList() {
             </div>
             <div class="scan-item-time">${scan.time}</div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // Update Counts

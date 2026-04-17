@@ -1,0 +1,45 @@
+============================================================
+  BUG FIX VERIFICATION — 2026-04-17 21:31 Cairo time
+============================================================
+
+Environment: Django 5.0.1, Python 3.13, SQLite
+Test student: مهداء فرج (code 1373)
+Test group 1: علوم الصف الثانى الاعدادى مس سلمى
+Test group 2: رياضيات الصف الخامس الابتدائى مس هدير
+
+------------------------------------------------------------
+BUG 1a: First scan → registered
+------------------------------------------------------------
+  success=True
+  status=registered
+  msg: مرحباً مهداء فرج — علوم الصف الثانى الاعدادى مس سلمى
+  newly_registered: [علوم الصف الثانى الاعدادى مس سلمى]
+  RESULT: ✅ PASS
+
+------------------------------------------------------------
+BUG 1b: Repeat scan → already_registered (NOT error)
+------------------------------------------------------------
+  success=True
+  status=already_registered
+  msg: مهداء فرج — تم تسجيل الحضور مسبقاً
+  already_registered: [علوم الصف الثانى الاعدادى مس سلمى]
+  RESULT: ✅ PASS — no more "فشل تسجيل الدخول" on repeat
+
+------------------------------------------------------------
+BUG 2: Multi-session registration (single scan → 2 groups)
+------------------------------------------------------------
+  success=True
+  status=registered
+  msg: مرحباً مهداء فرج — علوم ... ، رياضيات ...
+  newly_registered: 2 sessions
+    → علوم الصف الثانى الاعدادى مس سلمى (حاضر)
+    → رياضيات الصف الخامس الابتدائى مس هدير (حاضر)
+  RESULT: ✅ PASS — both groups registered in one scan
+
+------------------------------------------------------------
+BUG 3: Server-side PDF sticker
+------------------------------------------------------------
+  build_sticker_pdf(student) → 47149 bytes
+  File: PROOF/sticker_sample.pdf
+  URL: /students/1373/qr-ticket/pdf/
+  RESULT: ✅ PASS — PDF generated, no browser print caching issues

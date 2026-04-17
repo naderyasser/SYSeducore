@@ -476,6 +476,7 @@ def student_id_card_print(request, student_id):
 def student_qr_ticket(request, student_id):
     """
     طباعة تذكرة QR صغيرة (~5 × 8 سم) تحتوي فقط على كود الطالب و QR.
+    Deprecated: use qr_ticket_pdf for reliable repeat printing.
     """
     student = get_object_or_404(Student, pk=student_id)
     barcode_base64 = student.get_barcode_base64()
@@ -483,6 +484,22 @@ def student_qr_ticket(request, student_id):
         'student': student,
         'barcode_base64': barcode_base64,
     })
+
+
+@login_required
+def qr_ticket_pdf(request, student_id):
+    """
+    Server-side PDF sticker (35mm x 10mm) — no browser caching issues.
+    """
+    from .services.sticker_pdf import build_sticker_pdf
+    student = get_object_or_404(Student, pk=student_id)
+    pdf = build_sticker_pdf(student)
+    resp = HttpResponse(pdf, content_type='application/pdf')
+    resp['Content-Disposition'] = f'inline; filename="sticker_{student.student_code}.pdf"'
+    resp['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp['Pragma'] = 'no-cache'
+    resp['Expires'] = '0'
+    return resp
 
 
 @login_required
