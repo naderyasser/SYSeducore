@@ -798,6 +798,67 @@
         flex-wrap: wrap;
     }
 
+    /* Extended dossier sections */
+    .dossier-details-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 12px;
+        font-size: 0.78rem;
+    }
+    .dossier-detail-item {
+        display: flex;
+        flex-direction: column;
+    }
+    .dossier-detail-label {
+        color: #94a3b8;
+        font-size: 0.68rem;
+    }
+    .dossier-detail-value {
+        color: #1e293b;
+        font-weight: 600;
+    }
+
+    .dossier-summary-grid {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .dossier-sum-item {
+        flex: 1;
+        min-width: 70px;
+        text-align: center;
+        padding: 6px 4px;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.03);
+    }
+    .dossier-sum-value {
+        font-size: 1rem;
+        font-weight: 700;
+        display: block;
+    }
+    .dossier-sum-value.paid { color: #10b981; }
+    .dossier-sum-value.remaining { color: #f59e0b; }
+    .dossier-sum-value.overdue { color: #ef4444; }
+    .dossier-sum-label {
+        font-size: 0.65rem;
+        color: #64748b;
+    }
+    .dossier-collapse-toggle {
+        display: block;
+        width: 100%;
+        text-align: center;
+        font-size: 0.75rem;
+        color: #3b82f6;
+        background: none;
+        border: 1px dashed #cbd5e1;
+        border-radius: 6px;
+        padding: 4px;
+        cursor: pointer;
+        margin-top: 6px;
+    }
+    .dossier-collapsible { display: none; }
+    .dossier-collapsible.open { display: block; }
+
     /* Mobile collapsible stats */
     .stats-toggle-btn {
         display: none;
@@ -1352,22 +1413,56 @@ function renderDossier(d) {
             </div>`;
     });
 
-    // Parent contact
+    // Parent contact — fixed WhatsApp URL
     let contactHtml = '';
     if (d.parent_phone) {
         const phone = d.parent_phone.replace(/\D/g, '');
         const waPhone = phone.startsWith('0') ? '2' + phone : phone;
+        const safePhone = escHtml(d.parent_phone);
         contactHtml = `
             <div class="dossier-contact">
                 <a href="https://wa.me/${waPhone}" target="_blank" rel="noopener" class="btn btn-sm btn-success">
                     <i class="bi bi-whatsapp"></i> واتساب
                 </a>
-                <button class="btn btn-sm btn-outline-secondary"
-                    onclick="navigator.clipboard.writeText('${escHtml(d.parent_phone)}').then(()=>{ this.textContent='\u2713 \u062a\u0645 \u0627\u0644\u0646\u0633\u062e'; setTimeout(()=>{ this.innerHTML='<i class=\\"bi bi-clipboard\\"></i> ${escHtml(d.parent_phone)}'; },2000); })">
-                    <i class="bi bi-clipboard"></i> ${escHtml(d.parent_phone)}
+                <button class="btn btn-sm btn-outline-secondary" data-phone="${safePhone}"
+                    onclick="var p=this.dataset.phone,el=this;navigator.clipboard.writeText(p).then(function(){el.textContent='\u2713 \u062a\u0645 \u0627\u0644\u0646\u0633\u062e';setTimeout(function(){el.innerHTML='<i class=&quot;bi bi-clipboard&quot;></i> '+p;},2000);})">
+                    <i class="bi bi-clipboard"></i> ${safePhone}
                 </button>
             </div>`;
     }
+
+    // Personal details (collapsible)
+    let personalHtml = '';
+    const per = d.personal || {};
+    const hasPersonal = per.school_name || per.address || per.date_of_birth || per.parent_name;
+    if (hasPersonal) {
+        let items = '';
+        if (per.parent_name) items += `<div class="dossier-detail-item"><span class="dossier-detail-label">ولي الأمر</span><span class="dossier-detail-value">${escHtml(per.parent_name)}</span></div>`;
+        if (per.school_name) items += `<div class="dossier-detail-item"><span class="dossier-detail-label">المدرسة</span><span class="dossier-detail-value">${escHtml(per.school_name)}</span></div>`;
+        if (per.date_of_birth) items += `<div class="dossier-detail-item"><span class="dossier-detail-label">تاريخ الميلاد</span><span class="dossier-detail-value">${escHtml(per.date_of_birth)}${per.age != null ? ' (' + per.age + ' سنة)' : ''}</span></div>`;
+        if (per.address) items += `<div class="dossier-detail-item"><span class="dossier-detail-label">العنوان</span><span class="dossier-detail-value">${escHtml(per.address)}</span></div>`;
+        if (per.registration_date) items += `<div class="dossier-detail-item"><span class="dossier-detail-label">تاريخ التسجيل</span><span class="dossier-detail-value">${escHtml(per.registration_date)}</span></div>`;
+        personalHtml = `<div class="dossier-section"><div class="dossier-section-title">بيانات شخصية</div><div class="dossier-details-grid">${items}</div></div>`;
+    }
+
+    // Financial summary
+    let financialHtml = '';
+    const fin = d.financial_summary;
+    if (fin) {
+        financialHtml = `
+            <div class="dossier-section">
+                <div class="dossier-section-title">ملخص مالي (الشهر الحالي)</div>
+                <div class="dossier-summary-grid">
+                    <div class="dossier-sum-item"><span class="dossier-sum-value paid">${fin.total_paid} ج.م</span><span class="dossier-sum-label">مدفوع</span></div>
+                    <div class="dossier-sum-item"><span class="dossier-sum-value remaining">${fin.total_remaining} ج.م</span><span class="dossier-sum-label">متبقي</span></div>
+                    ${fin.overdue_months > 0 ? `<div class="dossier-sum-item"><span class="dossier-sum-value overdue">${fin.overdue_months}</span><span class="dossier-sum-label">شهور متأخرة</span></div>` : ''}
+                </div>
+            </div>`;
+    }
+
+    // Unique ID for collapse toggle
+    const collapseId = 'dossier_extra_' + (d.student_id || Math.random().toString(36).slice(2));
+    const hasExtra = personalHtml || financialHtml;
 
     return `
         <div class="dossier-card">
@@ -1389,10 +1484,24 @@ function renderDossier(d) {
                     <span class="dossier-stat-lbl">حضور الشهر</span>
                 </div>
                 <div class="dossier-stat">
+                    <span class="dossier-stat-val">${d.attendance_month?.last_month ?? '-'}</span>
+                    <span class="dossier-stat-lbl">الشهر السابق</span>
+                </div>
+                <div class="dossier-stat">
+                    <span class="dossier-stat-val">${d.attendance_month?.rate != null ? d.attendance_month.rate + '%' : '-'}</span>
+                    <span class="dossier-stat-lbl">نسبة الحضور</span>
+                </div>
+                <div class="dossier-stat">
                     <span class="dossier-stat-val" style="font-size:0.9rem;">${escHtml(lastScanStr)}</span>
-                    <span class="dossier-stat-lbl">آخر حضور</span>
+                    <span class="dossier-stat-lbl">آخر حضور${d.attendance_month?.last_scan_group ? '<br><small>' + escHtml(d.attendance_month.last_scan_group) + '</small>' : ''}</span>
                 </div>
             </div>
+            ${hasExtra ? `
+                <button class="dossier-collapse-toggle" onclick="var sec=document.getElementById('${collapseId}');sec.classList.toggle('open');this.textContent=sec.classList.contains('open')?'▲ إخفاء التفاصيل':'▼ عرض التفاصيل';">▼ عرض التفاصيل</button>
+                <div id="${collapseId}" class="dossier-collapsible">
+                    ${personalHtml}
+                    ${financialHtml}
+                </div>` : ''}
             ${contactHtml}
         </div>`;
 }
@@ -1404,9 +1513,17 @@ function displayResult(data, code) {
 
     const dossier = data.dossier || null;
 
+    // Determine severity-based card class and icon
+    const sevIcons = {
+        success: '<i class="bi bi-check-circle-fill"></i>',
+        info: '<i class="bi bi-info-circle-fill"></i>',
+        warning: '<i class="bi bi-exclamation-triangle-fill"></i>',
+        error: '<i class="bi bi-x-circle-fill"></i>',
+    };
+
     if (data.success && data.status === 'already_registered') {
         resultCard.className = 'result-card info';
-        resultIcon.innerHTML = '<i class="bi bi-info-circle-fill"></i>';
+        resultIcon.innerHTML = sevIcons.info;
         resultTitle.textContent = 'تم تسجيل الحضور مسبقاً';
         resultMessage.textContent = data.message || 'الطالب مسجل بالفعل';
         resultDetails.innerHTML = dossier ? renderDossier(dossier) : `
@@ -1421,7 +1538,7 @@ function displayResult(data, code) {
 
     } else if (data.success) {
         resultCard.className = 'result-card success';
-        resultIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+        resultIcon.innerHTML = sevIcons.success;
         resultTitle.textContent = 'تم تسجيل الحضور بنجاح';
         resultMessage.textContent = data.message || 'مرحباً!';
         resultDetails.innerHTML = dossier ? renderDossier(dossier) : `
@@ -1435,9 +1552,11 @@ function displayResult(data, code) {
             </div>`;
 
     } else {
-        resultCard.className = 'result-card error';
-        resultIcon.innerHTML = '<i class="bi bi-x-circle-fill"></i>';
-        resultTitle.textContent = 'فشل تسجيل الحضور';
+        const sev = data.severity || 'error';
+        resultCard.className = 'result-card ' + sev;
+        resultIcon.innerHTML = sevIcons[sev] || sevIcons.error;
+        resultTitle.textContent = sev === 'error' ? 'فشل تسجيل الحضور' :
+                                  sev === 'warning' ? 'تنبيه' : 'ملاحظة';
         resultMessage.textContent = data.message || 'حدث خطأ ما';
 
         // Build detail rows

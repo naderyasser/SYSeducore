@@ -691,3 +691,38 @@ class DossierTest(TestCase):
         if result.get('success'):
             self.assertIn('dossier', result)
             self.assertEqual(result['dossier']['student_code'], '5500')
+
+    def test_dossier_personal_section(self):
+        """Dossier must include personal section with parent_name and registration_date."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertIn('personal', dossier)
+        self.assertEqual(dossier['personal']['parent_name'], 'ولي الأمر')
+        self.assertIsNotNone(dossier['personal']['registration_date'])
+
+    def test_dossier_financial_summary(self):
+        """Dossier must include financial_summary with totals from enrollments."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertIn('financial_summary', dossier)
+        # group_a (300 unpaid) + group_b (exempt 0) = 300 total_due
+        self.assertEqual(dossier['financial_summary']['total_due'], 300.0)
+        self.assertEqual(dossier['financial_summary']['total_paid'], 0.0)
+        self.assertEqual(dossier['financial_summary']['total_remaining'], 300.0)
+
+    def test_dossier_attendance_rate_no_sessions(self):
+        """When no sessions exist, attendance rate should be None."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertIsNone(dossier['attendance_month']['rate'])
+
+    def test_severity_in_not_found(self):
+        """Scan for non-existent student must return severity='error'."""
+        result = AttendanceService.process_scan('NONEXISTENT', self.supervisor)
+        self.assertEqual(result['severity'], 'error')
+
+    def test_severity_in_subscription_expired(self):
+        """Scan for expired student must return severity='error'."""
+        from datetime import timedelta
+        self.student.subscription_expiry_date = timezone.localtime().date() - timedelta(days=5)
+        self.student.save()
+        result = AttendanceService.process_scan('5500', self.supervisor)
+        if result.get('error_type') == 'subscription_expired':
+            self.assertEqual(result['severity'], 'error')
