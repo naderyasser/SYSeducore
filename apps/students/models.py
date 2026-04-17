@@ -298,8 +298,9 @@ class Student(SoftDeleteModel):
     def is_subscription_active(self):
         """التحقق من صلاحية الاشتراك"""
         from django.utils import timezone
+        # No subscription date set = subscription not configured, allow entry
         if not self.subscription_expiry_date:
-            return False
+            return True
         return timezone.now().date() <= self.subscription_expiry_date
     
     def activate_subscription(self, days=30):
