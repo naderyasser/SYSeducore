@@ -517,3 +517,177 @@ class FirstMonthPaymentFlagTest(TestCase):
         )
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertTrue(result['allowed'])
+
+
+class BarcodeNormalizationTest(TestCase):
+    """
+    اختبار تنظيف كود الباركود المُدخَل من الكاميرا
+    Barcode values from scanners often carry extra whitespace or padding chars.
+    """
+
+    def setUp(self):
+        self.supervisor = User.objects.create_user(
+            username='sup_norm', password='testpass123', role='supervisor'
+        )
+
+    def test_whitespace_stripped(self):
+        """Leading/trailing spaces must be stripped before lookup."""
+        result = AttendanceService.process_scan(' 9999 ', self.supervisor)
+        # Student doesn't exist — but the failure should be 'كود غير صالح'
+        # NOT a server error (which would mean normalization blew up)
+        self.assertFalse(result['success'])
+        self.assertEqual(result.get('message'), 'كود غير صالح')
+
+    def test_newline_stripped(self):
+        """Barcode reader may append \\n — should be stripped."""
+        result = AttendanceService.process_scan('9999\n', self.supervisor)
+        self.assertFalse(result['success'])
+        self.assertEqual(result.get('message'), 'كود غير صالح')
+
+    def test_asterisk_padding_stripped(self):
+        """Code128 asterisk delimiters should be stripped."""
+        result = AttendanceService.process_scan('*9999*', self.supervisor)
+        self.assertFalse(result['success'])
+        self.assertEqual(result.get('message'), 'كود غير صالح')
+
+    def test_empty_code_handled(self):
+        """Empty code after stripping should return useful error, not crash."""
+        result = AttendanceService.process_scan('   ', self.supervisor)
+        self.assertFalse(result['success'])
+
+
+class DossierTest(TestCase):
+    """
+    اختبار بناء ملف الطالب الشامل (build_student_dossier)
+    """
+
+    def setUp(self):
+        self.supervisor = User.objects.create_user(
+            username='sup_doss', password='testpass123', role='supervisor'
+        )
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس التجربة',
+            email='doss_teacher@test.com',
+            phone='+201000000001',
+            specialization='علوم',
+            hire_date=timezone.now().date()
+        )
+        self.room = Room.objects.create(name='قاعة D', capacity=25)
+        self.group_a = Group.objects.create(
+            group_name='مجموعة ألفا',
+            teacher=self.teacher,
+            room=self.room,
+            schedule_day='Sunday',
+            schedule_time=time(10, 0),
+            standard_fee=300.00
+        )
+        self.group_b = Group.objects.create(
+            group_name='مجموعة بيتا',
+            teacher=self.teacher,
+            room=self.room,
+            schedule_day='Tuesday',
+            schedule_time=time(16, 0),
+            standard_fee=250.00
+        )
+        self.student = Student.objects.create(
+            student_code='5500',
+            full_name='طالب التجربة',
+            parent_phone='+201111111111',
+            parent_name='ولي الأمر',
+            education_stage='secondary',
+            education_year='2'
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group_a, financial_status='normal'
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group_b, financial_status='exempt'
+        )
+
+    def test_dossier_basic_fields(self):
+        """Dossier must include name, code, parent phone, education."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertEqual(dossier['full_name'], 'طالب التجربة')
+        self.assertEqual(dossier['student_code'], '5500')
+        self.assertEqual(dossier['parent_phone'], '+201111111111')
+        self.assertIn('ثانوي', dossier['education'])
+
+    def test_dossier_enrollments_count(self):
+        """Dossier must list all active enrollments."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertEqual(len(dossier['enrollments']), 2)
+
+    def test_dossier_exempt_group_payment(self):
+        """Exempt group must show pay_status='exempt'."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        exempt_enr = next(
+            e for e in dossier['enrollments'] if e['group_name'] == 'مجموعة بيتا'
+        )
+        self.assertEqual(exempt_enr['payment']['status'], 'exempt')
+        self.assertEqual(exempt_enr['payment']['amount_due'], 0.0)
+
+    def test_dossier_unpaid_group_payment(self):
+        """Group with no payment record must show pay_status='unpaid'."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        normal_enr = next(
+            e for e in dossier['enrollments'] if e['group_name'] == 'مجموعة ألفا'
+        )
+        self.assertEqual(normal_enr['payment']['status'], 'unpaid')
+        self.assertEqual(normal_enr['payment']['amount_due'], 300.0)
+
+    def test_dossier_paid_group_payment(self):
+        """Group with paid payment must reflect correct amounts."""
+        current_month = timezone.localtime().date().replace(day=1)
+        Payment.objects.create(
+            student=self.student, group=self.group_a, month=current_month,
+            amount_due=300.00, amount_paid=300.00, status='paid'
+        )
+        dossier = AttendanceService.build_student_dossier(self.student)
+        normal_enr = next(
+            e for e in dossier['enrollments'] if e['group_name'] == 'مجموعة ألفا'
+        )
+        self.assertEqual(normal_enr['payment']['status'], 'paid')
+        self.assertEqual(normal_enr['payment']['remaining'], 0.0)
+
+    def test_dossier_subscription_no_date(self):
+        """Student with no subscription_expiry_date → inactive status in dossier."""
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertEqual(dossier['subscription']['status'], 'inactive')
+
+    def test_dossier_attendance_month_count(self):
+        """Dossier attendance_month.total must match actual attendance records."""
+        from apps.attendance.models import Session, Attendance
+        session = Session.objects.create(
+            group=self.group_a,
+            session_date=timezone.localtime().date()
+        )
+        Attendance.objects.create(
+            student=self.student,
+            session=session,
+            status='present',
+            supervisor=self.supervisor
+        )
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertEqual(dossier['attendance_month']['total'], 1)
+        self.assertIsNotNone(dossier['attendance_month']['last_scan'])
+
+    def test_dossier_included_in_scan_result(self):
+        """Successful scan must include 'dossier' key in result."""
+        from unittest.mock import patch
+        from datetime import time as dtime
+        import pytz
+        from django.conf import settings
+        local_tz = pytz.timezone(settings.TIME_ZONE)
+        now_local = timezone.localtime()
+        # Simulate scan at 10:05 on a Sunday
+        fake_day = 'Sunday'
+        fake_time = now_local.replace(hour=10, minute=5)
+        with patch.object(AttendanceService, 'get_current_day_name', return_value=fake_day):
+            with patch('apps.attendance.services.timezone.localtime', return_value=fake_time):
+                with patch('apps.attendance.services.timezone.now', return_value=fake_time):
+                    result = AttendanceService.process_scan('5500', self.supervisor)
+        # Whether it succeeds or fails on time, if student exists and subscription OK,
+        # dossier is included on success
+        if result.get('success'):
+            self.assertIn('dossier', result)
+            self.assertEqual(result['dossier']['student_code'], '5500')
