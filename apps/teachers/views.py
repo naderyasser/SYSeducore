@@ -92,7 +92,12 @@ def teacher_list(request):
 @login_required
 def teacher_detail(request, teacher_id):
     teacher = get_object_or_404(Teacher, pk=teacher_id)
-    groups = teacher.groups.filter(is_active=True)
+    groups = teacher.groups.filter(is_active=True).annotate(
+        students_count=Count(
+            'studentgroupenrollment',
+            filter=Q(studentgroupenrollment__is_active=True),
+        )
+    )
     
     # Get upcoming sessions for this teacher (next 7 days)
     today = timezone.now().date()
