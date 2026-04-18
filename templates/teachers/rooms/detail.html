@@ -481,7 +481,11 @@
 // Auto-refresh every 30 seconds
 setInterval(function() {
     fetch('{% url "teachers:api_room_detail" room_id=room.room_id %}')
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+            if (!response.ok) throw new Error('خطأ في الخادم');
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 // Update capacity display

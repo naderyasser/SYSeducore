@@ -462,7 +462,11 @@ function removeStudent(enrollmentId, studentName) {
         },
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        if (!response.ok) throw new Error('خطأ في الخادم');
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             const card = document.getElementById('enrollment-' + enrollmentId);

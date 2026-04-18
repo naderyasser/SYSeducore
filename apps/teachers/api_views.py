@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
+from apps.accounts.decorators import ajax_login_required
 from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -11,7 +11,7 @@ from .models import Room, Group, Teacher
 from apps.students.models import Student, StudentGroupEnrollment
 
 
-@login_required
+@ajax_login_required
 def room_list_api(request):
     """
     API Endpoint: قائمة بجميع القاعات مع معلومات إضافية
@@ -76,7 +76,7 @@ def room_list_api(request):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 def room_detail_api(request, room_id):
     """
     API Endpoint: تفاصيل قاعة محددة مع جدولها الكامل
@@ -162,7 +162,7 @@ def room_detail_api(request, room_id):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def room_availability_check(request):
     """
@@ -248,7 +248,7 @@ def room_availability_check(request):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 def room_statistics_api(request):
     """
     API Endpoint: إحصائيات القاعات
@@ -325,7 +325,7 @@ def room_statistics_api(request):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 def room_schedule_api(request, room_id):
     """
     API Endpoint: جدول قاعة محددة لهذا الأسبوع

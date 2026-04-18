@@ -547,7 +547,11 @@ function showAddToGroup(studentId, studentName) {
     `;
 
     fetch(`{% url 'students:api_available_groups' 0 %}`.replace('0', studentId))
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+            if (!response.ok) throw new Error('خطأ في الخادم');
+            return response.json();
+        })
         .then(data => {
             if (data.success && data.groups.length > 0) {
                 const html = data.groups.map(group => `
@@ -595,7 +599,11 @@ function addToGroup(groupId, groupName) {
         },
         body: `student_id=${currentStudentId}&group_id=${groupId}&financial_status=normal`
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        if (!response.ok) throw new Error('خطأ في الخادم');
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             alert(data.message);
@@ -621,7 +629,11 @@ function removeFromGroup(enrollmentId) {
         },
         body: `enrollment_id=${enrollmentId}`
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        if (!response.ok) throw new Error('خطأ في الخادم');
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             alert(data.message);
@@ -661,7 +673,11 @@ function activateSubscription(days) {
         },
         body: `days=${days}`
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        if (!response.ok) throw new Error('خطأ في الخادم');
+        return response.json();
+    })
     .then(data => {
         closeSubscriptionModal();
         if (data.success) {

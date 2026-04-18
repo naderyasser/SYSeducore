@@ -657,7 +657,11 @@ const enrollmentData = JSON.parse('{{ enrollment_data_json|default:"{}" |escapej
 // Generate next code (preview only - does NOT fill the input field)
 function generateCode() {
     fetch('{% url "students:next_code" %}')
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+            if (!response.ok) throw new Error('خطأ في الخادم');
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 // Show code number in preview label only

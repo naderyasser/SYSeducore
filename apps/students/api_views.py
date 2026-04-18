@@ -3,8 +3,8 @@ API Views for Students App
 Handles barcode generation, WhatsApp sharing, group enrollment, and ID card generation
 """
 from django.shortcuts import get_object_or_404
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
+from apps.accounts.decorators import ajax_login_required
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.db.models import Count, Q
@@ -37,7 +37,7 @@ def generate_qr_image(code):
     return qr.make_image(fill_color="black", back_color="white").convert('RGB')
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def student_barcode(request, student_id):
     """
@@ -63,7 +63,7 @@ def student_barcode(request, student_id):
         })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def send_barcode_whatsapp(request, student_id):
     """
@@ -154,7 +154,7 @@ _نظام بداية التعليمي_"""
         })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def add_to_group(request):
     """
@@ -216,7 +216,7 @@ def add_to_group(request):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def remove_from_group(request):
     """
@@ -240,7 +240,7 @@ def remove_from_group(request):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def student_groups(request, student_id):
     """
@@ -276,7 +276,7 @@ def student_groups(request, student_id):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def available_groups(request, student_id):
     """
@@ -347,7 +347,7 @@ def available_groups(request, student_id):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def student_id_card_data(request, student_id):
     """
@@ -416,7 +416,7 @@ def student_id_card_data(request, student_id):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def whatsapp_barcode(request, student_id):
     """
@@ -448,7 +448,7 @@ def whatsapp_barcode(request, student_id):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def students_list_api(request):
     """
@@ -511,7 +511,7 @@ def students_list_api(request):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def student_statistics(request):
     """
@@ -548,7 +548,7 @@ def student_statistics(request):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def bulk_action(request):
     """
@@ -589,7 +589,7 @@ def bulk_action(request):
     })
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def activate_subscription(request, student_id):
     """
@@ -620,7 +620,7 @@ def activate_subscription(request, student_id):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def subscription_status(request, student_id):
     """

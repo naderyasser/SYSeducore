@@ -1,12 +1,13 @@
+from decimal import Decimal, InvalidOperation
+
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-import json
+from apps.accounts.decorators import ajax_login_required
 from .models import Payment
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def record_payment(request, payment_id):
     """
@@ -14,7 +15,7 @@ def record_payment(request, payment_id):
     """
     try:
         payment = Payment.objects.get(pk=payment_id)
-        amount = float(request.POST.get('amount', 0))
+        amount = Decimal(request.POST.get('amount', '0'))
         
         payment.amount_paid += amount
         payment.payment_date = timezone.now()
@@ -45,7 +46,7 @@ def record_payment(request, payment_id):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def mark_as_paid(request, payment_id):
     """

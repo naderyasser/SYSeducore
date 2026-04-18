@@ -1318,6 +1318,15 @@ async function processStudentCode(code) {
             return;
         }
 
+        if (response.status === 401) {
+            window.location.href = '/accounts/login/';
+            return;
+        }
+
+        if (!response.ok) {
+            throw new Error('خطأ في الخادم');
+        }
+
         const data = await response.json();
         displayResult(data, code);
 
@@ -1704,6 +1713,8 @@ function filterScans(filter) {
 async function loadTodayStats() {
     try {
         const response = await fetch('{% url "attendance:today_stats" %}');
+        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
+        if (!response.ok) throw new Error('خطأ في الخادم');
         const data = await response.json();
 
         if (data.success) {
@@ -1727,6 +1738,8 @@ async function loadTodayStats() {
 async function loadTodaySessions() {
     try {
         const response = await fetch('{% url "attendance:today_sessions" %}');
+        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
+        if (!response.ok) throw new Error('خطأ في الخادم');
         const data = await response.json();
 
         const sessionsList = document.getElementById('sessionsList');
@@ -2028,6 +2041,8 @@ async function performExport() {
             body: JSON.stringify({ date, type })
         });
 
+        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
+        if (!response.ok) throw new Error('خطأ في الخادم');
         const data = await response.json();
 
         if (data.success) {
