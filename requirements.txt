@@ -26,6 +26,8 @@ python-barcode==0.15.1
 qrcode==7.4.2
 reportlab==4.0.9
 openpyxl==3.1.2
+arabic-reshaper==3.0.0
+python-bidi==0.6.7
 
 # Production static files
 whitenoise==6.6.0

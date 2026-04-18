@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load l10n %}
 {% block title %}المدفوعات{% endblock %}
 {% block page_title %}المدفوعات{% endblock %}
 
@@ -371,15 +372,13 @@
                     <div class="key">المدفوع</div>
                 </div>
                 <div class="amount-block">
-                    {% with remaining=payment.amount_due|add:"-" %}
-                    <div class="val red">
+                    <div class="val red" data-field="remaining">
                         {% if payment.status == 'paid' %}
                         0
                         {% else %}
-                        {{ payment.amount_due }} <small>ج.م</small>
+                        {% widthratio payment.remaining 1 1 %} <small>ج.م</small>
                         {% endif %}
                     </div>
-                    {% endwith %}
                     <div class="key">المتبقي</div>
                 </div>
                 <div class="amount-block">
@@ -396,9 +395,9 @@
             <!-- Action Button -->
             {% if payment.status != 'paid' %}
             <button class="btn-pay full"
-                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name }}', {{ payment.amount_due }})">
+                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name }}', {% localize off %}{{ payment.amount_due }}{% endlocalize %})">
                 <i class="bi bi-check-circle-fill"></i>
-                تسديد كامل {{ payment.amount_due }} ج.م + تفعيل اشتراك
+                تسديد كامل {% widthratio payment.amount_due 1 1 %} ج.م + تفعيل اشتراك
             </button>
             {% else %}
             <div class="btn-pay done">
@@ -483,6 +482,14 @@ function payAndActivate(paymentId, studentId, studentName, amountDue) {
                 if (badge) {
                     badge.className = 'status-badge badge-paid';
                     badge.innerHTML = '<i class="bi bi-check-circle-fill"></i> مدفوع';
+                }
+                // Update remaining to 0
+                const rem = card.querySelector('[data-field="remaining"]');
+                if (rem) rem.textContent = '0';
+                // Update paid amount to match due
+                const vals = card.querySelectorAll('.amount-block .val');
+                if (vals.length >= 2) {
+                    vals[1].innerHTML = vals[0].innerHTML;
                 }
             }
             showToast('تم التسديد وتفعيل الاشتراك بنجاح', 'success');

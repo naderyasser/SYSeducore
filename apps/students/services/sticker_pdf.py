@@ -11,6 +11,13 @@ from barcode.writer import ImageWriter
 from PIL import Image
 from django.conf import settings
 
+try:
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    _HAS_BIDI = True
+except ImportError:
+    _HAS_BIDI = False
+
 
 FONTS_DIR = os.path.join(settings.BASE_DIR, 'static', 'fonts')
 
@@ -75,10 +82,12 @@ def build_sticker_pdf(student) -> bytes:
     c.setFont(AR_BOLD, 7)
     c.drawString(22 * mm, 5.5 * mm, str(student.student_code))
 
-    # Student name (right bottom, truncated)
+    # Student name (right bottom, truncated + RTL-reshaped)
     name = (student.full_name or '')[:10]
     if len(student.full_name or '') > 10:
         name += '…'
+    if _HAS_BIDI and name:
+        name = get_display(arabic_reshaper.reshape(name))
     c.setFont(AR_FONT, 5)
     c.drawString(22 * mm, 2 * mm, name)
 
