@@ -1,5 +1,24 @@
+from functools import wraps
+
 from django.contrib.auth.decorators import user_passes_test
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
+
+
+def ajax_login_required(view_func):
+    """
+    Like @login_required but returns JSON 401 instead of redirecting.
+    Use on API views called via fetch().
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse(
+                {'success': False, 'message': 'الجلسة منتهية، يرجى تسجيل الدخول'},
+                status=401,
+            )
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
 
 def admin_required(view_func):

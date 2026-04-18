@@ -904,7 +904,11 @@ function showBarcode(studentId, studentName, studentCode) {
 
     // Fetch barcode from API
     fetch(`{% url 'students:api_barcode' 0 %}`.replace('0', studentId))
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+            if (!response.ok) throw new Error('خطأ في الخادم');
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 currentBarcodeImage = data.barcode;
@@ -975,7 +979,11 @@ function sendBarcodeWhatsApp(studentId) {
             'Content-Type': 'application/x-www-form-urlencoded'
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        if (!response.ok) throw new Error('خطأ في الخادم');
+        return response.json();
+    })
     .then(data => {
         if (data.success) {
             alert('تم إرسال الباركود بنجاح عبر الواتساب');
@@ -1007,6 +1015,8 @@ async function showAddToGroup(studentId, studentName) {
 
     try {
         const response = await fetch(`{% url 'students:api_available_groups' 0 %}`.replace('0', studentId));
+        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
+        if (!response.ok) throw new Error('خطأ في الخادم');
         const data = await response.json();
 
         if (data.success && data.groups.length > 0) {
@@ -1064,6 +1074,8 @@ async function addToGroup(groupId, groupName) {
             body: `student_id=${currentStudentId}&group_id=${groupId}&financial_status=normal`
         });
 
+        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
+        if (!response.ok) throw new Error('خطأ في الخادم');
         const data = await response.json();
 
         if (data.success) {

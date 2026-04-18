@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from apps.accounts.decorators import ajax_login_required
 from django.utils import timezone
 from django.db import models, transaction
 from django.db.models import Sum, Count, Q, F, Avg
@@ -543,7 +544,7 @@ def recycle_bin(request):
     return render(request, 'reports/recycle_bin.html', context)
 
 
-@login_required
+@ajax_login_required
 def recycle_restore(request):
     """استعادة عنصر من سلة المهملات"""
     if request.method != 'POST':
@@ -587,7 +588,7 @@ def recycle_restore(request):
         return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
 
 
-@login_required
+@ajax_login_required
 def recycle_permanent_delete(request):
     """حذف نهائي من سلة المهملات - للمدير فقط"""
     if request.method != 'POST':

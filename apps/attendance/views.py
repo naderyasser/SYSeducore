@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from apps.accounts.decorators import ajax_login_required
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.utils import timezone
@@ -20,7 +21,7 @@ def scanner_page(request):
     })
 
 
-@login_required
+@ajax_login_required
 @ratelimit(key='ip', rate='30/m', block=True)
 @require_http_methods(["POST"])
 def process_student_code(request):
@@ -113,7 +114,7 @@ def cancel_session(request, session_id):
         return JsonResponse({'success': False, 'error': 'Session not found'}, status=404)
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def today_stats(request):
     """
@@ -168,7 +169,7 @@ def today_stats(request):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["GET"])
 def today_sessions(request):
     """
@@ -222,7 +223,7 @@ def today_sessions(request):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 @require_http_methods(["POST"])
 def export_report(request):
     """

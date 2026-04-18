@@ -1,12 +1,12 @@
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import login_required
 from django_ratelimit.decorators import ratelimit
+from apps.accounts.decorators import ajax_login_required
 import json
 from .services import AttendanceService
 
 
-@login_required
+@ajax_login_required
 @ratelimit(key='ip', rate='30/m', block=True)
 @require_http_methods(["POST"])
 def process_scan(request):
@@ -66,7 +66,7 @@ def process_scan(request):
         }, status=500)
 
 
-@login_required
+@ajax_login_required
 def session_attendance(request, session_id):
     """
     API endpoint لجلب حضور الحصة
@@ -102,7 +102,7 @@ def session_attendance(request, session_id):
         }, status=404)
 
 
-@login_required
+@ajax_login_required
 def student_history(request, student_id):
     """
     API endpoint لجلب سجل حضور الطالب

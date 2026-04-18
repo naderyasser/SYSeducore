@@ -1,5 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from apps.accounts.decorators import ajax_login_required
 from django.contrib import messages
 from django.db.models import Count, Q, Prefetch, Exists, OuterRef
 from django.db import models, transaction, IntegrityError
@@ -502,7 +503,7 @@ def qr_ticket_pdf(request, student_id):
     return resp
 
 
-@login_required
+@ajax_login_required
 def get_next_code(request):
     """
     API endpoint to get next auto-generated student code.
