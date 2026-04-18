@@ -596,7 +596,11 @@ def activate_subscription(request, student_id):
     تفعيل اشتراك الطالب لمدة 30 يوم
     """
     try:
-        student = get_object_or_404(Student, pk=student_id)
+        # Use all_objects to include soft-deleted students (payments may still reference them)
+        try:
+            student = Student.all_objects.get(pk=student_id)
+        except Student.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
         days = int(request.POST.get('days', 30))
         
         expiry_date = student.activate_subscription(days=days)
@@ -627,7 +631,10 @@ def subscription_status(request, student_id):
     الحصول على حالة اشتراك الطالب
     """
     try:
-        student = get_object_or_404(Student, pk=student_id)
+        try:
+            student = Student.all_objects.get(pk=student_id)
+        except Student.DoesNotExist:
+            return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
         subscription_status = student.get_subscription_status()
         
         return JsonResponse({
