@@ -412,6 +412,11 @@ class StudentGroupEnrollment(models.Model):
 
     enrolled_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الانضمام")
     is_active = models.BooleanField(default=True, verbose_name="نشط")
+    grace_until = models.DateField(
+        null=True, blank=True,
+        verbose_name="مهلة حتى تاريخ",
+        help_text="تاريخ انتهاء المهلة - يسمح للطالب بالدخول بدون دفع حتى هذا التاريخ",
+    )
 
     class Meta:
         db_table = 'student_group_enrollments'

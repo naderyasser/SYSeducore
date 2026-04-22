@@ -21,23 +21,23 @@ from apps.payments.models import Payment
 
 
 # Password for accessing sensitive reports
-REPORTS_PASSWORD = config('REPORTS_PASSWORD', default='0000')
+REPORTS_PASSWORD = config('REPORTS_PASSWORD', default='888888')
 
 
 def report_password_required(view_func):
     """
     Decorator to require password for accessing sensitive reports.
-    Checks session for password verification.
+    Password must be entered on EVERY visit — no session persistence.
     """
     @functools.wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
-        # Admin users bypass password requirement
-        if hasattr(request, 'user') and request.user.is_authenticated and request.user.role == 'admin':
-            return view_func(request, *args, **kwargs)
+        # Password required for ALL users — no admin bypass
+        # Check for one-time password submission (not persisted across requests)
         if not request.session.get('report_authenticated'):
-            # Save the original URL to redirect back after authentication
             request.session['report_redirect_after'] = request.get_full_path()
             return redirect('reports:password_prompt')
+        # Clear the flag immediately so it must be re-entered next time
+        del request.session['report_authenticated']
         return view_func(request, *args, **kwargs)
     return _wrapped_view
 
@@ -152,6 +152,10 @@ def dashboard(request):
     ).order_by('-payment_date')[:5]
 
     # ====== TODAY'S SCHEDULE ======
+    # Include groups from BOTH the legacy schedule_day field AND the
+    # GroupSchedule model (which supports multi-day schedules per group).
+    from apps.teachers.models import GroupSchedule
+
     todays_groups = Group.objects.filter(
         is_active=True,
         schedule_day=current_day_name
@@ -165,13 +169,13 @@ def dashboard(request):
     today_schedule = []
     now = timezone.now()
     current_time = now.time()
+    seen_group_ids = set()
 
     for grp in todays_groups:
         enrolled_count = grp.enrolled_count
         capacity = grp.room.capacity if grp.room else 0
         end_time = grp.get_end_time()
 
-        # Determine session status
         session_status = 'upcoming'
         if current_time > end_time:
             session_status = 'completed'
@@ -191,6 +195,56 @@ def dashboard(request):
             'utilization': (enrolled_count / capacity * 100) if capacity > 0 else 0,
             'status': session_status,
         })
+        seen_group_ids.add(grp.group_id)
+
+    # Also include groups that use GroupSchedule (multi-day) for today
+    gs_groups = Group.objects.filter(
+        is_active=True,
+        schedules__day_of_week=current_day_name,
+    ).exclude(
+        group_id__in=seen_group_ids,
+    ).select_related('teacher', 'room').annotate(
+        enrolled_count=Count(
+            'studentgroupenrollment',
+            filter=Q(studentgroupenrollment__is_active=True)
+        )
+    ).distinct()
+
+    for grp in gs_groups:
+        try:
+            gs = GroupSchedule.objects.get(group=grp, day_of_week=current_day_name)
+            start = gs.start_time
+            duration = gs.duration
+        except GroupSchedule.DoesNotExist:
+            continue
+        enrolled_count = grp.enrolled_count
+        capacity = grp.room.capacity if grp.room else 0
+        from datetime import datetime as _dt
+        end_dt = _dt.combine(today, start) + timedelta(minutes=duration)
+        end_time = end_dt.time()
+
+        session_status = 'upcoming'
+        if current_time > end_time:
+            session_status = 'completed'
+        elif current_time >= start:
+            session_status = 'ongoing'
+
+        today_schedule.append({
+            'id': grp.group_id,
+            'group_name': grp.group_name,
+            'teacher': grp.teacher.full_name,
+            'room': grp.room.name if grp.room else '-',
+            'time_start': start.strftime('%I:%M %p'),
+            'time_end': end_time.strftime('%I:%M %p'),
+            'duration': f'{duration} دقيقة',
+            'enrolled': enrolled_count,
+            'capacity': capacity,
+            'utilization': (enrolled_count / capacity * 100) if capacity > 0 else 0,
+            'status': session_status,
+        })
+
+    # Sort combined schedule by start time
+    today_schedule.sort(key=lambda s: s['time_start'])
 
     # ====== WEEK ATTENDANCE TREND ======
     week_attendance_data = []
@@ -354,6 +408,7 @@ def attendance_report(request):
 
 
 @login_required
+@report_password_required
 def payment_report(request):
     """
     Comprehensive Payment Report with filters and statistics
@@ -420,6 +475,7 @@ def payment_report(request):
 
 
 @login_required
+@report_password_required
 def financial_report(request):
     """
     Detailed Financial Report

@@ -1173,6 +1173,37 @@
 </div>
 
 <!-- Export Modal -->
+<!-- Grace Period Modal -->
+<div class="modal-overlay" id="graceModal" style="display:none;">
+    <div class="modal-content" style="max-width:400px; text-align:center;">
+        <div class="modal-header">
+            <h3><i class="bi bi-clock me-2"></i>استثناء - مهلة مؤقتة</h3>
+            <button class="close-btn" onclick="closeGraceModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px;">
+            <p style="margin-bottom:16px; font-size:1.05rem;">حدد عدد أيام المهلة:</p>
+            <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;">
+                <button class="btn btn-outline-warning" onclick="setGraceDays(1)">يوم واحد</button>
+                <button class="btn btn-outline-warning" onclick="setGraceDays(3)">3 أيام</button>
+                <button class="btn btn-outline-warning" onclick="setGraceDays(7)">أسبوع</button>
+                <button class="btn btn-outline-warning" onclick="setGraceDays(14)">أسبوعين</button>
+                <button class="btn btn-outline-warning" onclick="setGraceDays(30)">شهر</button>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; justify-content:center;">
+                <input type="number" id="graceDaysInput" class="form-control" value="3" min="1" max="90"
+                    style="width:100px; text-align:center; font-size:1.2rem;">
+                <span>يوم</span>
+            </div>
+        </div>
+        <div class="modal-footer" style="justify-content:center; gap:12px;">
+            <button class="btn btn-secondary" onclick="closeGraceModal()">إلغاء</button>
+            <button class="btn btn-warning" id="confirmGraceBtn" onclick="confirmGrace()">
+                <i class="bi bi-check-lg me-1"></i>تأكيد المهلة
+            </button>
+        </div>
+    </div>
+</div>
+
 <div class="modal-overlay" id="exportModal">
     <div class="modal-content">
         <div class="modal-header">
@@ -1295,6 +1326,10 @@ function submitManualCode() {
 // Process Student Code
 async function processStudentCode(code) {
     showLoading();
+
+    // Store last code for re-scan after quick actions
+    const input = document.getElementById('manualCodeInput');
+    if (input) input.dataset.lastCode = code;
 
     try {
         const response = await fetch('{% url "attendance:process_student_code" %}', {
@@ -1590,6 +1625,26 @@ function displayResult(data, code) {
             </div>`;
             });
         }
+
+        // ── Scanner Quick-Action Buttons for payment_required ──
+        // Check both skipped array (session matched but unpaid) and
+        // payment_info (schedule rejection but still unpaid)
+        const paymentSkip = (data.skipped || []).find(s => s.error_type === 'payment_required') || data.payment_info;
+        if (paymentSkip && paymentSkip.student_id) {
+            const sid = paymentSkip.student_id;
+            const pid = paymentSkip.payment_id || '';
+            const amt = paymentSkip.amount_due || 0;
+            detailHtml += `
+            <div class="scanner-actions" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+                <button class="btn btn-success btn-lg flex-fill" onclick="scannerPayNow(${pid}, ${sid})" style="min-width:140px;">
+                    <i class="bi bi-cash-stack me-1"></i> ادفع الان${amt > 0 ? ' (' + amt + ' ج.م)' : ''}
+                </button>
+                <button class="btn btn-warning btn-lg flex-fill" onclick="scannerGracePrompt(${sid})" style="min-width:140px;">
+                    <i class="bi bi-clock me-1"></i> استثناء
+                </button>
+            </div>`;
+        }
+
         // Render dossier below the error details when student data is available
         if (data.dossier) {
             detailHtml += renderDossier(data.dossier);
@@ -1606,6 +1661,96 @@ function displayResult(data, code) {
     window._resultTimer = setTimeout(() => {
         resultDisplay.classList.remove('show');
     }, hideDelay);
+}
+
+// ── Scanner Quick-Action Handlers ──
+
+async function scannerPayNow(paymentId, studentId) {
+    if (!confirm('هل تريد تسديد الدفعة وتفعيل الاشتراك الآن؟')) return;
+    try {
+        const resp = await fetch('{% url "attendance:scanner_pay_now" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+            body: JSON.stringify({payment_id: paymentId || null, student_id: studentId})
+        });
+        const data = await resp.json();
+        if (data.success) {
+            playSound('success');
+            // Re-scan the same code to register attendance
+            const input = document.getElementById('manualCodeInput');
+            const lastCode = input.dataset.lastCode || '';
+            if (lastCode) {
+                setTimeout(() => processStudentCode(lastCode), 500);
+            } else {
+                showToast('تم التسديد بنجاح — امسح الكود مرة أخرى', 'success');
+            }
+        } else {
+            showToast('خطأ: ' + (data.message || 'فشل العملية'), 'danger');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'danger');
+    }
+}
+
+// Grace period modal state
+let _graceStudentId = null;
+
+function setGraceDays(d) {
+    document.getElementById('graceDaysInput').value = d;
+}
+
+function scannerGracePrompt(studentId) {
+    _graceStudentId = studentId;
+    document.getElementById('graceDaysInput').value = 3;
+    document.getElementById('graceModal').style.display = 'flex';
+}
+
+function closeGraceModal() {
+    document.getElementById('graceModal').style.display = 'none';
+    _graceStudentId = null;
+}
+
+function confirmGrace() {
+    const days = parseInt(document.getElementById('graceDaysInput').value);
+    if (!days || days <= 0) return;
+    closeGraceModal();
+    scannerGracePeriod(_graceStudentId, days);
+}
+
+async function scannerGracePeriod(studentId, days) {
+    try {
+        const resp = await fetch('{% url "attendance:scanner_grace_period" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+            body: JSON.stringify({student_id: studentId, days: days})
+        });
+        const data = await resp.json();
+        if (data.success) {
+            playSound('success');
+            const input = document.getElementById('manualCodeInput');
+            const lastCode = input.dataset.lastCode || '';
+            if (lastCode) {
+                setTimeout(() => processStudentCode(lastCode), 500);
+            } else {
+                showToast(data.message, 'success');
+            }
+        } else {
+            showToast('خطأ: ' + (data.message || 'فشل العملية'), 'danger');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'danger');
+    }
+}
+
+function showToast(msg, type) {
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+        background:${type==='success'?'#16a34a':type==='warning'?'#d97706':'#dc2626'};
+        color:#fff;padding:14px 24px;border-radius:10px;font-weight:600;
+        z-index:10000;font-size:0.95rem;box-shadow:0 4px 12px rgba(0,0,0,0.2);`;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
 }
 
 // Get Status Text

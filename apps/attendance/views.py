@@ -313,3 +313,113 @@ def export_report(request):
             'success': False,
             'message': f'خطأ في التصدير: {str(e)}'
         }, status=500)
+
+
+# ─────────────────────────────────────────────────────────────
+# Scanner Quick-Action APIs  (Pay Now / Grace Period)
+# ─────────────────────────────────────────────────────────────
+
+@ajax_login_required
+@require_http_methods(["POST"])
+def scanner_pay_now(request):
+    """
+    Called from the scanner UI when the supervisor taps "ادفع الان".
+    Marks the current-month payment as paid and activates the subscription.
+    """
+    import json as _json
+    from apps.payments.models import Payment
+    from apps.payments.api_views import _activate_student_for_payment
+
+    try:
+        body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
+        payment_id = body.get('payment_id')
+        student_id = body.get('student_id')
+
+        if payment_id:
+            payment = Payment.objects.get(pk=payment_id)
+        elif student_id:
+            # Find or create the current-month payment
+            from apps.students.models import Student, StudentGroupEnrollment
+            student = Student.objects.get(pk=student_id)
+            current_month = timezone.localtime().date().replace(day=1)
+            # Use the first active enrollment's group
+            enr = StudentGroupEnrollment.objects.filter(
+                student=student, is_active=True,
+            ).select_related('group').first()
+            if not enr:
+                return JsonResponse({'success': False, 'message': 'لا يوجد تسجيل نشط'}, status=400)
+            fee = student.get_monthly_fee_for_group(enr.group)
+            payment, _ = Payment.objects.get_or_create(
+                student=student, group=enr.group, month=current_month,
+                defaults={'amount_due': fee, 'status': 'unpaid'},
+            )
+        else:
+            return JsonResponse({'success': False, 'message': 'payment_id أو student_id مطلوب'}, status=400)
+
+        # Mark as paid
+        payment.amount_paid = payment.amount_due
+        payment.status = 'paid'
+        payment.payment_date = timezone.now()
+        payment.save()
+
+        # Activate subscription + enrollment
+        _activate_student_for_payment(payment, user=request.user)
+
+        return JsonResponse({
+            'success': True,
+            'message': f'تم تسديد الدفعة وتفعيل الاشتراك بنجاح',
+        })
+    except Payment.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'سجل الدفع غير موجود'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@ajax_login_required
+@require_http_methods(["POST"])
+def scanner_grace_period(request):
+    """
+    Called from the scanner UI when the supervisor taps "استثناء".
+    Sets a grace_until date on the enrollment so the student can attend
+    for X days WITHOUT changing their payment status.
+    """
+    import json as _json
+    from datetime import timedelta
+    from apps.students.models import Student, StudentGroupEnrollment
+
+    try:
+        body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
+        student_id = body.get('student_id')
+        group_id = body.get('group_id')
+        days = int(body.get('days', 3))
+
+        if not student_id:
+            return JsonResponse({'success': False, 'message': 'student_id مطلوب'}, status=400)
+
+        student = Student.objects.get(pk=student_id)
+
+        # Extend subscription by X days so Step 1.5 passes
+        student.activate_subscription(days=days)
+
+        # Set grace_until on enrollments
+        today = timezone.localtime().date()
+        grace_date = today + timedelta(days=days)
+        updated = StudentGroupEnrollment.objects.filter(
+            student=student, is_active=True,
+        ).update(grace_until=grace_date)
+
+        # Also reactivate any inactive enrollments
+        StudentGroupEnrollment.objects.filter(
+            student=student, is_active=False,
+        ).update(is_active=True, grace_until=grace_date)
+
+        return JsonResponse({
+            'success': True,
+            'message': f'تم منح مهلة {days} أيام لـ {student.full_name} (حتى {grace_date})',
+            'days': days,
+            'grace_until': grace_date.isoformat(),
+        })
+    except Student.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
