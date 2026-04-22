@@ -84,8 +84,8 @@ def student_list(request):
     # Order by most recent first
     students = students.order_by('-created_at')
     
-    # Add payment status for current month
-    current_month = timezone.now().date().replace(day=1)
+    # Add payment status for current month (use localtime to match scanner)
+    current_month = timezone.localtime().date().replace(day=1)
     paid_student_ids = set(
         Payment.objects.filter(
             month=current_month,
@@ -255,7 +255,7 @@ def student_create(request):
                                         Payment.objects.create(
                                             student=student,
                                             group=group,
-                                            month=timezone.now().date().replace(day=1),
+                                            month=timezone.localtime().date().replace(day=1),
                                             amount_due=amount_due,
                                             amount_paid=amount,
                                             payment_date=timezone.now(),

@@ -106,18 +106,18 @@ class AttendanceService:
         """
         current_month = timezone.localtime().date().replace(day=1)
 
-        # Check current month payment
-        current_payment = None
-        has_paid_current = False
-        try:
-            current_payment = Payment.objects.get(
-                student=student,
-                group=group,
-                month=current_month
-            )
-            has_paid_current = current_payment.status == 'paid'
-        except Payment.DoesNotExist:
-            has_paid_current = False
+        # Check current month payment — auto-create if missing so the
+        # scanner always has a Payment row to evaluate.
+        current_payment, _created = Payment.objects.get_or_create(
+            student=student,
+            group=group,
+            month=current_month,
+            defaults={
+                'amount_due': student.get_monthly_fee_for_group(group),
+                'status': 'unpaid',
+            },
+        )
+        has_paid_current = current_payment.status == 'paid'
 
         # Check arrears (unpaid previous months)
         arrears = Payment.objects.filter(
@@ -273,7 +273,7 @@ class AttendanceService:
             rejection = AttendanceService._build_schedule_rejection(
                 student, enrollments, current_day_name, current_time_local, local_tz
             )
-            return {
+            result = {
                 'success': False,
                 'message': rejection['message'],
                 'sound': 'error',
@@ -282,6 +282,20 @@ class AttendanceService:
                 'student_name': student.full_name,
                 'dossier': dossier,
             }
+            # Also check financial status so scanner can show action buttons
+            # even when student doesn't have a session today
+            for _enr in enrollments:
+                fin_check = AttendanceService.check_financial_status(student, _enr.group)
+                if not fin_check.get('allowed') and fin_check.get('error_type') == 'payment_required':
+                    result['payment_info'] = {
+                        'payment_id': fin_check.get('payment_id'),
+                        'student_id': fin_check.get('student_id'),
+                        'group_id': fin_check.get('group_id'),
+                        'amount_due': fin_check.get('amount_due'),
+                        'error_type': 'payment_required',
+                    }
+                    break
+            return result
 
         # ========================================
         # الخطوات 3-5 لكل مجموعة مطابقة
@@ -317,10 +331,18 @@ class AttendanceService:
             )
 
             if not financial_check['allowed']:
-                skipped.append({
+                skip_item = {
                     'group_name': matching_group.group_name,
                     'reason': financial_check['reason'],
-                })
+                    'error_type': financial_check.get('error_type'),
+                }
+                # Pass payment details so the scanner UI can show action buttons
+                if financial_check.get('error_type') == 'payment_required':
+                    skip_item['payment_id'] = financial_check.get('payment_id')
+                    skip_item['student_id'] = financial_check.get('student_id')
+                    skip_item['group_id'] = financial_check.get('group_id')
+                    skip_item['amount_due'] = financial_check.get('amount_due')
+                skipped.append(skip_item)
                 continue
 
             # التسجيل النهائي — get_or_create للحصة
@@ -693,29 +715,40 @@ class AttendanceService:
 
         # منع الدخول بعد الحصة المسموح إذا لم يدفع
         if sessions_count >= allowed_sessions:
-            try:
-                payment = Payment.objects.get(
-                    student=student,
-                    group=group,
-                    month=current_month
-                )
-                if payment.status != 'paid':
-                    reason = 'ممنوع الدخول: الدفع مطلوب'
-                    if is_first_month:
-                        reason += ' (الشهر الأول)'
-                    return {
-                        'allowed': False,
-                        'reason': reason,
-                        'error_type': 'payment_required'
-                    }
-            except Payment.DoesNotExist:
+            # ── Check grace period first ──
+            today = timezone.localtime().date()
+            if enrollment.grace_until and enrollment.grace_until >= today:
+                # Student has an active grace period — allow entry
+                return {
+                    'allowed': True,
+                    'grace_period': True,
+                    'grace_until': enrollment.grace_until.isoformat(),
+                }
+
+            # get_or_create guarantees a Payment row exists for this
+            # student+group+month so the scanner never fails with a
+            # DoesNotExist just because no one opened the payment list.
+            payment, _p_created = Payment.objects.get_or_create(
+                student=student,
+                group=group,
+                month=current_month,
+                defaults={
+                    'amount_due': student.get_monthly_fee_for_group(group),
+                    'status': 'unpaid',
+                },
+            )
+            if payment.status != 'paid':
                 reason = 'ممنوع الدخول: الدفع مطلوب'
                 if is_first_month:
                     reason += ' (الشهر الأول)'
                 return {
                     'allowed': False,
                     'reason': reason,
-                    'error_type': 'payment_required'
+                    'error_type': 'payment_required',
+                    'payment_id': payment.payment_id,
+                    'student_id': student.student_id,
+                    'group_id': group.group_id,
+                    'amount_due': float(payment.amount_due),
                 }
 
         return {'allowed': True}

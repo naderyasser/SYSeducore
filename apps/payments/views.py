@@ -11,12 +11,76 @@ from apps.attendance.models import ActivityLog
 from apps.students.models import Student
 
 
+def _ensure_monthly_payments(month_date):
+    """
+    Auto-generate Payment rows for every active enrollment that does not
+    already have one for *month_date*.  This guarantees that the payment
+    list page always shows every active student, and the scanner can always
+    find a Payment record to check.
+
+    Returns the number of newly created payment records.
+    """
+    from apps.students.models import StudentGroupEnrollment
+
+    # Collect (student_id, group_id) pairs that already have a payment
+    existing = set(
+        Payment.objects.filter(month=month_date)
+        .values_list('student_id', 'group_id')
+    )
+
+    enrollments = StudentGroupEnrollment.objects.filter(
+        is_active=True,
+    ).select_related('student', 'group')
+
+    to_create = []
+    for enr in enrollments:
+        if (enr.student_id, enr.group_id) in existing:
+            continue
+
+        # Compute fee directly from enrollment (avoids extra queries)
+        if enr.financial_status == 'exempt':
+            fee = 0
+        elif enr.financial_status == 'symbolic':
+            fee = enr.custom_fee or 0
+        else:  # normal / per_session
+            fee = enr.group.standard_fee or 0
+
+        if fee <= 0:
+            # Exempt or zero-fee — still create a record so the scanner
+            # can mark it 'paid' automatically.
+            to_create.append(Payment(
+                student=enr.student,
+                group=enr.group,
+                month=month_date,
+                amount_due=0,
+                amount_paid=0,
+                status='paid',
+            ))
+        else:
+            to_create.append(Payment(
+                student=enr.student,
+                group=enr.group,
+                month=month_date,
+                amount_due=fee,
+                amount_paid=0,
+                status='unpaid',
+            ))
+
+    if to_create:
+        Payment.objects.bulk_create(to_create, ignore_conflicts=True)
+
+    return len(to_create)
+
+
 @login_required
 def payment_list(request):
     """
     List payments with filters. Defaults to current month unpaid/partial.
+    Auto-generates payment records for active enrollments so every student
+    appears in the list.
     """
-    current_month = timezone.now().date().replace(day=1)
+    # Use localtime (Cairo) so the month matches what the scanner expects
+    current_month = timezone.localtime().date().replace(day=1)
 
     # Filter params
     month_filter = request.GET.get('month', current_month.strftime('%Y-%m'))
@@ -30,6 +94,9 @@ def payment_list(request):
         month_date = date(filter_year, filter_month, 1)
     except Exception:
         month_date = current_month
+
+    # ── Auto-generate missing payment rows for this month ──
+    _ensure_monthly_payments(month_date)
 
     payments = Payment.objects.select_related('student', 'group', 'group__teacher').filter(month=month_date)
 
@@ -99,6 +166,7 @@ def teacher_settlement(request, teacher_id):
 def record_payment(request, payment_id):
     """
     Record a payment for a student.
+    When fully paid, also activate subscription + enrollment.
     """
     try:
         payment = Payment.objects.get(pk=payment_id)
@@ -115,11 +183,16 @@ def record_payment(request, payment_id):
         
         payment.save()
 
-        ActivityLog.log(
-            user=request.user, action='payment_record',
-            description=f'تسجيل دفعة: {amount} جنيه للطالب {payment.student.full_name}',
-            target_model='Payment', target_id=payment.pk, request=request
-        )
+        # Auto-activate subscription + enrollment when fully paid
+        if payment.status == 'paid':
+            from .api_views import _activate_student_for_payment
+            _activate_student_for_payment(payment, user=request.user)
+        else:
+            ActivityLog.log(
+                user=request.user, action='payment_record',
+                description=f'تسجيل دفعة جزئية: {amount} جنيه للطالب {payment.student.full_name}',
+                target_model='Payment', target_id=payment.pk, request=request
+            )
 
         return JsonResponse({'success': True, 'new_amount_paid': float(payment.amount_paid)})
     except Payment.DoesNotExist:

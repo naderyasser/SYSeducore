@@ -594,6 +594,8 @@ def bulk_action(request):
 def activate_subscription(request, student_id):
     """
     تفعيل اشتراك الطالب لمدة 30 يوم
+    Also ensures all active group enrollments are really active
+    so the attendance scanner can find them immediately.
     """
     try:
         # Use all_objects to include soft-deleted students (payments may still reference them)
@@ -604,17 +606,57 @@ def activate_subscription(request, student_id):
         days = int(request.POST.get('days', 30))
         
         expiry_date = student.activate_subscription(days=days)
+
+        # Ensure all group enrollments are active so the scanner finds them
+        reactivated = StudentGroupEnrollment.objects.filter(
+            student=student,
+            is_active=False,
+        ).update(is_active=True)
+
+        # ── Ensure current-month Payment rows exist and are marked 'paid' ──
+        # Activating a subscription means the student has paid, so every
+        # active enrollment must have a Payment(status='paid') for the
+        # current month — otherwise check_financial_status() still rejects.
+        from apps.payments.models import Payment
+        current_month = timezone.localtime().date().replace(day=1)
+        payments_updated = 0
+        for enr in StudentGroupEnrollment.objects.filter(
+            student=student, is_active=True,
+        ).select_related('group'):
+            fee = student.get_monthly_fee_for_group(enr.group)
+            payment, created = Payment.objects.get_or_create(
+                student=student,
+                group=enr.group,
+                month=current_month,
+                defaults={
+                    'amount_due': fee,
+                    'amount_paid': fee,
+                    'status': 'paid',
+                    'payment_date': timezone.now(),
+                },
+            )
+            if not created and payment.status != 'paid':
+                payment.amount_paid = payment.amount_due
+                payment.status = 'paid'
+                payment.payment_date = timezone.now()
+                payment.save(update_fields=['amount_paid', 'status', 'payment_date'])
+                payments_updated += 1
+            elif created:
+                payments_updated += 1
+
         subscription_status = student.get_subscription_status()
         
         return JsonResponse({
             'success': True,
-            'message': f'تم تفعيل اشتراك {student.full_name} لمدة {days} يوم',
+            'message': f'تم تفعيل اشتراك {student.full_name} لمدة {days} يوم + تحديث {payments_updated} سجل دفع',
             'student': {
                 'student_id': student.student_id,
                 'full_name': student.full_name,
                 'last_payment_date': student.last_payment_date.isoformat() if student.last_payment_date else None,
                 'subscription_expiry_date': student.subscription_expiry_date.isoformat() if student.subscription_expiry_date else None,
             },
+            'reactivated_enrollments': reactivated,
+            'payments_updated': payments_updated,
             'subscription_status': subscription_status
         })
     except Exception as e:
