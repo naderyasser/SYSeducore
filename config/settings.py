@@ -259,6 +259,14 @@ if crontab is not None:
             'task': 'apps.notifications.tasks.send_monthly_reminders_task',
             'schedule': crontab(hour=9, minute=0, day_of_month=1),  # 1st of every month at 9 AM
         },
+        'auto-mark-absent-sessions': {
+            'task': 'apps.attendance.tasks.auto_mark_absent_sessions',
+            'schedule': crontab(minute='*/2'),  # Every 2 minutes
+        },
+        'check-billing-cycles': {
+            'task': 'apps.attendance.tasks.check_billing_cycles',
+            'schedule': crontab(hour='*/6'),  # Every 6 hours
+        },
     }
 else:
     CELERY_BEAT_SCHEDULE = {}

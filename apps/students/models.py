@@ -417,6 +417,21 @@ class StudentGroupEnrollment(models.Model):
         verbose_name="مهلة حتى تاريخ",
         help_text="تاريخ انتهاء المهلة - يسمح للطالب بالدخول بدون دفع حتى هذا التاريخ",
     )
+    cycle_start_date = models.DateField(
+        null=True, blank=True,
+        verbose_name="بداية دورة الفوترة",
+        help_text="تاريخ بدء دورة الفوترة الحالية (session-based billing cycle)",
+    )
+    cycle_end_date = models.DateField(
+        null=True, blank=True,
+        verbose_name="نهاية دورة الفوترة",
+        help_text="تاريخ الانتهاء المحسوب لدورة الفوترة الحالية",
+    )
+    sessions_per_cycle = models.PositiveIntegerField(
+        default=0,
+        verbose_name="عدد الحصص في الدورة",
+        help_text="عدد الحصص لكل دورة فوترة (0 = استخدام إعدادات المجموعة)",
+    )
 
     class Meta:
         db_table = 'student_group_enrollments'

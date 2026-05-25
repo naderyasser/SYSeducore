@@ -52,6 +52,11 @@ class Payment(models.Model):
     )
 
     notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    billing_cycle_completed = models.BooleanField(
+        default=False,
+        verbose_name="اكتملت دورة الفوترة",
+        help_text="هل اكتملت دورة الفوترة لهذا الشهر وبدأت دورة جديدة",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

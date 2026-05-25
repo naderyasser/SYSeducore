@@ -1,0 +1,278 @@
+{% extends 'base.html' %}
+{% load math_filters %}
+
+{% block title %}التصفية الشهرية — Tsfya{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-cash-stack me-2"></i>
+                    التصفية الشهرية
+                    <small class="text-muted fs-6">Tsfya</small>
+                </h4>
+                <nav>
+                    <ol class="breadcrumb mb-0">
+                        <li class="breadcrumb-item"><a href="{% url 'reports:dashboard' %}">لوحة التحكم</a></li>
+                        <li class="breadcrumb-item active">التصفية</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <!-- Month Selector -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <form method="GET" class="d-flex gap-2 align-items-center">
+                        <label class="form-label mb-0 text-nowrap"><i class="bi bi-calendar-month me-1"></i>الشهر:</label>
+                        <select name="month" class="form-select form-select-sm" onchange="this.form.submit()">
+                            {% for m in distinct_months %}
+                            <option value="{{ m|date:'Y-m' }}" {% if m|date:'Y-m' == report_month|date:'Y-m' %}selected{% endif %}>
+                                {{ m|date:'F Y' }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary bg-opacity-10 border-primary h-100">
+                <div class="card-body text-center">
+                    <h2 class="fw-bold text-primary">{{ total_students }}</h2>
+                    <small class="text-muted">إجمالي الطلاب</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success bg-opacity-10 border-success h-100">
+                <div class="card-body text-center">
+                    <h2 class="fw-bold text-success">{{ paid_count }}</h2>
+                    <small class="text-muted">مدفوع</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning bg-opacity-10 border-warning h-100">
+                <div class="card-body text-center">
+                    <h2 class="fw-bold text-warning">{{ partial_count }}</h2>
+                    <small class="text-muted">مدفوع جزئياً</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger bg-opacity-10 border-danger h-100">
+                <div class="card-body text-center">
+                    <h2 class="fw-bold text-danger">{{ unpaid_count }}</h2>
+                    <small class="text-muted">غير مدفوع</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Totals Row -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h4 class="text-primary fw-bold">{{ total_due|floatformat:0 }} ج.م</h4>
+                    <small class="text-muted">إجمالي المستحق</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h4 class="text-success fw-bold">{{ total_paid|floatformat:0 }} ج.م</h4>
+                    <small class="text-muted">إجمالي المدفوع</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm">
+                <div class="card-body text-center">
+                    <h4 class="text-danger fw-bold">{{ total_remaining|floatformat:0 }} ج.م</h4>
+                    <small class="text-muted">المتبقي</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Collection Rate -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">نسبة التحصيل</h6>
+                    <div class="progress" style="height: 28px;">
+                        <div class="progress-bar bg-success fw-bold {% if collection_rate < 30 %}bg-danger{% elif collection_rate < 70 %}bg-warning{% endif %}"
+                             style="width: {% if collection_rate > 100 %}100{% else %}{{ collection_rate|floatformat:0 }}{% endif %}%">
+                            {{ collection_rate|floatformat:1 }}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Per-Group Breakdown -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>توزيع حسب المجموعة</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>المجموعة</th>
+                                    <th>المدرس</th>
+                                    <th class="text-center">الطلاب</th>
+                                    <th class="text-center">مدفوع</th>
+                                    <th class="text-center">جزئي</th>
+                                    <th class="text-center">غير مدفوع</th>
+                                    <th class="text-end">المستحق</th>
+                                    <th class="text-end">المدفوع</th>
+                                    <th class="text-end">المتبقي</th>
+                                    <th>التحصيل</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for g in group_breakdown %}
+                                <tr>
+                                    <td class="fw-semibold">{{ g.group_name }}</td>
+                                    <td class="text-muted">{{ g.teacher_name }}</td>
+                                    <td class="text-center">{{ g.total_students }}</td>
+                                    <td class="text-center"><span class="badge bg-success">{{ g.paid }}</span></td>
+                                    <td class="text-center"><span class="badge bg-warning text-dark">{{ g.partial }}</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">{{ g.unpaid }}</span></td>
+                                    <td class="text-end">{{ g.due|floatformat:0 }} ج.م</td>
+                                    <td class="text-end">{{ g.paid_amount|floatformat:0 }} ج.م</td>
+                                    <td class="text-end fw-bold {% if g.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ g.remaining|floatformat:0 }} ج.م
+                                    </td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="progress flex-grow-1" style="height: 6px;">
+                                                <div class="progress-bar {% if g.collection_rate >= 80 %}bg-success{% elif g.collection_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}"
+                                                     style="width: {% if g.collection_rate > 100 %}100{% else %}{{ g.collection_rate|floatformat:0 }}{% endif %}%"></div>
+                                            </div>
+                                            <small class="text-muted">{{ g.collection_rate|floatformat:0 }}%</small>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="10" class="text-center text-muted py-4">لا توجد بيانات لهذا الشهر</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Per-Student Payment List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>سجل المدفوعات — {{ report_month|date:'F Y' }}</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>الطالب</th>
+                                    <th>الكود</th>
+                                    <th>المجموعة</th>
+                                    <th class="text-center">الحالة</th>
+                                    <th class="text-end">المطلوب</th>
+                                    <th class="text-end">المدفوع</th>
+                                    <th class="text-end">المتبقي</th>
+                                    <th class="text-center">الحصص</th>
+                                    <th>آخر تحديث</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for p in page_obj %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'students:detail' p.student.student_id %}">
+                                            {{ p.student.full_name }}
+                                        </a>
+                                    </td>
+                                    <td><code class="bg-light px-2 py-1 rounded">{{ p.student.student_code }}</code></td>
+                                    <td class="text-muted">{{ p.group.group_name }}</td>
+                                    <td class="text-center">
+                                        {% if p.status == 'paid' %}
+                                            <span class="badge bg-success">مدفوع</span>
+                                        {% elif p.status == 'partial' %}
+                                            <span class="badge bg-warning text-dark">جزئي</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">غير مدفوع</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-end">{{ p.amount_due|floatformat:2 }} ج.م</td>
+                                    <td class="text-end">{{ p.amount_paid|floatformat:2 }} ج.م</td>
+                                    <td class="text-end fw-bold {% if p.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ p.remaining|floatformat:2 }} ج.م
+                                    </td>
+                                    <td class="text-center">{{ p.sessions_attended }} / {{ p.sessions_total }}</td>
+                                    <td class="text-muted small">
+                                        {% if p.payment_date %}
+                                            {{ p.payment_date|date:'Y-m-d H:i' }}
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-4">لا توجد مدفوعات لهذا الشهر</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% if page_obj.has_other_pages %}
+                <div class="card-footer">
+                    <nav>
+                        <ul class="pagination justify-content-center mb-0">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&month={{ report_month|date:'Y-m' }}">السابق</a>
+                            </li>
+                            {% endif %}
+                            <li class="page-item disabled">
+                                <span class="page-link">صفحة {{ page_obj.number }} من {{ page_obj.paginator.num_pages }}</span>
+                            </li>
+                            {% if page_obj.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&month={{ report_month|date:'Y-m' }}">التالي</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

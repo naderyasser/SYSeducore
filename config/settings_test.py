@@ -36,3 +36,6 @@ SECURE_SSL_REDIRECT = False
 
 # Disable rate limiting for tests (except explicit rate-limit tests)
 RATELIMIT_ENABLE = False
+
+# Disable WhatsApp/messaging for tests (WhatsApp views redirect when disabled)
+NOTIFICATION_METHOD = 'none'
