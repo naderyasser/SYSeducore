@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Session, Attendance, ActivityLog
+from .models import Session, Attendance, ActivityLog, ExceptionRecord
 
 
 @admin.register(Session)
@@ -126,3 +126,36 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None):
         return False  # Read-only
+
+
+@admin.register(ExceptionRecord)
+class ExceptionRecordAdmin(admin.ModelAdmin):
+    list_display = ['student', 'exception_type', 'reason_type', 'group', 'session',
+                    'approved_by', 'is_active', 'created_at']
+    list_filter = ['exception_type', 'reason_type', 'is_active', 'created_at']
+    search_fields = ['student__full_name', 'student__student_code', 'custom_reason',
+                     'group__group_name']
+    ordering = ['-created_at']
+    date_hierarchy = 'created_at'
+    autocomplete_fields = ['student', 'group', 'session', 'approved_by']
+    readonly_fields = ['created_at']
+
+    fieldsets = (
+        ('معلومات الاستثناء', {
+            'fields': ('student', 'group', 'session', 'exception_type', 'reason_type', 'custom_reason')
+        }),
+        ('الموافقة', {
+            'fields': ('approved_by', 'is_active')
+        }),
+        ('معلومات النظام', {
+            'fields': ('created_at',),
+            'classes': ('collapse',)
+        }),
+    )
+
+    actions = ['deactivate_exceptions']
+
+    def deactivate_exceptions(self, request, queryset):
+        count = queryset.update(is_active=False)
+        self.message_user(request, f'تم إلغاء تنشيط {count} استثناء')
+    deactivate_exceptions.short_description = "إلغاء تنشيط الاستثناءات المحددة"

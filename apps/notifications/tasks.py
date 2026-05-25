@@ -9,56 +9,77 @@ from apps.students.models import StudentGroupEnrollment
 @shared_task
 def send_attendance_notifications_task():
     """
-    مهمة تعمل كل دقيقة للتحقق من الحصص التي انتهت قبل 10 دقائق
+    Celery task: runs every 5 minutes.
+    10 minutes after each session starts, auto-marks absent students
+    and sends WhatsApp notifications to parents.
     """
     notification_service = NotificationService()
     now = timezone.now()
+    today = now.date()
 
-    # البحث عن الحصص التي تحتاج إشعارات
     sessions = Session.objects.filter(
-        session_date=now.date(),
-        notification_sent=False,
+        session_date=today,
         is_cancelled=False,
         group__is_active=True,
     ).select_related('group')
 
     for session in sessions:
-        # تحويل وقت الحصة إلى datetime
+        schedule_time = session.group.schedule_time
+        if not schedule_time:
+            continue
+
         session_start = timezone.make_aware(
-            datetime.combine(session.session_date, session.group.schedule_time)
+            datetime.combine(session.session_date, schedule_time)
+        )
+        trigger_time = session_start + timedelta(minutes=10)
+
+        if now < trigger_time:
+            continue
+
+        enrollments = StudentGroupEnrollment.objects.filter(
+            group=session.group,
+            is_active=True,
+        ).select_related('student')
+
+        existing_attendance = set(
+            Attendance.objects.filter(session=session).values_list('student_id', flat=True)
         )
 
-        # التحقق من مرور 10 دقائق
-        if now >= session_start + timedelta(minutes=10):
-            # Get all enrolled students
-            enrollments = StudentGroupEnrollment.objects.filter(
-                group=session.group,
-                is_active=True,
-            ).select_related('student')
+        absent_to_create = []
+        for enrollment in enrollments:
+            student = enrollment.student
+            attendance_exists = student.student_id in existing_attendance
 
-            for enrollment in enrollments:
-                student = enrollment.student
+            if attendance_exists:
                 attendance = Attendance.objects.filter(
                     student=student, session=session
                 ).first()
+                status = attendance.status if attendance else 'absent'
+                scan_time = attendance.scan_time if attendance else now
+            else:
+                status = 'absent'
+                scan_time = now
+                absent_to_create.append(Attendance(
+                    student=student,
+                    session=session,
+                    status='absent',
+                    scan_time=now,
+                ))
 
-                if attendance:
-                    status = attendance.status
-                    scan_time = attendance.scan_time or now
-                else:
-                    status = 'absent'
-                    scan_time = now
+            if student.parent_phone:
+                notification_service.send_attendance_notification(
+                    student.full_name,
+                    student.parent_phone,
+                    status,
+                    scan_time,
+                )
 
-                if student.parent_phone:
-                    notification_service.send_attendance_notification(
-                        student.full_name,
-                        student.parent_phone,
-                        status,
-                        scan_time,
-                    )
+        if absent_to_create:
+            Attendance.objects.bulk_create(absent_to_create, ignore_conflicts=True)
 
+        if not session.notification_sent:
             session.notification_sent = True
-            session.save()
+            session.save(update_fields=['notification_sent'])
 
 
 @shared_task

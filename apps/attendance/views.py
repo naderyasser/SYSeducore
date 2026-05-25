@@ -423,3 +423,152 @@ def scanner_grace_period(request):
         return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
     except Exception as e:
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@ajax_login_required
+@require_http_methods(["POST"])
+def grant_exception(request):
+    """
+    Grant an exception (payment or late-arrival) for a student.
+    Called from the scanner UI by admin/supervisor.
+
+    Request body:
+    - student_id
+    - group_id (optional)
+    - session_id (optional, for late-arrival context)
+    - exception_type: 'payment' or 'late_arrival'
+    - reason_type: one of the predefined reasons
+    - custom_reason: free text (optional)
+    """
+    import json as _json
+    from apps.students.models import Student
+    from apps.teachers.models import Group
+    from .models import ExceptionRecord, Session as SessionModel
+    from apps.attendance.models import ActivityLog
+
+    try:
+        body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
+        student_id = body.get('student_id')
+        group_id = body.get('group_id')
+        session_id = body.get('session_id')
+        exception_type = body.get('exception_type', 'payment')
+        reason_type = body.get('reason_type', 'other')
+        custom_reason = body.get('custom_reason', '')
+
+        if not student_id:
+            return JsonResponse({'success': False, 'message': 'student_id مطلوب'}, status=400)
+
+        student = Student.objects.get(pk=student_id)
+        group = None
+        if group_id:
+            group = Group.objects.get(pk=group_id)
+
+        session = None
+        if session_id:
+            session = SessionModel.objects.filter(pk=session_id).first()
+
+        # Create exception record
+        exception = ExceptionRecord.objects.create(
+            student=student,
+            group=group,
+            session=session,
+            exception_type=exception_type,
+            reason_type=reason_type,
+            custom_reason=custom_reason,
+            approved_by=request.user,
+        )
+
+        # If this is a late_arrival exception and we have a session,
+        # immediately apply it by marking attendance as 'exception'
+        if exception_type == 'late_arrival' and session and group:
+            from .services import AttendanceService
+            AttendanceService.apply_late_exception(student, group, session, exception)
+
+        # Log the action
+        ActivityLog.log(
+            user=request.user,
+            action='exception_grant',
+            description=(
+                f'منح استثناء {student.full_name}: '
+                f'{exception.get_exception_type_display()} — {exception.reason_display}'
+            ),
+            target_model='ExceptionRecord',
+            target_id=exception.pk,
+            request=request,
+        )
+
+        # Dispatch WhatsApp notification (fire-and-forget via Celery)
+        try:
+            from .tasks import send_exception_notification
+            group_name = group.group_name if group else '—'
+            send_exception_notification.delay(
+                student_id=student.student_id,
+                group_name=group_name,
+                exception_type=exception_type,
+                reason_display=exception.reason_display,
+            )
+        except Exception:
+            pass  # Celery may not be available; notification is non-critical
+
+        return JsonResponse({
+            'success': True,
+            'message': f'تم منح استثناء لـ {student.full_name}',
+            'exception': {
+                'exception_id': exception.exception_id,
+                'type': exception_type,
+                'reason': exception.reason_display,
+            },
+        })
+
+    except Student.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
+    except Group.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'المجموعة غير موجودة'}, status=404)
+    except Exception as e:
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+
+@ajax_login_required
+@require_http_methods(["GET"])
+def exception_reasons_list(request):
+    """
+    Return the predefined exception reasons list for the frontend dropdown.
+    """
+    from .models import ExceptionRecord
+    reasons = [
+        {'value': value, 'label': label}
+        for value, label in ExceptionRecord.PREDEFINED_REASON_CHOICES
+    ]
+    return JsonResponse({'success': True, 'reasons': reasons})
+
+
+@ajax_login_required
+@require_http_methods(["POST"])
+def revoke_exception(request, exception_id):
+    """
+    Revoke (deactivate) an exception. The exception remains in the log
+    but is marked inactive so it won't be considered for future scans.
+    """
+    from .models import ExceptionRecord
+    from apps.attendance.models import ActivityLog
+
+    try:
+        exception = ExceptionRecord.objects.get(pk=exception_id)
+        exception.is_active = False
+        exception.save(update_fields=['is_active'])
+
+        ActivityLog.log(
+            user=request.user,
+            action='exception_revoke',
+            description=f'إلغاء استثناء {exception.student.full_name}: {exception.reason_display}',
+            target_model='ExceptionRecord',
+            target_id=exception.pk,
+            request=request,
+        )
+
+        return JsonResponse({
+            'success': True,
+            'message': f'تم إلغاء الاستثناء لـ {exception.student.full_name}',
+        })
+    except ExceptionRecord.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'الاستثناء غير موجود'}, status=404)

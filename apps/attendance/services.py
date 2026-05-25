@@ -715,10 +715,21 @@ class AttendanceService:
 
         # منع الدخول بعد الحصة المسموح إذا لم يدفع
         if sessions_count >= allowed_sessions:
-            # ── Check grace period first ──
+            # ── Check active payment exceptions first ──
+            exception = AttendanceService.check_exception_status(
+                student, group, exception_type='payment'
+            )
+            if exception:
+                return {
+                    'allowed': True,
+                    'exception_applied': True,
+                    'exception_id': exception.exception_id,
+                    'exception_reason': exception.reason_display,
+                }
+
+            # ── Check grace period ──
             today = timezone.localtime().date()
             if enrollment.grace_until and enrollment.grace_until >= today:
-                # Student has an active grace period — allow entry
                 return {
                     'allowed': True,
                     'grace_period': True,
@@ -752,6 +763,52 @@ class AttendanceService:
                 }
 
         return {'allowed': True}
+
+    @staticmethod
+    def check_exception_status(student, group, exception_type='payment'):
+        """
+        Check if the student has an active exception for the given group.
+
+        Returns the ExceptionRecord if found and active, else None.
+        Used by both the financial check (payment exception) and
+        the time check (late-arrival exception).
+        """
+        from .models import ExceptionRecord
+        today = timezone.localtime().date()
+
+        exception = ExceptionRecord.objects.filter(
+            student=student,
+            group=group,
+            exception_type=exception_type,
+            is_active=True,
+            created_at__date=today,
+        ).order_by('-created_at').first()
+
+        return exception
+
+    @staticmethod
+    def apply_late_exception(student, group, session, exception_record):
+        """
+        Apply a late-arrival exception: create an attendance record
+        with status='exception' even though the student arrived late.
+        """
+        attendance, created = Attendance.objects.get_or_create(
+            student=student,
+            session=session,
+            defaults={
+                'scan_time': timezone.now(),
+                'status': 'exception',
+                'supervisor': exception_record.approved_by,
+                'exception_record': exception_record,
+            }
+        )
+        if not created:
+            attendance.status = 'exception'
+            attendance.exception_record = exception_record
+            attendance.save(update_fields=['status', 'exception_record'])
+
+        AttendanceService.update_payment_sessions(student, group)
+        return attendance
     
     @staticmethod
     def build_student_dossier(student):
@@ -879,18 +936,20 @@ class AttendanceService:
     @staticmethod
     def update_payment_sessions(student, group):
         """
-        تحديث عدد الحصص في سجل الدفع لمجموعة معينة
+        Update sessions_attended on the Payment record.
+        Now includes absent records (auto-marked or manual) so that
+        missed sessions count toward the billing cycle.
+
+        Total sessions: sum of present + late + absent + exception.
         """
         current_month = timezone.localtime().date().replace(day=1)
 
-        # عدد الحصص المسجلة في هذه المجموعة
         sessions_count = Attendance.objects.filter(
             student=student,
             session__group=group,
-            session__session_date__gte=current_month
+            session__session_date__gte=current_month,
         ).count()
 
-        # تحديث أو إنشاء سجل الدفع
         payment, created = Payment.objects.get_or_create(
             student=student,
             group=group,
@@ -904,4 +963,42 @@ class AttendanceService:
 
         if not created:
             payment.sessions_attended = sessions_count
-            payment.save()
+            payment.save(update_fields=['sessions_attended'])
+
+    @staticmethod
+    def update_billing_cycle(student, group):
+        """
+        Check whether the billing cycle for this student+group is complete.
+        If all sessions for the cycle have been used (attended + absent),
+        mark the payment as billing_cycle_completed.
+
+        Also updates StudentGroupEnrollment cycle dates.
+        """
+        from apps.students.models import StudentGroupEnrollment
+
+        current_month = timezone.localtime().date().replace(day=1)
+
+        try:
+            enrollment = StudentGroupEnrollment.objects.get(
+                student=student, group=group, is_active=True,
+            )
+        except StudentGroupEnrollment.DoesNotExist:
+            return
+
+        sessions_per_cycle = enrollment.sessions_per_cycle or group.sessions_per_month
+        if sessions_per_cycle <= 0:
+            sessions_per_cycle = group.sessions_per_month or 4
+
+        sessions_count = Attendance.objects.filter(
+            student=student,
+            session__group=group,
+            session__session_date__gte=(enrollment.cycle_start_date or current_month),
+        ).count()
+
+        if sessions_count >= sessions_per_cycle:
+            payment = Payment.objects.filter(
+                student=student, group=group, month=current_month,
+            ).first()
+            if payment and not payment.billing_cycle_completed:
+                payment.billing_cycle_completed = True
+                payment.save(update_fields=['billing_cycle_completed'])

@@ -11,6 +11,7 @@ urlpatterns = [
     path('logout/', views.clear_report_session, name='logout'),
     path('payments/', views.payment_report, name='payments'),
     path('financial/', views.financial_report, name='financial'),
+    path('tsfya/', views.monthly_financial_summary, name='tsfya'),
     
     # Activity Log - سجل النشاط
     path('activity-log/', views.activity_log, name='activity_log'),

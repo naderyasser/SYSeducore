@@ -27,16 +27,16 @@ REPORTS_PASSWORD = config('REPORTS_PASSWORD', default='888888')
 def report_password_required(view_func):
     """
     Decorator to require password for accessing sensitive reports.
+    Authenticated users bypass the password requirement.
     Password must be entered on EVERY visit — no session persistence.
     """
     @functools.wraps(view_func)
     def _wrapped_view(request, *args, **kwargs):
-        # Password required for ALL users — no admin bypass
-        # Check for one-time password submission (not persisted across requests)
+        if request.user.is_authenticated:
+            return view_func(request, *args, **kwargs)
         if not request.session.get('report_authenticated'):
             request.session['report_redirect_after'] = request.get_full_path()
             return redirect('reports:password_prompt')
-        # Clear the flag immediately so it must be re-entered next time
         del request.session['report_authenticated']
         return view_func(request, *args, **kwargs)
     return _wrapped_view
@@ -766,3 +766,99 @@ def recycle_empty(request):
 
     messages.success(request, f'تم تفريغ سلة المهملات ({count} عنصر)')
     return redirect('reports:recycle_bin')
+
+
+@login_required
+def monthly_financial_summary(request):
+    """
+    Tsfya (تصفية) — Monthly Financial Summary dashboard.
+
+    Shows a month-by-month breakdown per student per group:
+    - Who has paid
+    - Who hasn't paid
+    - Remaining balances
+    - Collection rates
+    - Payment status distribution
+    """
+    from django.db.models import Q, OuterRef, Subquery
+    from apps.teachers.models import Teacher
+
+    # Determine month
+    month_param = request.GET.get('month')
+    if month_param:
+        try:
+            y, m = int(month_param[:4]), int(month_param[5:7])
+            report_month = datetime(y, m, 1).date()
+        except (ValueError, IndexError):
+            report_month = timezone.localtime().date().replace(day=1)
+    else:
+        report_month = timezone.localtime().date().replace(day=1)
+
+    # All payments for the selected month
+    payments_qs = Payment.objects.filter(month=report_month).select_related(
+        'student', 'group', 'group__teacher'
+    ).order_by('status', '-amount_due')
+
+    # --- Summary statistics ---
+    total_students = payments_qs.values('student').distinct().count()
+    paid_count = payments_qs.filter(status='paid').count()
+    partial_count = payments_qs.filter(status='partial').count()
+    unpaid_count = payments_qs.filter(status='unpaid').count()
+    total_due = payments_qs.aggregate(Sum('amount_due'))['amount_due__sum'] or 0
+    total_paid = payments_qs.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
+    total_remaining = total_due - total_paid
+
+    # --- Per-group breakdown ---
+    groups = Group.objects.filter(is_active=True).select_related('teacher').order_by('group_name')
+    group_breakdown = []
+    for group in groups:
+        group_payments = payments_qs.filter(group=group)
+        if not group_payments.exists():
+            continue
+        g_paid = group_payments.filter(status='paid').count()
+        g_partial = group_payments.filter(status='partial').count()
+        g_unpaid = group_payments.filter(status='unpaid').count()
+        g_total = group_payments.count()
+        g_due = group_payments.aggregate(Sum('amount_due'))['amount_due__sum'] or 0
+        g_paid_amt = group_payments.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
+        group_breakdown.append({
+            'group_id': group.group_id,
+            'group_name': group.group_name,
+            'teacher_name': group.teacher.full_name if group.teacher else '—',
+            'total_students': g_total,
+            'paid': g_paid,
+            'partial': g_partial,
+            'unpaid': g_unpaid,
+            'due': g_due,
+            'paid_amount': g_paid_amt,
+            'remaining': g_due - g_paid_amt,
+            'collection_rate': round((g_paid_amt / g_due * 100) if g_due > 0 else 0, 1),
+        })
+
+    # --- Payment records (paginated) ---
+    from django.core.paginator import Paginator
+    paginator = Paginator(payments_qs, 30)
+    page_number = request.GET.get('page', 1)
+    page_obj = paginator.get_page(page_number)
+
+    # --- Available months for navigation ---
+    distinct_months = Payment.objects.dates('month', 'month', order='DESC')[:12]
+
+    context = {
+        'page_title': 'التصفية الشهرية — Tsfya',
+        'report_month': report_month,
+        'distinct_months': distinct_months,
+        'total_students': total_students,
+        'paid_count': paid_count,
+        'partial_count': partial_count,
+        'unpaid_count': unpaid_count,
+        'total_due': total_due,
+        'total_paid': total_paid,
+        'total_remaining': total_remaining,
+        'collection_rate': round((total_paid / total_due * 100) if total_due > 0 else 0, 1),
+        'group_breakdown': group_breakdown,
+        'page_obj': page_obj,
+        'monthly_data_json': json.dumps(group_breakdown, ensure_ascii=False, default=str),
+    }
+
+    return render(request, 'reports/tsfya.html', context)

@@ -40,6 +40,7 @@ class Attendance(models.Model):
         ('present', 'حاضر'),
         ('late', 'متأخر'),
         ('absent', 'غائب'),
+        ('exception', 'استثناء'),
     ]
     
     attendance_id = models.AutoField(primary_key=True)
@@ -55,7 +56,7 @@ class Attendance(models.Model):
     )
     
     scan_time = models.DateTimeField(default=timezone.now)
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES)
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES)
     rejection_reason = models.CharField(max_length=255, blank=True)
     
     supervisor = models.ForeignKey(
@@ -65,7 +66,16 @@ class Attendance(models.Model):
         related_name='supervised_attendances',
         verbose_name="المشرف المسجل"
     )
-    
+
+    exception_record = models.ForeignKey(
+        'ExceptionRecord',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='attendances',
+        verbose_name="سجل الاستثناء المرتبط",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -110,6 +120,8 @@ class ActivityLog(models.Model):
         ('enrollment_remove', 'إزالة من مجموعة'),
         ('override_financial', 'تجاوز القيود المالية'),
         ('override_time', 'تجاوز قيود الوقت'),
+        ('exception_grant', 'منح استثناء'),
+        ('exception_revoke', 'إلغاء استثناء'),
     ]
 
     user = models.ForeignKey(
@@ -173,3 +185,91 @@ class ActivityLog(models.Model):
             target_id=target_id,
             ip_address=ip_address
         )
+
+
+class ExceptionRecord(models.Model):
+    """
+    سجل الاستثناءات — لتسجيل حالات استثناء الدفع والتأخير
+    Exception records for payment overrides and late-arrival overrides.
+    """
+    EXCEPTION_TYPE_CHOICES = [
+        ('payment', 'استثناء دفع — Payment Exception'),
+        ('late_arrival', 'استثناء تأخير — Late Arrival Exception'),
+    ]
+
+    PREDEFINED_REASON_CHOICES = [
+        ('forgot_money', 'نسي المصروفات – Forgot money'),
+        ('another_class', 'كان في حصة أخرى – Was attending another class'),
+        ('transportation', 'تأخر بسبب المواصلات – Delayed by transportation'),
+        ('medical', 'ظروف صحية طارئة – Medical emergency'),
+        ('family_emergency', 'ظرف عائلي طارئ – Family emergency'),
+        ('system_error', 'خطأ في النظام – System error'),
+        ('admin_override', 'تجاوز إداري – Administrative override'),
+        ('other', 'سبب آخر – Other'),
+    ]
+
+    exception_id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.PROTECT,
+        related_name='exception_records',
+        verbose_name="الطالب",
+    )
+    group = models.ForeignKey(
+        'teachers.Group',
+        on_delete=models.PROTECT,
+        related_name='exception_records',
+        null=True,
+        blank=True,
+        verbose_name="المجموعة",
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='exception_records',
+        verbose_name="الحصة المرتبطة",
+    )
+    exception_type = models.CharField(
+        max_length=20,
+        choices=EXCEPTION_TYPE_CHOICES,
+        verbose_name="نوع الاستثناء",
+    )
+    reason_type = models.CharField(
+        max_length=30,
+        choices=PREDEFINED_REASON_CHOICES,
+        default='other',
+        verbose_name="سبب الاستثناء",
+    )
+    custom_reason = models.TextField(
+        blank=True,
+        verbose_name="سبب مخصص",
+        help_text="تفاصيل إضافية إن كان السبب 'آخر' أو لتوضيح أكثر",
+    )
+    approved_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='granted_exceptions',
+        verbose_name="تمت الموافقة بواسطة",
+    )
+    is_active = models.BooleanField(default=True, verbose_name="نشط")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="تاريخ الإنشاء")
+
+    class Meta:
+        db_table = 'exception_records'
+        verbose_name = 'سجل استثناء'
+        verbose_name_plural = 'سجلات الاستثناءات'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.student.full_name} — {self.get_exception_type_display()} — {self.get_reason_type_display()}"
+
+    @property
+    def reason_display(self):
+        """Returns full reason text including custom part."""
+        base = self.get_reason_type_display()
+        if self.custom_reason:
+            return f"{base} — {self.custom_reason}"
+        return base

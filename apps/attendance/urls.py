@@ -31,4 +31,9 @@ urlpatterns = [
     # Scanner Quick Actions
     path('api/scanner-pay-now/', views.scanner_pay_now, name='scanner_pay_now'),
     path('api/scanner-grace-period/', views.scanner_grace_period, name='scanner_grace_period'),
+
+    # Exception Handling (Estesna)
+    path('api/grant-exception/', views.grant_exception, name='grant_exception'),
+    path('api/exception-reasons/', views.exception_reasons_list, name='exception_reasons_list'),
+    path('api/revoke-exception/<int:exception_id>/', views.revoke_exception, name='revoke_exception'),
 ]
