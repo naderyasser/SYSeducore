@@ -20,6 +20,12 @@ requests==2.31.0
 django-ratelimit==4.1.0
 python-decouple==3.8
 
+# Timezone data
+# TZ-09: apps/attendance/services.py imports pytz directly. It used to resolve
+# only as a transitive dependency; pin it explicitly so the scanner cannot break
+# with an ImportError when that transitive edge disappears.
+pytz==2025.2
+
 # Other utilities
 Pillow==10.4.0
 python-barcode==0.15.1
@@ -35,5 +41,7 @@ whitenoise==6.6.0
 # Production server
 gunicorn==21.2.0
 
-# Development
-django-debug-toolbar==4.2.0
+# SEC-15: django-debug-toolbar was listed here but is never added to
+# INSTALLED_APPS or MIDDLEWARE. It was dead weight in the production image and
+# has been removed. If it is ever needed, add it to a separate
+# requirements-dev.txt together with the matching settings wiring.

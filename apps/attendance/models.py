@@ -98,6 +98,8 @@ class ActivityLog(models.Model):
         ('student_delete', 'حذف طالب'),
         ('student_toggle', 'تغيير حالة طالب'),
         ('attendance_scan', 'تسجيل حضور'),
+        ('session_cancel', 'إلغاء حصة'),
+        ('teacher_checkin', 'تسجيل حضور مدرس'),
         ('payment_create', 'إنشاء دفعة'),
         ('payment_update', 'تعديل دفعة'),
         ('payment_record', 'تسجيل دفعة'),
@@ -122,6 +124,12 @@ class ActivityLog(models.Model):
         ('override_time', 'تجاوز قيود الوقت'),
         ('exception_grant', 'منح استثناء'),
         ('exception_revoke', 'إلغاء استثناء'),
+        # Recycle-bin actions (apps.reports) — they used to be written as the
+        # generic 'update'/'delete', which are not valid choices, so
+        # get_action_display() echoed the raw string and the filter dropdown
+        # could not select them.
+        ('restore', 'استعادة من سلة المحذوفات'),
+        ('permanent_delete', 'حذف نهائي'),
     ]
 
     user = models.ForeignKey(

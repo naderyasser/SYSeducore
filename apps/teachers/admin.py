@@ -1,13 +1,25 @@
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
+from django.db.models import Count, Q
+
 from .models import Teacher, Group, Room, Subject
 
 
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
-    list_display = ['name', 'education_stage']
+    list_display = ['name', 'education_stage', 'get_teachers_count']
     list_filter = ['education_stage']
     search_fields = ['name']
     ordering = ['name']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).annotate(
+            teachers_count=Count('teachers', distinct=True)
+        )
+
+    @admin.display(description='عدد المدرسين', ordering='teachers_count')
+    def get_teachers_count(self, obj):
+        return obj.teachers_count
 
 
 @admin.register(Room)
@@ -33,18 +45,31 @@ class RoomAdmin(admin.ModelAdmin):
 
     actions = ['activate_rooms', 'deactivate_rooms']
 
+    def get_queryset(self, request):
+        """Annotate the count so the changelist is not N+1 over rooms."""
+        return super().get_queryset(request).annotate(
+            active_groups_count=Count(
+                'groups', filter=Q(groups__is_active=True), distinct=True
+            )
+        )
+
+    @admin.display(description='عدد المجموعات', ordering='active_groups_count')
     def get_groups_count(self, obj):
         """عدد المجموعات في القاعة"""
-        count = obj.groups.filter(is_active=True).count()
-        return f'{count} مجموعة'
-    get_groups_count.short_description = 'عدد المجموعات'
+        return f'{obj.active_groups_count} مجموعة'
 
     def get_groups_list(self, obj):
         """قائمة المجموعات في القاعة"""
-        groups = obj.groups.filter(is_active=True)
-        if groups:
-            return ", ".join([f"{g.group_name} ({g.schedule_day} {g.schedule_time} - {g.get_end_time().strftime('%I:%M %p')})" for g in groups])
-        return "لا توجد مجموعات"
+        groups = obj.groups.filter(is_active=True).prefetch_related('schedules')
+        parts = []
+        for group in groups:
+            schedule = " ، ".join(
+                f"{entry.get_day_display()} {entry.start_time.strftime('%I:%M %p')}"
+                f" - {entry.get_end_time().strftime('%I:%M %p')}"
+                for entry in group.get_schedule_entries()
+            )
+            parts.append(f"{group.group_name} ({schedule or 'بدون مواعيد'})")
+        return " | ".join(parts) if parts else "لا توجد مجموعات"
     get_groups_list.short_description = 'المجموعات المسجلة'
 
     def activate_rooms(self, request, queryset):
@@ -84,16 +109,23 @@ class TeacherAdmin(admin.ModelAdmin):
 
     actions = ['activate_teachers', 'deactivate_teachers']
 
+    def get_queryset(self, request):
+        """Prefetch subjects and annotate the group count (was N+1 per row)."""
+        return super().get_queryset(request).prefetch_related('subjects').annotate(
+            active_groups_count=Count(
+                'groups', filter=Q(groups__is_active=True), distinct=True
+            )
+        )
+
     def get_subjects(self, obj):
         """عرض التخصصات"""
         return obj.get_subjects_display()
     get_subjects.short_description = 'التخصصات'
 
+    @admin.display(description='عدد المجموعات', ordering='active_groups_count')
     def get_groups_count(self, obj):
         """عدد المجموعات للمدرس"""
-        count = obj.groups.filter(is_active=True).count()
-        return f'{count} مجموعة'
-    get_groups_count.short_description = 'عدد المجموعات'
+        return f'{obj.active_groups_count} مجموعة'
 
     def activate_teachers(self, request, queryset):
         """تفعيل المدرسين المحددين"""
@@ -108,9 +140,45 @@ class TeacherAdmin(admin.ModelAdmin):
     deactivate_teachers.short_description = "❌ إلغاء تفعيل المدرسين"
 
 
+class GroupAdminForm(forms.ModelForm):
+    """
+    Admin form for ``Group`` with an **explicit** double-booking opt-in.
+
+    The room-overlap rule used to be bypassed by matching the Arabic word
+    'تعارض' inside ``str(exception)``: any rewording of the message silently
+    turned "warn and save" into a hard 500, and the blanket
+    ``skip_validation=True`` it then used also skipped the education
+    stage/year check. Now the person saving has to tick a box, and only the
+    overlap rule is relaxed.
+    """
+
+    allow_schedule_conflict = forms.BooleanField(
+        required=False,
+        label='السماح بتداخل مواعيد القاعة',
+        help_text=(
+            'فعّل هذا الخيار فقط إذا كنت تقصد حجز القاعة في وقت محجوز بالفعل. '
+            'باقي قواعد التحقق (المرحلة والسنة الدراسية) تظل مطبّقة.'
+        ),
+    )
+
+    class Meta:
+        model = Group
+        fields = '__all__'
+
+    def clean(self):
+        cleaned_data = super().clean()
+        # ``_post_clean`` runs right after this and calls ``instance.full_clean()``,
+        # so the flag has to be on the instance before then.
+        self.instance._skip_conflict_check = bool(
+            cleaned_data.get('allow_schedule_conflict')
+        )
+        return cleaned_data
+
+
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ['group_name', 'teacher', 'room', 'schedule_day', 'schedule_time', 'get_duration',
+    form = GroupAdminForm
+    list_display = ['group_name', 'teacher', 'room', 'get_schedule', 'get_duration',
                     'gender_type', 'get_education', 'standard_fee', 'is_active', 'created_at']
     list_filter = ['schedule_day', 'is_active', 'teacher', 'room', 'gender_type',
                    'education_stage', 'education_year', 'created_at']
@@ -125,8 +193,11 @@ class GroupAdmin(admin.ModelAdmin):
             'fields': ('group_name', 'teacher', 'room', 'is_active')
         }),
         ('الجدول والمدة', {
-            'fields': ('schedule_day', 'schedule_time', 'duration_minutes'),
-            'description': '⚠️ النظام يمنع تداخل التوقيت تلقائياً (يسمح بنفس القاعة لمدرسين مختلفين بشرط عدم التداخل)'
+            'fields': ('schedule_day', 'schedule_time', 'duration_minutes', 'allow_schedule_conflict'),
+            'description': (
+                '⚠️ النظام يمنع تداخل التوقيت تلقائياً (يسمح بنفس القاعة لمدرسين مختلفين بشرط عدم التداخل). '
+                'المواعيد الكاملة للمجموعة تُدار من شاشة المجموعات (كل يوم بوقته).'
+            )
         }),
         ('التصنيف (الجنس والمرحلة)', {
             'fields': ('gender_type', 'education_stage', 'education_year'),
@@ -144,10 +215,21 @@ class GroupAdmin(admin.ModelAdmin):
 
     actions = ['activate_groups', 'deactivate_groups', 'clear_rooms']
 
+    def get_queryset(self, request):
+        """select_related + prefetch so the changelist is not N+1 per row."""
+        return super().get_queryset(request).select_related(
+            'teacher', 'room'
+        ).prefetch_related('schedules')
+
     def get_duration(self, obj):
         """عرض المدة"""
         return obj.get_duration_display()
     get_duration.short_description = 'مدة الحصة'
+
+    @admin.display(description='المواعيد')
+    def get_schedule(self, obj):
+        """كل مواعيد المجموعة (لا اليوم الأول فقط)"""
+        return obj.get_schedule_display()
 
     def get_education(self, obj):
         """عرض المرحلة الدراسية"""
@@ -161,30 +243,31 @@ class GroupAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """
-        تجاوز الـ validation للـ admin
-        Admin له صلاحية تجاوز قاعدة منع التعارض (التداخل الزمني)
-        """
-        # التحقق من وجود تعارض
-        try:
-            obj.full_clean()
-            has_conflict = False
-        except Exception as e:
-            if 'تعارض' in str(e) or 'conflict' in str(e).lower():
-                has_conflict = True
-            else:
-                raise
+        حفظ المجموعة مع احترام خيار "السماح بتداخل مواعيد القاعة".
 
-        if has_conflict:
-            obj.save(skip_validation=True)
+        No string matching on exception text: the conflicts are queried
+        explicitly, and only the person who ticked the opt-in box can save on
+        top of them. Every other validation rule still runs.
+        """
+        allow_conflict = bool(
+            form.cleaned_data.get('allow_schedule_conflict')
+            if hasattr(form, 'cleaned_data') else False
+        )
+
+        conflicts = obj.get_room_conflicts() if allow_conflict else []
+
+        obj.save(skip_conflict_check=allow_conflict)
+
+        if conflicts:
+            other = conflicts[0]
             self.message_user(
                 request,
                 f'⚠️ تحذير: تم الحفظ مع تجاوز قاعدة منع التداخل الزمني. '
                 f'القاعة "{obj.room.name if obj.room else "غير محددة"}" '
-                f'بها تداخل زمني مع مجموعة أخرى!',
-                level='WARNING'
+                f'محجوزة لمجموعة "{other.group_name}" يوم {other.get_day_display()} '
+                f'الساعة {other.start_time.strftime("%I:%M %p")}!',
+                level=messages.WARNING,
             )
-        else:
-            obj.save()
 
     def activate_groups(self, request, queryset):
         """تفعيل المجموعات المحددة"""

@@ -1,69 +1,15 @@
 from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django_ratelimit.decorators import ratelimit
+from django.utils import timezone
+
 from apps.accounts.decorators import ajax_login_required
-import json
-from .services import AttendanceService
 
-
-@ajax_login_required
-@ratelimit(key='ip', rate='30/m', block=True)
-@require_http_methods(["POST"])
-def process_scan(request):
-    """
-    API endpoint لمعالجة إدخال كود الطالب
-    """
-    try:
-        data = json.loads(request.body)
-        student_code = data.get('student_code')
-        
-        if not student_code:
-            return JsonResponse({
-                'success': False,
-                'message': 'كود الطالب مطلوب'
-            }, status=400)
-        
-        result = AttendanceService.process_scan(student_code, request.user)
-        
-        # تحويل الكائنات إلى dict
-        if result.get('success') and 'student' in result:
-            result['student'] = {
-                'id': result['student'].student_id,
-                'name': result['student'].full_name,
-                'student_code': result['student'].student_code
-            }
-            if 'attendance' in result:
-                result['attendance'] = {
-                    'id': result['attendance'].attendance_id,
-                    'status': result['attendance'].status,
-                    'scan_time': result['attendance'].scan_time.isoformat()
-                }
-            if 'group' in result:
-                result['group'] = {
-                    'id': result['group'].group_id,
-                    'name': result['group'].group_name
-                }
-
-        # Convert instant_status Payment object
-        if 'instant_status' in result:
-            status_data = result['instant_status']
-            if 'current_payment' in status_data:
-                del status_data['current_payment']  # Remove non-serializable object
-            result['instant_status'] = status_data
-        
-        status_code = 200 if result['success'] else 400
-        return JsonResponse(result, status=status_code)
-        
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'message': 'بيانات غير صالحة'
-        }, status=400)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'message': f'حدث خطأ في الخادم: {str(e)}'
-        }, status=500)
+# ``process_scan`` used to live here as a second, broken copy of the scanner
+# endpoint: it treated ``AttendanceService.process_scan()['student']`` as a
+# model instance when the service returns a plain dict, so every call raised
+# AttributeError and answered 500. Nothing reached it — the scanner UI posts to
+# ``attendance:process_student_code`` (``views.process_student_code``), which is
+# the maintained implementation. The duplicate and its ``/api/attendance/scan/``
+# route were removed rather than fixed twice over.
 
 
 @ajax_login_required
@@ -71,9 +17,9 @@ def session_attendance(request, session_id):
     """
     API endpoint لجلب حضور الحصة
     """
-    from .models import Session, Attendance
+    from .models import Session
     try:
-        session = Session.objects.get(pk=session_id)
+        session = Session.objects.select_related('group').get(pk=session_id)
         attendances = session.attendances.select_related('student').all()
         
         data = {
@@ -89,7 +35,7 @@ def session_attendance(request, session_id):
                     'id': a.attendance_id,
                     'student': a.student.full_name,
                     'status': a.status,
-                    'scan_time': a.scan_time.isoformat(),
+                    'scan_time': timezone.localtime(a.scan_time).isoformat(),
                 }
                 for a in attendances
             ]
@@ -107,7 +53,6 @@ def student_history(request, student_id):
     """
     API endpoint لجلب سجل حضور الطالب
     """
-    from .models import Attendance
     from apps.students.models import Student
     try:
         student = Student.objects.get(pk=student_id)
@@ -125,7 +70,7 @@ def student_history(request, student_id):
                     'id': a.attendance_id,
                     'date': a.session.session_date.isoformat(),
                     'status': a.status,
-                    'scan_time': a.scan_time.isoformat(),
+                    'scan_time': timezone.localtime(a.scan_time).isoformat(),
                 }
                 for a in attendances
             ]

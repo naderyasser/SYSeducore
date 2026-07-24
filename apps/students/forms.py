@@ -1,5 +1,7 @@
 from django import forms
+
 from .models import Student, StudentGroupEnrollment
+from .utils import enrollment_compatibility_errors, normalize_phone
 
 
 class StudentForm(forms.ModelForm):
@@ -87,28 +89,26 @@ class StudentForm(forms.ModelForm):
         code = self.cleaned_data.get('student_code')
         if code:
             code = code.strip()
-            # Check if code already exists (exclude current instance if updating)
-            qs = Student.objects.filter(student_code=code)
+            # ``student_code`` is UNIQUE at the database level and Student is
+            # soft-deletable, so validating against ``objects`` (alive rows
+            # only) let a recycled code through and blew up with an
+            # IntegrityError at save time. Validate against ``all_objects``.
+            qs = Student.all_objects.filter(student_code=code)
             if self.instance and self.instance.pk:
                 qs = qs.exclude(pk=self.instance.pk)
-            if qs.exists():
+            clash = qs.first()
+            if clash is not None:
+                if clash.deleted_at is not None:
+                    raise forms.ValidationError(
+                        'هذا الكود مستخدم بالفعل لطالب محذوف موجود في سلة المهملات. '
+                        'يرجى اختيار كود آخر أو استعادة الطالب المحذوف.'
+                    )
                 raise forms.ValidationError('هذا الكود مستخدم بالفعل لطالب آخر')
         return code
 
     def _clean_phone(self, phone):
-        """Helper to normalize phone numbers - removes +20 prefix for storage"""
-        if not phone:
-            return phone
-        phone = phone.replace(' ', '').replace('-', '').strip()
-        # Remove +20 prefix if exists
-        if phone.startswith('+20'):
-            phone = '0' + phone[3:]
-        elif phone.startswith('20') and len(phone) == 12:
-            phone = '0' + phone[2:]
-        # Ensure starts with 0
-        if not phone.startswith('0') and len(phone) == 10:
-            phone = '0' + phone
-        return phone
+        """Normalize a phone number to the app-wide stored format ``01xxxxxxxxx``."""
+        return normalize_phone(phone)
 
     def clean_parent_phone(self):
         phone = self.cleaned_data.get('parent_phone', '')
@@ -140,20 +140,20 @@ class StudentQuickForm(forms.ModelForm):
         }
 
     def clean_parent_phone(self):
-        phone = self.cleaned_data.get('parent_phone', '')
-        phone = phone.replace(' ', '').replace('-', '')
-        if not phone.startswith('+'):
-            if phone.startswith('0'):
-                phone = '+20' + phone[1:]
-            else:
-                phone = '+20' + phone
-        return phone
+        # Same canonical format as StudentForm ('01xxxxxxxxx'). This form used
+        # to store '+201xxxxxxxxx', so the very same number looked like two
+        # different contacts depending on which dialog created the student.
+        return normalize_phone(self.cleaned_data.get('parent_phone', ''))
 
 
 class StudentGroupEnrollmentForm(forms.ModelForm):
     """
     Form لتسجيل الطالب في المجموعة
     مع التحقق من توافق الجنس والمرحلة الدراسية
+
+    The compatibility rules live in ``students.utils.enrollment_compatibility_errors``
+    and are shared with the ``add_to_group`` API so both paths reject the same
+    enrollments.
     """
     class Meta:
         model = StudentGroupEnrollment
@@ -184,71 +184,9 @@ class StudentGroupEnrollmentForm(forms.ModelForm):
                 'يجب تحديد المبلغ المخصص للطلاب ذوي المبلغ الرمزي'
             )
 
-        # التحقق من توافق الجنس
-        if student and group:
-            if group.gender_type == 'male' and student.gender == 'female':
-                raise forms.ValidationError(
-                    'لا يمكن تسجيل طالبة في مجموعة مخصصة للبنين فقط'
-                )
-            if group.gender_type == 'female' and student.gender == 'male':
-                raise forms.ValidationError(
-                    'لا يمكن تسجيل طالب في مجموعة مخصصة للبنات فقط'
-                )
-
-            # التحقق من توافق المرحلة الدراسية
-            if group.education_stage and student.education_stage:
-                if group.education_stage != student.education_stage:
-                    raise forms.ValidationError(
-                        f'المجموعة مخصصة لمرحلة "{group.get_education_stage_display()}" '
-                        f'والطالب في مرحلة "{student.get_education_stage_display()}"'
-                    )
-            if group.education_year and student.education_year:
-                if group.education_year != student.education_year:
-                    raise forms.ValidationError(
-                        f'المجموعة مخصصة للسنة "{group.get_education_year_display()}" '
-                        f'والطالب في السنة "{student.get_education_year_display()}"'
-                    )
+        # التحقق من توافق الجنس والمرحلة الدراسية
+        errors = enrollment_compatibility_errors(student, group)
+        if errors:
+            raise forms.ValidationError(errors)
 
         return cleaned_data
-
-
-class StudentFilterForm(forms.Form):
-    """
-    Form for filtering students
-    """
-    search = forms.CharField(
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'بحث بالاسم، الكود، أو الهاتف...'
-        })
-    )
-    group = forms.ModelChoiceField(
-        queryset=None,
-        required=False,
-        empty_label='جميع المجموعات',
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    status = forms.ChoiceField(
-        choices=[
-            ('', 'جميع الحالات'),
-            ('with_groups', 'في مجموعة'),
-            ('no_groups', 'بدون مجموعة'),
-            ('active', 'نشط فقط'),
-            ('inactive', 'غير نشط'),
-        ],
-        required=False,
-        widget=forms.Select(attrs={'class': 'form-select'})
-    )
-    grade = forms.CharField(
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'الصف الدراسي'
-        })
-    )
-
-    def __init__(self, *args, **kwargs):
-        from apps.teachers.models import Group
-        super().__init__(*args, **kwargs)
-        self.fields['group'].queryset = Group.objects.filter(is_active=True)

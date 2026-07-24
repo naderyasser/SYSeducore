@@ -1,14 +1,27 @@
+import json
+import logging
+
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from apps.accounts.decorators import ajax_login_required
+from django.db import transaction
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
-from .models import Session, Attendance
+
+from apps.accounts.decorators import (
+    ajax_login_required,
+    ajax_supervisor_required,
+    ratelimit_key,
+)
+from .models import Session, Attendance, ActivityLog
 from .services import AttendanceService
-from apps.students.models import Student
-import json
+
+logger = logging.getLogger('attendance')
+
+#: Generic message returned instead of the raw exception text — the internal
+#: message leaks model names, SQL fragments and file paths to the client.
+SERVER_ERROR_MESSAGE = 'حدث خطأ في النظام، يرجى المحاولة مرة أخرى'
 
 
 @login_required
@@ -22,7 +35,7 @@ def scanner_page(request):
 
 
 @ajax_login_required
-@ratelimit(key='ip', rate='30/m', block=True)
+@ratelimit(key=ratelimit_key, rate='30/m', block=True)
 @require_http_methods(["POST"])
 def process_student_code(request):
     """
@@ -57,10 +70,11 @@ def process_student_code(request):
             'message': 'خطأ في البيانات المرسلة',
             'sound': 'error'
         })
-    except Exception as e:
+    except Exception:
+        logger.exception('process_student_code failed')
         return JsonResponse({
             'success': False,
-            'message': f'خطأ في النظام: {str(e)}',
+            'message': SERVER_ERROR_MESSAGE,
             'sound': 'error'
         })
 
@@ -78,40 +92,67 @@ def session_detail(request, session_id):
     })
 
 
-@login_required
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def record_teacher_attendance(request, session_id):
     """
-    تسجيل حضور المدرس
+    تسجيل حضور المدرس — عملية مكتبية: مشرف أو مدير فقط.
     """
     try:
-        session = Session.objects.get(pk=session_id)
-        session.teacher_attended = True
-        session.teacher_checkin_time = timezone.now()
-        session.save()
-        
-        return JsonResponse({'success': True})
+        session = Session.objects.select_related('group').get(pk=session_id)
     except Session.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Session not found'}, status=404)
 
+    session.teacher_attended = True
+    session.teacher_checkin_time = timezone.now()
+    session.save(update_fields=['teacher_attended', 'teacher_checkin_time'])
 
-@login_required
+    ActivityLog.log(
+        user=request.user,
+        action='teacher_checkin',
+        description=(
+            f'تسجيل حضور المدرس لحصة {session.group.group_name} '
+            f'بتاريخ {session.session_date}'
+        ),
+        target_model='Session',
+        target_id=session.pk,
+        request=request,
+    )
+
+    return JsonResponse({'success': True})
+
+
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def cancel_session(request, session_id):
     """
-    إلغاء حصة
+    إلغاء حصة — عملية مكتبية: مشرف أو مدير فقط، وتُسجَّل في سجل النشاط
+    حتى يمكن معرفة من ألغى الحصة ولماذا.
     """
     try:
-        session = Session.objects.get(pk=session_id)
-        reason = request.POST.get('reason', '')
-
-        session.is_cancelled = True
-        session.cancellation_reason = reason
-        session.save()
-
-        return JsonResponse({'success': True})
+        session = Session.objects.select_related('group').get(pk=session_id)
     except Session.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Session not found'}, status=404)
+
+    reason = request.POST.get('reason', '')
+
+    session.is_cancelled = True
+    session.cancellation_reason = reason
+    session.save(update_fields=['is_cancelled', 'cancellation_reason'])
+
+    ActivityLog.log(
+        user=request.user,
+        action='session_cancel',
+        description=(
+            f'إلغاء حصة {session.group.group_name} بتاريخ {session.session_date}'
+            + (f' — السبب: {reason}' if reason else '')
+        ),
+        target_model='Session',
+        target_id=session.pk,
+        request=request,
+    )
+
+    return JsonResponse({'success': True})
 
 
 @ajax_login_required
@@ -120,12 +161,10 @@ def today_stats(request):
     """
     API Endpoint: إحصائيات الحضور اليوم
     """
-    from django.db.models import Count, Q
-    from django.utils import timezone
     from datetime import timedelta
 
     try:
-        today = timezone.now().date()
+        today = timezone.localdate()
         yesterday = today - timedelta(days=1)
 
         # حضور اليوم
@@ -162,10 +201,11 @@ def today_stats(request):
             'change': change
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('today_stats failed')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': SERVER_ERROR_MESSAGE
         }, status=500)
 
 
@@ -174,52 +214,65 @@ def today_stats(request):
 def today_sessions(request):
     """
     API Endpoint: حصص اليوم مع عدد الحضور
+
+    نقطة قراءة فقط — كانت تُنشئ صف ``Session`` لكل مجموعة في كل استعلام
+    تحديث للوحة (كل بضع ثوانٍ). الحصة تُنشأ عند أول مسح حضور.
     """
-    from django.db.models import Count
-    from django.utils import timezone
+    from django.db.models import Count, Q
 
     try:
-        today = timezone.now().date()
+        today = timezone.localdate()
+        day_name = AttendanceService.get_current_day_name()
         from apps.teachers.models import Group
 
-        # جلب المجموعات التي لها حصص اليوم
-        groups = Group.objects.filter(
-            schedule_day=AttendanceService.get_current_day_name(),
-            is_active=True
-        ).select_related('teacher', 'room')
+        # جلب المجموعات التي لها حصص اليوم (كل أيام GroupSchedule وليس
+        # اليوم الأول فقط من الحقول القديمة)
+        groups = (
+            Group.objects.filter(is_active=True)
+            .select_related('teacher', 'room')
+            .prefetch_related('schedules')
+        )
 
-        sessions_data = []
-        for group in groups:
-            # الحصول على حصة اليوم أو إنشاؤها
-            session, created = Session.objects.get_or_create(
-                group=group,
-                session_date=today,
-                defaults={'teacher_attended': False}
+        # الحصص الموجودة فعلاً اليوم مع عدد الحضور — استعلام واحد
+        sessions_today = {
+            s.group_id: s
+            for s in Session.objects.filter(session_date=today).annotate(
+                attendees_count=Count(
+                    'attendances',
+                    filter=Q(attendances__status__in=['present', 'late']),
+                )
             )
+        }
 
-            # عدد الحضور
-            attendees_count = session.attendances.filter(
-                status__in=['present', 'late']
-            ).count()
+        scheduled = []
+        for group in groups:
+            entry = group.get_schedule_for_day(day_name)
+            if entry is None or not entry.start_time:
+                continue
 
-            sessions_data.append({
-                'session_id': session.session_id,
+            session = sessions_today.get(group.pk)
+            scheduled.append((entry.start_time, {
+                'session_id': session.session_id if session else None,
                 'group_name': group.group_name,
-                'time': group.schedule_time.strftime('%I:%M %p'),
+                'time': entry.start_time.strftime('%I:%M %p'),
                 'teacher_name': group.teacher.full_name if group.teacher else None,
-                'attendees': attendees_count,
+                'attendees': session.attendees_count if session else 0,
                 'is_active': True
-            })
+            }))
+
+        scheduled.sort(key=lambda item: item[0])
+        sessions_data = [item[1] for item in scheduled]
 
         return JsonResponse({
             'success': True,
             'sessions': sessions_data
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('today_sessions failed')
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': SERVER_ERROR_MESSAGE
         }, status=500)
 
 
@@ -282,7 +335,7 @@ def export_report(request):
                     att.session.group.group_name,
                     att.session.group.teacher.full_name if att.session.group.teacher else '-',
                     att.get_status_display(),
-                    att.scan_time.strftime('%I:%M %p')
+                    timezone.localtime(att.scan_time).strftime('%I:%M %p')
                 ])
 
         elif report_type == 'students':
@@ -297,7 +350,7 @@ def export_report(request):
                     att.student.student_code,
                     att.session.group.group_name,
                     att.get_status_display(),
-                    att.scan_time.strftime('%I:%M %p')
+                    timezone.localtime(att.scan_time).strftime('%I:%M %p')
                 ])
 
         content = output.getvalue()
@@ -308,10 +361,11 @@ def export_report(request):
             'filename': f'attendance_report_{report_date}.csv'
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception('export_report failed')
         return JsonResponse({
             'success': False,
-            'message': f'خطأ في التصدير: {str(e)}'
+            'message': 'خطأ في التصدير'
         }, status=500)
 
 
@@ -319,12 +373,66 @@ def export_report(request):
 # Scanner Quick-Action APIs  (Pay Now / Grace Period)
 # ─────────────────────────────────────────────────────────────
 
-@ajax_login_required
+def _resolve_scanner_payment(student, group_id=None):
+    """
+    Pick the Payment row the scanner's "ادفع الان" button should settle.
+
+    Preference order: the group the scanner asked about, then the first active
+    enrollment that still owes money this month, then the first active
+    enrollment. Blindly taking the *first* enrollment charged the wrong group
+    for a student enrolled in several.
+
+    Returns ``(payment, error_message)``.
+    """
+    from apps.payments.models import Payment
+    from apps.students.models import StudentGroupEnrollment
+
+    current_month = timezone.localdate().replace(day=1)
+    enrollments = list(
+        StudentGroupEnrollment.objects.filter(student=student, is_active=True)
+        .select_related('group')
+    )
+    if not enrollments:
+        return None, 'لا يوجد تسجيل نشط'
+
+    if group_id:
+        enrollments = [e for e in enrollments if str(e.group_id) == str(group_id)] or enrollments
+
+    payments = {
+        p.group_id: p
+        for p in Payment.objects.filter(
+            student=student,
+            group_id__in=[e.group_id for e in enrollments],
+            month=current_month,
+        )
+    }
+
+    for enr in enrollments:
+        payment = payments.get(enr.group_id)
+        if payment is None or payment.status != 'paid':
+            if payment is not None:
+                return payment, None
+            fee = student.get_monthly_fee_for_group(enr.group)
+            payment, _ = Payment.objects.get_or_create(
+                student=student, group=enr.group, month=current_month,
+                defaults={'amount_due': fee, 'status': 'unpaid'},
+            )
+            return payment, None
+
+    # Everything is already settled — return the first row so the caller gets
+    # an idempotent success instead of a confusing error.
+    return payments[enrollments[0].group_id], None
+
+
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def scanner_pay_now(request):
     """
     Called from the scanner UI when the supervisor taps "ادفع الان".
     Marks the current-month payment as paid and activates the subscription.
+
+    Moves money, so it is restricted to admin/supervisor, written to the
+    activity log ("who marked this paid?") and applied atomically.
     """
     import json as _json
     from apps.payments.models import Payment
@@ -334,54 +442,64 @@ def scanner_pay_now(request):
         body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
         payment_id = body.get('payment_id')
         student_id = body.get('student_id')
+        group_id = body.get('group_id')
 
         if payment_id:
-            payment = Payment.objects.get(pk=payment_id)
+            payment = Payment.objects.select_related('student', 'group').get(pk=payment_id)
         elif student_id:
-            # Find or create the current-month payment
-            from apps.students.models import Student, StudentGroupEnrollment
+            from apps.students.models import Student
             student = Student.objects.get(pk=student_id)
-            current_month = timezone.localtime().date().replace(day=1)
-            # Use the first active enrollment's group
-            enr = StudentGroupEnrollment.objects.filter(
-                student=student, is_active=True,
-            ).select_related('group').first()
-            if not enr:
-                return JsonResponse({'success': False, 'message': 'لا يوجد تسجيل نشط'}, status=400)
-            fee = student.get_monthly_fee_for_group(enr.group)
-            payment, _ = Payment.objects.get_or_create(
-                student=student, group=enr.group, month=current_month,
-                defaults={'amount_due': fee, 'status': 'unpaid'},
-            )
+            payment, error = _resolve_scanner_payment(student, group_id)
+            if error:
+                return JsonResponse({'success': False, 'message': error}, status=400)
         else:
             return JsonResponse({'success': False, 'message': 'payment_id أو student_id مطلوب'}, status=400)
 
-        # Mark as paid
-        payment.amount_paid = payment.amount_due
-        payment.status = 'paid'
-        payment.payment_date = timezone.now()
-        payment.save()
+        with transaction.atomic():
+            # Mark as paid
+            payment.amount_paid = payment.amount_due
+            payment.status = 'paid'
+            payment.payment_date = timezone.now()
+            payment.save(update_fields=['amount_paid', 'status', 'payment_date'])
 
-        # Activate subscription + enrollment
-        _activate_student_for_payment(payment, user=request.user)
+            # Activate subscription + enrollment
+            _activate_student_for_payment(payment, user=request.user)
+
+            ActivityLog.log(
+                user=request.user,
+                action='payment_record',
+                description=(
+                    f'تسديد من الماسح: {payment.student.full_name} — '
+                    f'{payment.group.group_name} — شهر {payment.month:%Y-%m} — '
+                    f'{payment.amount_due} ج.م'
+                ),
+                target_model='Payment',
+                target_id=payment.pk,
+                request=request,
+            )
 
         return JsonResponse({
             'success': True,
-            'message': f'تم تسديد الدفعة وتفعيل الاشتراك بنجاح',
+            'message': 'تم تسديد الدفعة وتفعيل الاشتراك بنجاح',
         })
     except Payment.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'سجل الدفع غير موجود'}, status=404)
-    except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+    except Exception:
+        logger.exception('scanner_pay_now failed')
+        return JsonResponse({'success': False, 'message': SERVER_ERROR_MESSAGE}, status=500)
 
 
-@ajax_login_required
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def scanner_grace_period(request):
     """
     Called from the scanner UI when the supervisor taps "استثناء".
-    Sets a grace_until date on the enrollment so the student can attend
-    for X days WITHOUT changing their payment status.
+    Sets a grace_until date on the *active* enrollments so the student can
+    attend for X days WITHOUT changing their payment status.
+
+    It deliberately does **not** resurrect enrollments the desk has removed:
+    granting a payment grace period is not the same decision as putting a
+    student back into a group they were taken out of.
     """
     import json as _json
     from datetime import timedelta
@@ -391,27 +509,46 @@ def scanner_grace_period(request):
         body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
         student_id = body.get('student_id')
         group_id = body.get('group_id')
-        days = int(body.get('days', 3))
+
+        try:
+            days = int(body.get('days', 3))
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'message': 'عدد الأيام غير صالح'}, status=400)
+        if days < 1 or days > 90:
+            return JsonResponse(
+                {'success': False, 'message': 'عدد الأيام يجب أن يكون بين 1 و 90'}, status=400
+            )
 
         if not student_id:
             return JsonResponse({'success': False, 'message': 'student_id مطلوب'}, status=400)
 
         student = Student.objects.get(pk=student_id)
 
-        # Extend subscription by X days so Step 1.5 passes
-        student.activate_subscription(days=days)
-
-        # Set grace_until on enrollments
-        today = timezone.localtime().date()
+        today = timezone.localdate()
         grace_date = today + timedelta(days=days)
-        updated = StudentGroupEnrollment.objects.filter(
-            student=student, is_active=True,
-        ).update(grace_until=grace_date)
 
-        # Also reactivate any inactive enrollments
-        StudentGroupEnrollment.objects.filter(
-            student=student, is_active=False,
-        ).update(is_active=True, grace_until=grace_date)
+        with transaction.atomic():
+            # Extend subscription by X days so Step 1.5 passes
+            student.activate_subscription(days=days)
+
+            enrollments = StudentGroupEnrollment.objects.filter(
+                student=student, is_active=True,
+            )
+            if group_id:
+                enrollments = enrollments.filter(group_id=group_id)
+            updated = enrollments.update(grace_until=grace_date)
+
+            ActivityLog.log(
+                user=request.user,
+                action='override_financial',
+                description=(
+                    f'منح مهلة {days} أيام لـ {student.full_name} '
+                    f'حتى {grace_date} ({updated} تسجيل)'
+                ),
+                target_model='Student',
+                target_id=student.pk,
+                request=request,
+            )
 
         return JsonResponse({
             'success': True,
@@ -421,16 +558,17 @@ def scanner_grace_period(request):
         })
     except Student.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
-    except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+    except Exception:
+        logger.exception('scanner_grace_period failed')
+        return JsonResponse({'success': False, 'message': SERVER_ERROR_MESSAGE}, status=500)
 
 
-@ajax_login_required
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def grant_exception(request):
     """
     Grant an exception (payment or late-arrival) for a student.
-    Called from the scanner UI by admin/supervisor.
+    Called from the scanner UI by admin/supervisor — now actually enforced.
 
     Request body:
     - student_id
@@ -444,19 +582,31 @@ def grant_exception(request):
     from apps.students.models import Student
     from apps.teachers.models import Group
     from .models import ExceptionRecord, Session as SessionModel
-    from apps.attendance.models import ActivityLog
 
     try:
         body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
         student_id = body.get('student_id')
         group_id = body.get('group_id')
         session_id = body.get('session_id')
-        exception_type = body.get('exception_type', 'payment')
-        reason_type = body.get('reason_type', 'other')
+        exception_type = body.get('exception_type') or 'payment'
+        reason_type = body.get('reason_type') or 'other'
         custom_reason = body.get('custom_reason', '')
 
         if not student_id:
             return JsonResponse({'success': False, 'message': 'student_id مطلوب'}, status=400)
+
+        # ``choices`` are not enforced by the database, so validate here or
+        # arbitrary strings end up stored and rendered back to the user.
+        valid_types = dict(ExceptionRecord.EXCEPTION_TYPE_CHOICES)
+        if exception_type not in valid_types:
+            return JsonResponse(
+                {'success': False, 'message': 'نوع الاستثناء غير صالح'}, status=400
+            )
+        valid_reasons = dict(ExceptionRecord.PREDEFINED_REASON_CHOICES)
+        if reason_type not in valid_reasons:
+            return JsonResponse(
+                {'success': False, 'message': 'سبب الاستثناء غير صالح'}, status=400
+            )
 
         student = Student.objects.get(pk=student_id)
         group = None
@@ -467,35 +617,35 @@ def grant_exception(request):
         if session_id:
             session = SessionModel.objects.filter(pk=session_id).first()
 
-        # Create exception record
-        exception = ExceptionRecord.objects.create(
-            student=student,
-            group=group,
-            session=session,
-            exception_type=exception_type,
-            reason_type=reason_type,
-            custom_reason=custom_reason,
-            approved_by=request.user,
-        )
+        with transaction.atomic():
+            # Create exception record
+            exception = ExceptionRecord.objects.create(
+                student=student,
+                group=group,
+                session=session,
+                exception_type=exception_type,
+                reason_type=reason_type,
+                custom_reason=custom_reason,
+                approved_by=request.user,
+            )
 
-        # If this is a late_arrival exception and we have a session,
-        # immediately apply it by marking attendance as 'exception'
-        if exception_type == 'late_arrival' and session and group:
-            from .services import AttendanceService
-            AttendanceService.apply_late_exception(student, group, session, exception)
+            # If this is a late_arrival exception and we have a session,
+            # immediately apply it by marking attendance as 'exception'
+            if exception_type == 'late_arrival' and session and group:
+                AttendanceService.apply_late_exception(student, group, session, exception)
 
-        # Log the action
-        ActivityLog.log(
-            user=request.user,
-            action='exception_grant',
-            description=(
-                f'منح استثناء {student.full_name}: '
-                f'{exception.get_exception_type_display()} — {exception.reason_display}'
-            ),
-            target_model='ExceptionRecord',
-            target_id=exception.pk,
-            request=request,
-        )
+            # Log the action
+            ActivityLog.log(
+                user=request.user,
+                action='exception_grant',
+                description=(
+                    f'منح استثناء {student.full_name}: '
+                    f'{exception.get_exception_type_display()} — {exception.reason_display}'
+                ),
+                target_model='ExceptionRecord',
+                target_id=exception.pk,
+                request=request,
+            )
 
         # Dispatch WhatsApp notification (fire-and-forget via Celery)
         try:
@@ -508,7 +658,12 @@ def grant_exception(request):
                 reason_display=exception.reason_display,
             )
         except Exception:
-            pass  # Celery may not be available; notification is non-critical
+            # Celery may not be available; the notification is non-critical,
+            # but a silent swallow hid broker outages completely.
+            logger.warning(
+                'Could not queue exception notification for student %s',
+                student.pk, exc_info=True,
+            )
 
         return JsonResponse({
             'success': True,
@@ -524,8 +679,9 @@ def grant_exception(request):
         return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
     except Group.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'المجموعة غير موجودة'}, status=404)
-    except Exception as e:
-        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+    except Exception:
+        logger.exception('grant_exception failed')
+        return JsonResponse({'success': False, 'message': SERVER_ERROR_MESSAGE}, status=500)
 
 
 @ajax_login_required
@@ -542,18 +698,18 @@ def exception_reasons_list(request):
     return JsonResponse({'success': True, 'reasons': reasons})
 
 
-@ajax_login_required
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def revoke_exception(request, exception_id):
     """
     Revoke (deactivate) an exception. The exception remains in the log
     but is marked inactive so it won't be considered for future scans.
+    Admin/supervisor only, same as granting one.
     """
     from .models import ExceptionRecord
-    from apps.attendance.models import ActivityLog
 
     try:
-        exception = ExceptionRecord.objects.get(pk=exception_id)
+        exception = ExceptionRecord.objects.select_related('student').get(pk=exception_id)
         exception.is_active = False
         exception.save(update_fields=['is_active'])
 

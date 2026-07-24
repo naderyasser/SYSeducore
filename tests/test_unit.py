@@ -577,8 +577,10 @@ class AccessControlTest(BaseTestMixin, TestCase):
         """Teacher role should be denied access to student creation."""
         self.client.login(username='teacher_test', password='TestPass123!')
         response = self.client.get(reverse('students:create'))
-        # supervisor_required uses user_passes_test → redirects to login
-        self.assertEqual(response.status_code, 302)
+        # supervisor_required returns a real 403 for an authenticated user
+        # with the wrong role (it used to redirect to login, which bounced
+        # straight back to the dashboard — a silent no-op).
+        self.assertEqual(response.status_code, 403)
 
     def test_admin_can_access_everything(self):
         self.client.login(username='admin_test', password='TestPass123!')
