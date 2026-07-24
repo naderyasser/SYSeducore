@@ -1,4 +1,8 @@
+from decimal import Decimal
+
 from django import forms
+from django.db import transaction
+
 from .models import Teacher, Group, Room, Subject, GroupSchedule
 
 
@@ -39,6 +43,35 @@ class TeacherForm(forms.ModelForm):
         self.fields['specialization'].required = False
         if self.instance and self.instance.pk:
             self.fields['subjects'].initial = self.instance.subjects.all()
+
+    def clean_email(self):
+        """
+        البريد الإلكتروني حقل اختياري.
+
+        ``Teacher.email`` is ``unique=True``, and Django form fields clean an
+        empty input to ``''`` — not ``None``. Storing ``''`` means the *second*
+        teacher left without an email collides with the first and the save dies
+        with an ``IntegrityError``. Normalise blank to ``NULL``, which a unique
+        index does not constrain.
+        """
+        email = (self.cleaned_data.get('email') or '').strip()
+        if not email:
+            return None
+
+        # ``Teacher.objects`` hides soft-deleted rows, so ModelForm's own
+        # uniqueness check cannot see a deleted teacher still holding this
+        # address — the save would then fail with a raw IntegrityError.
+        clash = Teacher.all_objects.filter(email__iexact=email)
+        if self.instance and self.instance.pk:
+            clash = clash.exclude(pk=self.instance.pk)
+        clash = clash.first()
+        if clash is not None:
+            if clash.deleted_at is not None:
+                raise forms.ValidationError(
+                    'هذا البريد الإلكتروني مستخدم بواسطة مدرس محذوف موجود في سلة المهملات'
+                )
+            raise forms.ValidationError('هذا البريد الإلكتروني مستخدم بالفعل')
+        return email
 
     def save(self, commit=True):
         teacher = super().save(commit=commit)
@@ -83,8 +116,14 @@ class GroupForm(forms.ModelForm):
             'gender_type': forms.Select(attrs={'class': 'form-select'}),
             'education_stage': forms.Select(attrs={'class': 'form-select'}),
             'education_year': forms.Select(attrs={'class': 'form-select'}),
-            'standard_fee': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': 'السعر'}),
-            'center_percentage': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '30'}),
+            'standard_fee': forms.NumberInput(attrs={
+                'class': 'form-control', 'placeholder': 'السعر',
+                'min': '0', 'step': '0.01',
+            }),
+            'center_percentage': forms.NumberInput(attrs={
+                'class': 'form-control', 'placeholder': '30',
+                'min': '0', 'max': '100', 'step': '0.01',
+            }),
             'sessions_per_month': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '4', 'min': '1'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
@@ -97,34 +136,75 @@ class GroupForm(forms.ModelForm):
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
 
+    def clean_standard_fee(self):
+        """السعر القياسي لا يمكن أن يكون بالسالب"""
+        fee = self.cleaned_data.get('standard_fee')
+        if fee is not None and fee < 0:
+            raise forms.ValidationError('السعر القياسي لا يمكن أن يكون رقماً سالباً')
+        return fee
+
+    def clean_center_percentage(self):
+        """نسبة السنتر يجب أن تكون بين 0 و 100"""
+        percentage = self.cleaned_data.get('center_percentage')
+        if percentage is not None and not (Decimal('0') <= percentage <= Decimal('100')):
+            raise forms.ValidationError('نسبة السنتر يجب أن تكون بين 0 و 100')
+        return percentage
+
+    def clean_duration_minutes(self):
+        """مدة الحصة يجب أن تكون أكبر من صفر"""
+        duration = self.cleaned_data.get('duration_minutes')
+        if duration is not None and duration < 1:
+            raise forms.ValidationError('مدة الحصة يجب أن تكون دقيقة واحدة على الأقل')
+        return duration
+
+    def clean_sessions_per_month(self):
+        """عدد الحصص في الشهر يجب أن يكون حصة واحدة على الأقل"""
+        sessions = self.cleaned_data.get('sessions_per_month')
+        if sessions is not None and sessions < 1:
+            raise forms.ValidationError('عدد الحصص في الشهر يجب أن يكون 1 على الأقل')
+        return sessions
+
+    @transaction.atomic
     def save_with_schedules(self, schedule_data, commit=True):
         """
-        Save group and create/update GroupSchedule records.
-        schedule_data: list of dicts [{'day': 'Saturday', 'time': time_obj, 'duration': 120}, ...]
+        Save the group and rebuild its ``GroupSchedule`` rows.
+
+        ``schedule_data``: ``[{'day': 'Saturday', 'time': time_obj, 'duration': 120}, ...]``
+
+        Two things this method has to get right:
+
+        * **Atomicity** — the old schedules are deleted before the new ones are
+          written. Without a transaction a failure part-way through (an overlap,
+          a duplicated day) left the group with *no* schedule at all.
+        * **Validation** — ``objects.create()`` never calls ``full_clean()``, so
+          ``GroupSchedule.clean``'s room-overlap check was dead code and
+          double-booked rooms were accepted silently.
         """
         group = super().save(commit=False)
 
-        # Set legacy fields from schedule data BEFORE save (model requires them)
-        if schedule_data:
-            first = schedule_data[0]
-            group.schedule_day = first['day']
-            group.schedule_time = first['time']
-            group.duration_minutes = first.get('duration', group.duration_minutes or 120)
+        # Legacy columns still feed consumers outside this app; keep them
+        # pointing at the first session. GroupSchedule remains the source of truth.
+        group.sync_legacy_schedule_fields(schedule_data)
 
-        if commit:
-            group.save()
+        if not commit:
+            return group
 
-            # Clear old schedules and create new ones
-            GroupSchedule.objects.filter(group=group).delete()
-            for entry in schedule_data:
-                GroupSchedule.objects.create(
-                    group=group,
-                    day_of_week=entry['day'],
-                    start_time=entry['time'],
-                    duration=entry.get('duration', group.duration_minutes),
-                )
+        group.save()
+
+        # Clear old schedules and create new ones
+        GroupSchedule.objects.filter(group=group).delete()
+        for entry in schedule_data:
+            schedule = GroupSchedule(
+                group=group,
+                day_of_week=entry['day'],
+                start_time=entry['time'],
+                duration=entry.get('duration') or group.duration_minutes,
+            )
+            schedule.full_clean()
+            schedule.save()
 
         return group
+
 
 class SubjectForm(forms.ModelForm):
     """
@@ -144,14 +224,26 @@ class SubjectForm(forms.ModelForm):
         }
 
     def clean(self):
-        """Validate that the (name, education_stage) combination is unique"""
+        """
+        Validate that the ``(name, education_stage)`` combination is unique.
+
+        The check runs against ``all_objects``: the pair is unique at the
+        database level, so a *soft-deleted* subject still occupies the name and
+        recreating it would fail with a raw ``IntegrityError`` instead of a
+        readable form error.
+        """
         cleaned_data = super().clean()
         name = cleaned_data.get('name')
         education_stage = cleaned_data.get('education_stage', '')
         if name:
-            queryset = Subject.objects.filter(name=name, education_stage=education_stage)
+            queryset = Subject.all_objects.filter(name=name, education_stage=education_stage)
             if self.instance.pk:
                 queryset = queryset.exclude(pk=self.instance.pk)
-            if queryset.exists():
+            existing = queryset.first()
+            if existing is not None:
+                if existing.deleted_at is not None:
+                    raise forms.ValidationError(
+                        'هذه المادة موجودة في سلة المهملات لنفس المرحلة الدراسية — يمكن استعادتها بدلاً من إضافتها من جديد'
+                    )
                 raise forms.ValidationError('هذه المادة موجودة بالفعل لنفس المرحلة الدراسية')
         return cleaned_data

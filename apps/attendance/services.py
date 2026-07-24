@@ -1,19 +1,22 @@
 import logging
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
+
 from .models import Attendance, Session
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.payments.models import Payment
-from apps.teachers.models import GroupSchedule
+from apps.teachers.models import WEEK_DAYS_AR
 
 logger = logging.getLogger('attendance')
 
-# Arabic day names for user-facing messages
-DAY_NAMES_AR = {
-    'Saturday': 'السبت', 'Sunday': 'الأحد', 'Monday': 'الاثنين',
-    'Tuesday': 'الثلاثاء', 'Wednesday': 'الأربعاء',
-    'Thursday': 'الخميس', 'Friday': 'الجمعة',
-}
+# Arabic day names for user-facing messages.
+# ``apps.teachers`` owns the canonical map; aliased here because this module's
+# name for it is part of its own (widely imported) surface.
+DAY_NAMES_AR = WEEK_DAYS_AR
 
 # Maps error_type → UI severity for the frontend card color
 SEVERITY_MAP = {
@@ -32,27 +35,43 @@ SEVERITY_MAP = {
 }
 
 
+def get_local_tz():
+    """The centre's timezone as a stdlib :class:`~zoneinfo.ZoneInfo`."""
+    return ZoneInfo(settings.TIME_ZONE)
+
+
+def local_datetime(day, clock_time):
+    """Combine a date and a naive time into an aware local datetime."""
+    return datetime.combine(day, clock_time, tzinfo=get_local_tz())
+
+
 def _calculate_age(dob):
     """Calculate age from date of birth."""
     if not dob:
         return None
-    today = timezone.localtime().date()
+    today = timezone.localdate()
     return today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
 
 def _count_overdue_months(student):
-    """Count months with unpaid/partial payment before current month."""
-    current_month = timezone.localtime().date().replace(day=1)
+    """
+    Number of distinct months (before the current one) the student still owes
+    money for.
+
+    Counting payment *rows* made a student enrolled in three groups with one
+    unpaid month look three months overdue in the scanner dossier.
+    """
+    current_month = timezone.localdate().replace(day=1)
     return Payment.objects.filter(
         student=student,
         month__lt=current_month,
         status__in=['unpaid', 'partial'],
-    ).count()
+    ).values('month').distinct().count()
 
 
 def _count_last_month_attendance(student):
     """Count attendance records from last month."""
-    now = timezone.localtime().date()
+    now = timezone.localdate()
     first_of_current = now.replace(day=1)
     last_month_end = first_of_current - timedelta(days=1)
     last_month_start = last_month_end.replace(day=1)
@@ -64,12 +83,19 @@ def _count_last_month_attendance(student):
 
 
 def _calculate_attendance_rate(student):
-    """Percentage of sessions attended this month out of sessions that occurred."""
-    now = timezone.localtime().date()
+    """
+    Percentage of sessions attended this month out of the sessions that
+    actually took place in the groups the student is enrolled in.
+
+    Numerator and denominator must describe the *same* set of sessions:
+    counting attendance across every group the student ever attended, with no
+    upper date bound, produced rates above 100%.
+    """
+    now = timezone.localdate()
     current_month = now.replace(day=1)
-    enrolled_group_ids = student.group_enrollments.filter(
-        is_active=True
-    ).values_list('group_id', flat=True)
+    enrolled_group_ids = list(
+        student.group_enrollments.filter(is_active=True).values_list('group_id', flat=True)
+    )
     total_sessions = Session.objects.filter(
         group_id__in=enrolled_group_ids,
         session_date__gte=current_month,
@@ -79,10 +105,12 @@ def _calculate_attendance_rate(student):
         return None
     attended = Attendance.objects.filter(
         student=student,
+        session__group_id__in=enrolled_group_ids,
         session__session_date__gte=current_month,
+        session__session_date__lte=now,
         status__in=['present', 'late'],
     ).count()
-    return round((attended / total_sessions) * 100, 1)
+    return min(round((attended / total_sessions) * 100, 1), 100.0)
 
 
 class AttendanceService:
@@ -104,20 +132,17 @@ class AttendanceService:
         - هل دفع الشهر الجديد؟
         - هل عليه متأخرات؟
         """
-        current_month = timezone.localtime().date().replace(day=1)
+        current_month = timezone.localdate().replace(day=1)
 
-        # Check current month payment — auto-create if missing so the
-        # scanner always has a Payment row to evaluate.
-        current_payment, _created = Payment.objects.get_or_create(
+        # Read-only: this is a status *probe* run on every scan (including for
+        # exempt students), so it must never create a Payment row as a side
+        # effect. A missing row simply means "nothing recorded yet" = unpaid.
+        current_payment = Payment.objects.filter(
             student=student,
             group=group,
             month=current_month,
-            defaults={
-                'amount_due': student.get_monthly_fee_for_group(group),
-                'status': 'unpaid',
-            },
-        )
-        has_paid_current = current_payment.status == 'paid'
+        ).first()
+        has_paid_current = bool(current_payment and current_payment.status == 'paid')
 
         # Check arrears (unpaid previous months)
         arrears = Payment.objects.filter(
@@ -188,7 +213,7 @@ class AttendanceService:
         # الخطوة 1: التعريف - جلب الطالب
         # ========================================
         try:
-            student = Student.objects.prefetch_related('groups').get(
+            student = Student.objects.get(
                 student_code=student_code,
                 is_active=True
             )
@@ -200,8 +225,15 @@ class AttendanceService:
                 'severity': 'error',
             }
 
-        # Build dossier ONCE — included in every subsequent response
-        dossier = AttendanceService.build_student_dossier(student)
+        # The dossier costs a handful of queries (enrollments, payments,
+        # monthly stats). Build it lazily and at most once: every response
+        # below that needs it asks for it, nothing pays for it up front.
+        dossier_cache = {}
+
+        def dossier():
+            if 'value' not in dossier_cache:
+                dossier_cache['value'] = AttendanceService.build_student_dossier(student)
+            return dossier_cache['value']
 
         # ========================================
         # الخطوة 1.5: التحقق من صلاحية الاشتراك
@@ -217,7 +249,7 @@ class AttendanceService:
                 'severity': 'error',
                 'student_name': student.full_name,
                 'subscription_status': subscription_status,
-                'dossier': dossier,
+                'dossier': dossier(),
             }
 
         # ========================================
@@ -226,17 +258,15 @@ class AttendanceService:
         # ========================================
         current_time = timezone.now()
         current_day_name = AttendanceService.get_current_day_name()
-
-        from django.conf import settings
-        import pytz
-        local_tz = pytz.timezone(settings.TIME_ZONE)
-        current_time_local = current_time.astimezone(local_tz)
+        current_time_local = timezone.localtime(current_time)
 
         # جلب كل المجموعات المسجل فيها الطالب
+        # ``group__schedules`` is prefetched so the schedule lookup below costs
+        # one query for the whole scan instead of one per group.
         enrollments = StudentGroupEnrollment.objects.filter(
             student=student,
             is_active=True
-        ).select_related('group')
+        ).select_related('group', 'group__teacher').prefetch_related('group__schedules')
 
         # جمع كل المجموعات المطابقة للجدول الآن
         matching_entries = []  # list of (group, enrollment, schedule_dict)
@@ -244,24 +274,17 @@ class AttendanceService:
         for enr in enrollments:
             group = enr.group
 
-            # Try GroupSchedule first
-            try:
-                schedule = GroupSchedule.objects.get(group=group, day_of_week=current_day_name)
-                schedule_time = schedule.start_time
-                duration = schedule.duration
-            except GroupSchedule.DoesNotExist:
-                # Fallback to legacy fields
-                if group.schedule_day != current_day_name:
-                    continue
-                schedule_time = group.schedule_time
-                duration = group.duration_minutes
-
-            if not schedule_time:
+            # GroupSchedule is the single source of truth; groups that still
+            # only have the legacy schedule_day/schedule_time columns are
+            # covered by the same helper.
+            entry = group.get_schedule_for_day(current_day_name)
+            if entry is None or not entry.start_time:
                 continue
 
-            session_start = local_tz.localize(
-                datetime.combine(current_time_local.date(), schedule_time)
-            )
+            schedule_time = entry.start_time
+            duration = entry.duration or 120
+
+            session_start = local_datetime(current_time_local.date(), schedule_time)
             session_end = session_start + timedelta(minutes=duration)
             early_window = session_start - timedelta(minutes=AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES)
 
@@ -271,7 +294,7 @@ class AttendanceService:
 
         if not matching_entries:
             rejection = AttendanceService._build_schedule_rejection(
-                student, enrollments, current_day_name, current_time_local, local_tz
+                student, enrollments, current_day_name, current_time_local
             )
             result = {
                 'success': False,
@@ -280,7 +303,7 @@ class AttendanceService:
                 'error_type': rejection['type'],
                 'severity': SEVERITY_MAP.get(rejection['type'], 'error'),
                 'student_name': student.full_name,
-                'dossier': dossier,
+                'dossier': dossier(),
             }
             # Also check financial status so scanner can show action buttons
             # even when student doesn't have a session today
@@ -346,25 +369,32 @@ class AttendanceService:
                 continue
 
             # التسجيل النهائي — get_or_create للحصة
-            session, _ = Session.objects.get_or_create(
-                group=matching_group,
-                session_date=timezone.localtime().date(),
-                defaults={'teacher_attended': False}
-            )
+            # One atomic block per group: the session row, the attendance row
+            # and the payment session counter must land together, and two
+            # supervisors scanning the same card at once must not leave a
+            # half-written group behind when they race on unique_together.
+            with transaction.atomic():
+                session, _ = Session.objects.get_or_create(
+                    group=matching_group,
+                    session_date=timezone.localdate(),
+                    defaults={'teacher_attended': False}
+                )
 
-            # Bug 1 fix: use get_or_create — repeat scan = success, not error
-            attendance, created = Attendance.objects.get_or_create(
-                student=student,
-                session=session,
-                defaults={
-                    'scan_time': timezone.now(),
-                    'status': time_check['status'],
-                    'supervisor': supervisor,
-                }
-            )
+                # Bug 1 fix: use get_or_create — repeat scan = success, not error
+                attendance, created = Attendance.objects.get_or_create(
+                    student=student,
+                    session=session,
+                    defaults={
+                        'scan_time': timezone.now(),
+                        'status': time_check['status'],
+                        'supervisor': supervisor,
+                    }
+                )
+
+                if created:
+                    AttendanceService.update_payment_sessions(student, matching_group)
 
             if created:
-                AttendanceService.update_payment_sessions(student, matching_group)
                 newly_registered.append({
                     'group_id': matching_group.group_id,
                     'group_name': matching_group.group_name,
@@ -414,7 +444,7 @@ class AttendanceService:
                 'severity': 'warning',
                 'student_name': student.full_name,
                 'skipped': skipped,
-                'dossier': dossier,
+                'dossier': dossier(),
             }
         else:
             return {
@@ -424,7 +454,7 @@ class AttendanceService:
                 'error_type': 'no_session',
                 'severity': 'info',
                 'student_name': student.full_name,
-                'dossier': dossier,
+                'dossier': dossier(),
             }
 
         # الرد الرئيسي (أول مجموعة مسجلة — للتوافق مع الواجهة القديمة)
@@ -462,11 +492,11 @@ class AttendanceService:
             'already_registered': already_registered,
             'skipped': skipped,
             'instant_status': combined_instant_status.get(first_result['group_name'], {}),
-            'dossier': dossier,
+            'dossier': dossier(),
         }
     
     @staticmethod
-    def _build_schedule_rejection(student, enrollments, current_day_name, now_local, local_tz):
+    def _build_schedule_rejection(student, enrollments, current_day_name, now_local):
         """
         Build a specific, actionable rejection message when no session matches.
         Distinguishes: no groups, wrong day, too early, too late (session ended).
@@ -474,36 +504,32 @@ class AttendanceService:
         name = student.full_name
         today_ar = DAY_NAMES_AR.get(current_day_name, current_day_name)
 
-        if not enrollments.exists():
+        enrollments = list(enrollments)
+        if not enrollments:
             return {
                 'type': 'no_groups',
                 'message': f'الطالب {name} غير مسجل في أي مجموعة نشطة',
             }
 
-        # Collect all groups and check which are today vs other days
+        # Collect all groups and check which are today vs other days.
+        # ``get_schedule_for_day`` reads GroupSchedule (all days) and falls back
+        # to the legacy columns, so a multi-day group is no longer reported
+        # under the wrong day.
         today_groups = []
-        other_groups = []
         for enr in enrollments:
             group = enr.group
-            # Check GroupSchedule first, then legacy field
-            try:
-                schedule = GroupSchedule.objects.get(group=group, day_of_week=current_day_name)
-                today_groups.append((group, schedule.start_time, schedule.duration))
-            except GroupSchedule.DoesNotExist:
-                if group.schedule_day == current_day_name and group.schedule_time:
-                    today_groups.append((group, group.schedule_time, group.duration_minutes or 120))
-                else:
-                    other_groups.append(group)
+            entry = group.get_schedule_for_day(current_day_name)
+            if entry and entry.start_time:
+                today_groups.append((group, entry.start_time, entry.duration or 120))
 
         if not today_groups:
-            # Student has groups but none scheduled today — show their schedule
+            # Student has groups but none scheduled today — show their full
+            # weekly schedule, every day of it, in Arabic.
             schedules = []
             for enr in enrollments:
                 g = enr.group
-                day_ar = DAY_NAMES_AR.get(g.schedule_day, g.schedule_day)
-                time_str = g.schedule_time.strftime('%I:%M %p') if g.schedule_time else ''
                 teacher = g.teacher.full_name if g.teacher else ''
-                label = f'{g.group_name} ({day_ar} {time_str}' + (f' - {teacher}' if teacher else '') + ')'
+                label = f'{g.group_name} ({g.get_schedule_display()}' + (f' - {teacher}' if teacher else '') + ')'
                 schedules.append(label)
             schedules_text = ' ، '.join(schedules)
             return {
@@ -517,9 +543,7 @@ class AttendanceService:
         most_recent_ended = None  # (group, mins_since, time_str)
 
         for group, sched_time, duration in today_groups:
-            session_start = local_tz.localize(
-                datetime.combine(now_local.date(), sched_time)
-            )
+            session_start = local_datetime(now_local.date(), sched_time)
             session_end = session_start + timedelta(minutes=duration)
             early_window = session_start - timedelta(minutes=AttendanceService.EARLY_ARRIVAL_LIMIT_MINUTES)
 
@@ -577,22 +601,20 @@ class AttendanceService:
 
         القواعد:
         - الوقت الفعلي مقارنة بالجدول الرسمي
-        - ≤10 دقائق: قبول (حاضر)
+        - في الموعد أو قبله: حاضر
+        - من دقيقة إلى 10 دقائق تأخير: قبول مع تسجيل "متأخر"
         - >10 دقائق: رفض كامل (BLOCK)
-        - لا يوجد "تأخير"، فقط قبول أو رفض
         - يراعي مدة الحصة (بعد انتهاء الحصة = رفض)
+
+        The 10-minute window used to be recorded as ``present`` as well, which
+        made the ``late`` status unreachable and left every "late" counter in
+        the dashboard, the reports and the CSV export permanently zero.
         """
         # تحويل scan_time إلى التوقيت المحلي للمقارنة مع schedule_time
-        from django.conf import settings
-        import pytz
-        
-        local_tz = pytz.timezone(settings.TIME_ZONE)
-        scan_time_local = scan_time.astimezone(local_tz)
-        
+        scan_time_local = scan_time.astimezone(get_local_tz())
+
         # إنشاء session_start في نفس التوقيت المحلي
-        session_start = local_tz.localize(
-            datetime.combine(scan_time_local.date(), schedule_time)
-        )
+        session_start = local_datetime(scan_time_local.date(), schedule_time)
         session_end = session_start + timedelta(minutes=duration_minutes)
 
         # حساب الفرق بالدقائق
@@ -623,11 +645,12 @@ class AttendanceService:
                 'error_type': 'too_late'
             }
 
-        # قبول: في الموعد أو في حدود الـ 10 دقائق
+        # قبول: في الموعد (حاضر) أو في حدود الـ 10 دقائق (متأخر)
+        minutes_late = max(0, int(diff_minutes))
         return {
             'allowed': True,
-            'status': 'present',  # لا يوجد late، فقط present
-            'minutes_late': max(0, int(diff_minutes))
+            'status': 'late' if minutes_late >= 1 else 'present',
+            'minutes_late': minutes_late,
         }
     
     @staticmethod
@@ -635,7 +658,7 @@ class AttendanceService:
         """
         تحديد هل هذا هو الشهر الأول للطالب في مجموعة معينة
         """
-        current_month = timezone.localtime().date().replace(day=1)
+        current_month = timezone.localdate().replace(day=1)
 
         # البحث عن أول حضور للطالب في هذه المجموعة
         first_attendance = Attendance.objects.filter(
@@ -647,8 +670,9 @@ class AttendanceService:
             # لم يسجل حضور من قبل في هذه المجموعة = شهر أول
             return True
 
-        # تاريخ أول حضور
-        first_month = first_attendance.scan_time.date().replace(day=1)
+        # تاريخ أول حضور — بالتوقيت المحلي: مسح بعد منتصف الليل بالقاهرة
+        # كان يُحسب على الشهر السابق فينقلب حكم "الشهر الأول".
+        first_month = timezone.localtime(first_attendance.scan_time).date().replace(day=1)
 
         # إذا كان أول حضور في نفس الشهر الحالي = شهر أول
         return first_month == current_month
@@ -680,7 +704,7 @@ class AttendanceService:
             return {'allowed': True, 'exempt': True}
 
         # الحصول على الشهر الحالي
-        current_month = timezone.localtime().date().replace(day=1)
+        current_month = timezone.localdate().replace(day=1)
 
         # عدد الحصص المسجلة هذا الشهر لهذه المجموعة فقط
         sessions_count = Attendance.objects.filter(
@@ -703,8 +727,10 @@ class AttendanceService:
             allowed_sessions = 2
 
         # التحقق من استنفاد الحصص الشهرية
-        sessions_limit = group.sessions_per_month
-        if sessions_count >= sessions_limit:
+        # sessions_per_month = 0 تعني "بدون حد" — قبل ذلك كان الشرط
+        # ``sessions_count >= 0`` صحيحاً دائماً فيُرفض كل طلاب المجموعة.
+        sessions_limit = group.sessions_per_month or 0
+        if sessions_limit > 0 and sessions_count >= sessions_limit:
             return {
                 'allowed': False,
                 'reason': f'تم استنفاد جميع الحصص ({sessions_limit} حصة) لهذا الشهر. يرجى تجديد الاشتراك.',
@@ -728,7 +754,7 @@ class AttendanceService:
                 }
 
             # ── Check grace period ──
-            today = timezone.localtime().date()
+            today = timezone.localdate()
             if enrollment.grace_until and enrollment.grace_until >= today:
                 return {
                     'allowed': True,
@@ -736,30 +762,31 @@ class AttendanceService:
                     'grace_until': enrollment.grace_until.isoformat(),
                 }
 
-            # get_or_create guarantees a Payment row exists for this
-            # student+group+month so the scanner never fails with a
-            # DoesNotExist just because no one opened the payment list.
-            payment, _p_created = Payment.objects.get_or_create(
+            # Read-only lookup: a *check* must not create billing rows. A
+            # missing row means nobody has invoiced this month yet, which is
+            # exactly "not paid". ``scanner_pay_now`` creates the row when the
+            # supervisor actually settles the debt.
+            payment = Payment.objects.filter(
                 student=student,
                 group=group,
                 month=current_month,
-                defaults={
-                    'amount_due': student.get_monthly_fee_for_group(group),
-                    'status': 'unpaid',
-                },
-            )
-            if payment.status != 'paid':
+            ).first()
+            if payment is None or payment.status != 'paid':
                 reason = 'ممنوع الدخول: الدفع مطلوب'
                 if is_first_month:
                     reason += ' (الشهر الأول)'
+                amount_due = (
+                    payment.amount_due if payment is not None
+                    else student.get_monthly_fee_for_group(group)
+                )
                 return {
                     'allowed': False,
                     'reason': reason,
                     'error_type': 'payment_required',
-                    'payment_id': payment.payment_id,
+                    'payment_id': payment.payment_id if payment is not None else None,
                     'student_id': student.student_id,
                     'group_id': group.group_id,
-                    'amount_due': float(payment.amount_due),
+                    'amount_due': float(amount_due),
                 }
 
         return {'allowed': True}
@@ -774,7 +801,7 @@ class AttendanceService:
         the time check (late-arrival exception).
         """
         from .models import ExceptionRecord
-        today = timezone.localtime().date()
+        today = timezone.localdate()
 
         exception = ExceptionRecord.objects.filter(
             student=student,
@@ -816,18 +843,30 @@ class AttendanceService:
         بناء ملف الطالب الشامل — يُعرض بعد كل مسح ناجح
         يشمل: البيانات الشخصية، المجموعات، حالة الدفع، إحصائيات الحضور
         """
-        now = timezone.localtime()
-        current_month = now.date().replace(day=1)
+        current_month = timezone.localdate().replace(day=1)
+
+        enrollments = list(
+            student.group_enrollments.filter(is_active=True)
+            .select_related('group', 'group__teacher')
+            .prefetch_related('group__schedules')
+        )
+
+        # مدفوعات الشهر الحالي لكل المجموعات في استعلام واحد
+        # (كان استعلاماً لكل مجموعة داخل الحلقة)
+        payments_by_group = {
+            p.group_id: p
+            for p in Payment.objects.filter(
+                student=student,
+                group_id__in=[enr.group_id for enr in enrollments],
+                month=current_month,
+            )
+        }
 
         # كل التسجيلات النشطة مع معلومات الدفع للشهر الحالي
         enrollments_data = []
-        for enr in student.group_enrollments.filter(
-            is_active=True
-        ).select_related('group', 'group__teacher'):
+        for enr in enrollments:
             group = enr.group
-            payment = Payment.objects.filter(
-                student=student, group=group, month=current_month
-            ).first()
+            payment = payments_by_group.get(group.pk)
 
             if enr.financial_status == 'exempt':
                 pay_status = 'exempt'
@@ -849,22 +888,30 @@ class AttendanceService:
                 amount_paid = 0.0
                 remaining = float(fee)
 
-            # معلومات الجدول
-            schedule_str = '-'
-            if group.schedule_time:
-                day_display = dict(group.SCHEDULE_DAY_CHOICES).get(
-                    group.schedule_day, group.schedule_day
-                ) if hasattr(group, 'SCHEDULE_DAY_CHOICES') else group.schedule_day
-                schedule_str = f"{day_display} {group.schedule_time.strftime('%I:%M %p')}"
+            # معلومات الجدول — كل أيام المجموعة بالعربية.
+            # الكود القديم كان يفحص ``SCHEDULE_DAY_CHOICES`` وهو اسم غير موجود
+            # (الصحيح ``DAYS_CHOICES``) فكان الفرع لا يعمل أبداً وتظهر
+            # أسماء الأيام بالإنجليزية في ملف الطالب.
+            entries = group.get_schedule_entries()
+            schedule_str = group.get_schedule_display() if entries else '-'
+            first_entry = entries[0] if entries else None
 
             enrollments_data.append({
                 'group_id': group.group_id,
                 'group_name': group.group_name,
                 'teacher_name': group.teacher.full_name if group.teacher else '—',
                 'schedule': schedule_str,
-                'schedule_day_en': group.schedule_day,
-                'schedule_day_ar': DAY_NAMES_AR.get(group.schedule_day, group.schedule_day),
-                'schedule_time': group.schedule_time.strftime('%H:%M') if group.schedule_time else '',
+                'schedule_day_en': first_entry.day_of_week if first_entry else '',
+                'schedule_day_ar': first_entry.get_day_display() if first_entry else '',
+                'schedule_time': first_entry.start_time.strftime('%H:%M') if first_entry else '',
+                'schedule_days': [
+                    {
+                        'day_en': e.day_of_week,
+                        'day_ar': e.get_day_display(),
+                        'time': e.start_time.strftime('%H:%M'),
+                    }
+                    for e in entries
+                ],
                 'financial_status': enr.get_financial_status_display(),
                 'financial_status_code': enr.financial_status,
                 'payment': {
@@ -942,7 +989,7 @@ class AttendanceService:
 
         Total sessions: sum of present + late + absent + exception.
         """
-        current_month = timezone.localtime().date().replace(day=1)
+        current_month = timezone.localdate().replace(day=1)
 
         sessions_count = Attendance.objects.filter(
             student=student,
@@ -965,40 +1012,8 @@ class AttendanceService:
             payment.sessions_attended = sessions_count
             payment.save(update_fields=['sessions_attended'])
 
-    @staticmethod
-    def update_billing_cycle(student, group):
-        """
-        Check whether the billing cycle for this student+group is complete.
-        If all sessions for the cycle have been used (attended + absent),
-        mark the payment as billing_cycle_completed.
-
-        Also updates StudentGroupEnrollment cycle dates.
-        """
-        from apps.students.models import StudentGroupEnrollment
-
-        current_month = timezone.localtime().date().replace(day=1)
-
-        try:
-            enrollment = StudentGroupEnrollment.objects.get(
-                student=student, group=group, is_active=True,
-            )
-        except StudentGroupEnrollment.DoesNotExist:
-            return
-
-        sessions_per_cycle = enrollment.sessions_per_cycle or group.sessions_per_month
-        if sessions_per_cycle <= 0:
-            sessions_per_cycle = group.sessions_per_month or 4
-
-        sessions_count = Attendance.objects.filter(
-            student=student,
-            session__group=group,
-            session__session_date__gte=(enrollment.cycle_start_date or current_month),
-        ).count()
-
-        if sessions_count >= sessions_per_cycle:
-            payment = Payment.objects.filter(
-                student=student, group=group, month=current_month,
-            ).first()
-            if payment and not payment.billing_cycle_completed:
-                payment.billing_cycle_completed = True
-                payment.save(update_fields=['billing_cycle_completed'])
+    # ``update_billing_cycle`` used to live here. It was never called by
+    # anything and diverged from ``apps.attendance.tasks.check_billing_cycles``
+    # (which reimplemented the same rule with different queries and, unlike
+    # this copy, also rolled the next month's Payment). The Celery task is now
+    # the single implementation of billing-cycle completion.

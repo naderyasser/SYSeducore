@@ -80,7 +80,7 @@ class AttendanceServiceStrictTest(TestCase):
         self.assertEqual(result['status'], 'present')
 
     def test_check_strict_time_5_minutes_late(self):
-        """اختبار: تأخر 5 دقائق (9:05) - قبول"""
+        """اختبار: تأخر 5 دقائق (9:05) - قبول مع تسجيل 'متأخر'"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 5))
@@ -88,10 +88,11 @@ class AttendanceServiceStrictTest(TestCase):
 
         result = AttendanceService.check_strict_time(scan_time, schedule_time)
         self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'present')
+        self.assertEqual(result['status'], 'late')
+        self.assertEqual(result['minutes_late'], 5)
 
     def test_check_strict_time_exactly_10_minutes(self):
-        """اختبار: تأخر بالظبط 10 دقائق (9:10) - قبول"""
+        """اختبار: تأخر بالظبط 10 دقائق (9:10) - قبول مع تسجيل 'متأخر'"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 10))
@@ -99,7 +100,7 @@ class AttendanceServiceStrictTest(TestCase):
 
         result = AttendanceService.check_strict_time(scan_time, schedule_time)
         self.assertTrue(result['allowed'])
-        self.assertEqual(result['status'], 'present')
+        self.assertEqual(result['status'], 'late')
 
     def test_check_strict_time_11_minutes_late_block(self):
         """اختبار: تأخر 11 دقيقة (9:11) - رفض كامل ⚠️"""
@@ -385,16 +386,17 @@ class TimezoneLocalDayNameTest(TestCase):
     def test_get_current_day_name_uses_localtime(self):
         """get_current_day_name should return the local (Cairo) day name, not UTC."""
         from unittest.mock import patch
-        import pytz
+        from datetime import timezone as dt_timezone
+        from zoneinfo import ZoneInfo
 
-        cairo_tz = pytz.timezone('Africa/Cairo')
+        cairo_tz = ZoneInfo('Africa/Cairo')
 
         # Simulate 00:30 Cairo time on a Saturday = Friday 22:30 UTC
         # Cairo Saturday 00:30 → UTC Friday 22:30
-        cairo_saturday_0030 = cairo_tz.localize(
-            datetime(2026, 4, 18, 0, 30)  # Saturday in Cairo
+        cairo_saturday_0030 = datetime(
+            2026, 4, 18, 0, 30, tzinfo=cairo_tz  # Saturday in Cairo
         )
-        utc_equivalent = cairo_saturday_0030.astimezone(pytz.utc)
+        utc_equivalent = cairo_saturday_0030.astimezone(dt_timezone.utc)
 
         with patch('apps.attendance.services.timezone.localtime') as mock_localtime:
             mock_localtime.return_value = cairo_saturday_0030
@@ -674,10 +676,6 @@ class DossierTest(TestCase):
     def test_dossier_included_in_scan_result(self):
         """Successful scan must include 'dossier' key in result."""
         from unittest.mock import patch
-        from datetime import time as dtime
-        import pytz
-        from django.conf import settings
-        local_tz = pytz.timezone(settings.TIME_ZONE)
         now_local = timezone.localtime()
         # Simulate scan at 10:05 on a Sunday
         fake_day = 'Sunday'
@@ -1069,8 +1067,12 @@ class ScannerGracePeriodTest(TestCase):
 
         self.assertEqual(resp.status_code, 404)
 
-    def test_grace_period_reactivates_inactive_enrollment(self):
-        """Grace period should also reactivate inactive enrollments."""
+    def test_grace_period_does_not_reactivate_removed_enrollment(self):
+        """
+        AUTH-03: granting a payment grace period must NOT silently put the
+        student back into groups the desk removed them from. It used to
+        reactivate every inactive enrollment the student ever had.
+        """
         self.enrollment.is_active = False
         self.enrollment.save()
 
@@ -1085,8 +1087,34 @@ class ScannerGracePeriodTest(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.enrollment.refresh_from_db()
-        self.assertTrue(self.enrollment.is_active)
-        self.assertIsNotNone(self.enrollment.grace_until)
+        self.assertFalse(self.enrollment.is_active)
+        self.assertIsNone(self.enrollment.grace_until)
+
+    def test_grace_period_rejects_teacher_role(self):
+        """AUTH-03: a teacher-role account must not be able to grant grace."""
+        User.objects.create_user(
+            username='teacher_grace', password='testpass123', role='teacher'
+        )
+        client = Client()
+        client.login(username='teacher_grace', password='testpass123')
+
+        resp = client.post(
+            reverse('attendance:scanner_grace_period'),
+            data=json.dumps({'student_id': self.student.student_id, 'days': 3}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+        self.enrollment.refresh_from_db()
+        self.assertIsNone(self.enrollment.grace_until)
+
+    def test_grace_period_rejects_absurd_day_count(self):
+        """Day count is validated instead of being trusted from the request."""
+        resp = self.client.post(
+            reverse('attendance:scanner_grace_period'),
+            data=json.dumps({'student_id': self.student.student_id, 'days': 3650}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 400)
 
 
 class GracePeriodFinancialCheckTest(TestCase):

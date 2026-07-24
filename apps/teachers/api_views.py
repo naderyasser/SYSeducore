@@ -1,14 +1,72 @@
+"""
+Room APIs for the booking screens.
+
+Two things every view here has in common:
+
+* **Capacity is per session.** A room that seats 30 seats 30 students *in each
+  session*, not 30 spread over the whole week. Summing enrolments across every
+  group in a room reported a room used by five groups as 5× over capacity.
+* **``GroupSchedule`` is the source of truth for the timetable.** A group may
+  meet on several days with a different time each day; the legacy
+  ``Group.schedule_day``/``schedule_time`` columns only ever describe the first.
+"""
+import json
+import logging
+from datetime import datetime
+
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
-from apps.accounts.decorators import ajax_login_required
-from django.db.models import Count, Q
-from django.utils import timezone
-from datetime import datetime, timedelta
-import json
 
-from .models import Room, Group, Teacher
-from apps.students.models import Student, StudentGroupEnrollment
+from apps.accounts.decorators import ajax_login_required
+from apps.students.models import StudentGroupEnrollment
+
+from .models import (
+    WEEK_DAYS,
+    WEEK_DAYS_AR,
+    Group,
+    Room,
+    find_room_conflicts,
+    room_schedule_entries,
+    room_week_entries,
+)
+
+logger = logging.getLogger(__name__)
+
+#: Returned instead of ``str(exception)`` — raw exception text leaks model
+#: names, SQL fragments and file paths to the browser.
+GENERIC_ERROR_MESSAGE = 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى'
+
+
+def _server_error(context, exc):
+    logger.exception('%s failed: %s', context, exc)
+    return JsonResponse({'success': False, 'error': GENERIC_ERROR_MESSAGE}, status=500)
+
+
+def _active_groups(room):
+    """Active groups of ``room``, with their enrolment count annotated."""
+    return list(
+        room.groups.filter(is_active=True)
+        .select_related('teacher', 'room')
+        .prefetch_related('schedules')
+        .annotate(
+            students_count=Count(
+                'studentgroupenrollment',
+                filter=Q(studentgroupenrollment__is_active=True),
+                distinct=True,
+            )
+        )
+        .order_by('group_name')
+    )
+
+
+def _peak_usage(groups):
+    """Largest single session in the room — what its capacity actually limits."""
+    return max((group.students_count for group in groups), default=0)
+
+
+def _occupancy(peak, capacity):
+    return round((peak / capacity * 100) if capacity > 0 else 0, 1)
 
 
 @ajax_login_required
@@ -17,63 +75,44 @@ def room_list_api(request):
     API Endpoint: قائمة بجميع القاعات مع معلومات إضافية
     """
     try:
-        rooms = Room.objects.filter(is_active=True).annotate(
-            groups_count=Count('groups', filter=Q(groups__is_active=True))
-        ).prefetch_related('groups__teacher')
+        rooms = Room.objects.filter(is_active=True).order_by('name')
 
         rooms_data = []
         for room in rooms:
-            # جلب المجموعات النشطة في القاعة
-            active_groups = room.groups.filter(is_active=True)
+            groups = _active_groups(room)
+            peak = _peak_usage(groups)
 
-            # حساب السعة المستخدمة
-            total_capacity_used = 0
             groups_list = []
-
-            for group in active_groups:
-                # عدد الطلاب المسجلين في المجموعة
-                students_count = StudentGroupEnrollment.objects.filter(
-                    group=group,
-                    is_active=True
-                ).count()
-
-                total_capacity_used += students_count
-
+            for entry in room_schedule_entries(room, groups=groups):
+                students_count = entry.group.students_count
                 groups_list.append({
-                    'id': group.group_id,
-                    'name': group.group_name,
-                    'teacher': group.teacher.full_name if group.teacher else '-',
-                    'day': group.get_schedule_day_display(),
-                    'time': group.schedule_time.strftime('%I:%M %p'),
+                    'id': entry.group_id,
+                    'name': entry.group_name,
+                    'teacher': entry.teacher.full_name if entry.teacher else '-',
+                    'day': entry.get_day_display(),
+                    'time': entry.start_time.strftime('%I:%M %p'),
                     'students_count': students_count,
-                    'is_full': students_count >= room.capacity
+                    'is_full': students_count >= room.capacity,
                 })
-
-            # حساب نسبة الامتلاء
-            occupancy_rate = (total_capacity_used / room.capacity * 100) if room.capacity > 0 else 0
 
             rooms_data.append({
                 'id': room.room_id,
                 'name': room.name,
                 'capacity': room.capacity,
-                'capacity_used': total_capacity_used,
-                'capacity_available': room.capacity - total_capacity_used,
-                'occupancy_rate': round(occupancy_rate, 1),
-                'groups_count': active_groups.count(),
+                # per-session usage, not the sum across the week
+                'capacity_used': peak,
+                'capacity_available': max(room.capacity - peak, 0),
+                'occupancy_rate': _occupancy(peak, room.capacity),
+                'groups_count': len(groups),
+                'sessions_per_week': len(groups_list),
                 'is_active': room.is_active,
-                'groups': groups_list
+                'groups': groups_list,
             })
 
-        return JsonResponse({
-            'success': True,
-            'rooms': rooms_data
-        })
+        return JsonResponse({'success': True, 'rooms': rooms_data})
 
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    except Exception as exc:
+        return _server_error('room_list_api', exc)
 
 
 @ajax_login_required
@@ -82,47 +121,31 @@ def room_detail_api(request, room_id):
     API Endpoint: تفاصيل قاعة محددة مع جدولها الكامل
     """
     try:
-        room = Room.objects.get(pk=room_id, is_active=True)
+        room = Room.objects.filter(pk=room_id, is_active=True).first()
+        if room is None:
+            return JsonResponse({'success': False, 'error': 'القاعة غير موجودة'}, status=404)
 
-        # جلب المجموعات النشطة
-        active_groups = room.groups.filter(is_active=True).select_related('teacher')
+        groups = _active_groups(room)
+        peak = _peak_usage(groups)
 
-        # جلب الجدول الأسبوعي للقاعة
-        DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         schedule = {}
-
-        for day in DAYS:
-            day_groups = active_groups.filter(schedule_day=day)
-            if day_groups.exists():
-                schedule[day] = []
-                for group in day_groups.order_by('schedule_time'):
-                    students_count = StudentGroupEnrollment.objects.filter(
-                        group=group,
-                        is_active=True
-                    ).count()
-
-                    schedule[day].append({
-                        'id': group.group_id,
-                        'name': group.group_name,
-                        'teacher': group.teacher.full_name if group.teacher else '-',
-                        'time': group.schedule_time.strftime('%I:%M %p'),
-                        'time_end': group.get_end_time().strftime('%I:%M %p'),
-                        'duration': group.get_duration_display(),
-                        'students_count': students_count,
-                        'fee': float(group.standard_fee),
-                        'is_full': students_count >= room.capacity
-                    })
-
-        # حساب إحصائيات القاعة
-        total_students = 0
-        for group in active_groups:
-            total_students += StudentGroupEnrollment.objects.filter(
-                group=group,
-                is_active=True
-            ).count()
-
-        # الحصص في الأسبوع
-        sessions_per_week = active_groups.count()
+        sessions_per_week = 0
+        for day, entries in room_week_entries(room, groups=groups).items():
+            sessions_per_week += len(entries)
+            schedule[day] = [
+                {
+                    'id': entry.group_id,
+                    'name': entry.group_name,
+                    'teacher': entry.teacher.full_name if entry.teacher else '-',
+                    'time': entry.start_time.strftime('%I:%M %p'),
+                    'time_end': entry.get_end_time().strftime('%I:%M %p'),
+                    'duration': entry.get_duration_display(),
+                    'students_count': entry.group.students_count,
+                    'fee': float(entry.group.standard_fee),
+                    'is_full': entry.group.students_count >= room.capacity,
+                }
+                for entry in entries
+            ]
 
         return JsonResponse({
             'success': True,
@@ -130,36 +153,36 @@ def room_detail_api(request, room_id):
                 'id': room.room_id,
                 'name': room.name,
                 'capacity': room.capacity,
-                'capacity_used': total_students,
-                'capacity_available': room.capacity - total_students,
-                'occupancy_rate': round((total_students / room.capacity * 100) if room.capacity > 0 else 0, 1),
-                'groups_count': active_groups.count(),
+                'capacity_used': peak,
+                'capacity_available': max(room.capacity - peak, 0),
+                'occupancy_rate': _occupancy(peak, room.capacity),
+                'groups_count': len(groups),
                 'sessions_per_week': sessions_per_week,
-                'is_active': room.is_active
+                'is_active': room.is_active,
             },
             'schedule': schedule,
             'groups': [
                 {
-                    'id': g.group_id,
-                    'name': g.group_name,
-                    'teacher': g.teacher.full_name if g.teacher else '-',
-                    'day': g.get_schedule_day_display(),
-                    'time': g.schedule_time.strftime('%I:%M %p')
+                    'id': group.group_id,
+                    'name': group.group_name,
+                    'teacher': group.teacher.full_name if group.teacher else '-',
+                    'day': group.get_schedule_day_display(),
+                    'time': group.schedule_time.strftime('%I:%M %p') if group.schedule_time else '',
+                    'schedule': [
+                        {
+                            'day': entry.get_day_display(),
+                            'time': entry.start_time.strftime('%I:%M %p'),
+                            'time_end': entry.get_end_time().strftime('%I:%M %p'),
+                        }
+                        for entry in group.get_schedule_entries()
+                    ],
                 }
-                for g in active_groups
-            ]
+                for group in groups
+            ],
         })
 
-    except Room.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'القاعة غير موجودة'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    except Exception as exc:
+        return _server_error('room_detail_api', exc)
 
 
 @ajax_login_required
@@ -169,137 +192,140 @@ def room_availability_check(request):
     API Endpoint: التحقق من توفر القاعة في وقت معين
     """
     try:
-        data = json.loads(request.body)
+        try:
+            data = json.loads(request.body or b'{}')
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return JsonResponse({'success': False, 'error': 'صيغة الطلب غير صحيحة'}, status=400)
+        if not isinstance(data, dict):
+            return JsonResponse({'success': False, 'error': 'صيغة الطلب غير صحيحة'}, status=400)
+
         room_id = data.get('room_id')
         day = data.get('day')  # Monday, Tuesday, etc.
         time = data.get('time')  # HH:MM format
 
         if not all([room_id, day, time]):
-            return JsonResponse({
-                'success': False,
-                'error': 'جميع الحقول مطلوبة'
-            }, status=400)
+            return JsonResponse({'success': False, 'error': 'جميع الحقول مطلوبة'}, status=400)
 
-        room = Room.objects.get(pk=room_id, is_active=True)
+        if day not in WEEK_DAYS:
+            return JsonResponse({'success': False, 'error': 'اليوم غير صحيح'}, status=400)
 
-        # تحويل الوقت
+        room = Room.objects.filter(pk=room_id, is_active=True).first()
+        if room is None:
+            return JsonResponse({'success': False, 'error': 'القاعة غير موجودة'}, status=404)
+
         try:
             schedule_time = datetime.strptime(time, '%H:%M').time()
-        except ValueError:
-            return JsonResponse({
-                'success': False,
-                'error': 'صيغة الوقت غير صحيحة'
-            }, status=400)
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'error': 'صيغة الوقت غير صحيحة'}, status=400)
 
-        # البحث عن مجموعات متداخلة في التوقيت (Smart Overlap Check)
-        schedule_time_dt = datetime.combine(datetime.today(), schedule_time)
-        duration = int(data.get('duration_minutes', 120))
-        new_end_dt = schedule_time_dt + timedelta(minutes=duration)
+        try:
+            duration = int(data.get('duration_minutes') or 120)
+        except (TypeError, ValueError):
+            return JsonResponse({'success': False, 'error': 'مدة الحصة غير صحيحة'}, status=400)
+        if duration < 1:
+            return JsonResponse({'success': False, 'error': 'مدة الحصة غير صحيحة'}, status=400)
 
-        other_groups = Group.objects.filter(
-            room=room,
-            schedule_day=day,
-            is_active=True
+        exclude_group_pk = data.get('exclude_group_id') or None
+
+        # Smart overlap check against every scheduled session in the room —
+        # including days 2..n of multi-day groups.
+        conflicting = find_room_conflicts(
+            room, day, schedule_time, duration, exclude_group_pk=exclude_group_pk
         )
 
-        conflicting_groups = []
-        for other in other_groups:
-            other_start = datetime.combine(datetime.today(), other.schedule_time)
-            other_end = other_start + timedelta(minutes=other.duration_minutes)
-
-            # Check overlap: start1 < end2 AND start2 < end1
-            if schedule_time_dt < other_end and other_start < new_end_dt:
-                conflicting_groups.append(other)
-
-        if conflicting_groups:
-            conflicts = []
-            for group in conflicting_groups:
-                conflicts.append({
-                    'id': group.group_id,
-                    'name': group.group_name,
-                    'teacher': group.teacher.full_name if group.teacher else '-',
-                    'time_start': group.schedule_time.strftime('%I:%M %p'),
-                    'time_end': group.get_end_time().strftime('%I:%M %p'),
-                    'duration': group.get_duration_display(),
-                })
-
+        if conflicting:
             return JsonResponse({
                 'success': True,
                 'available': False,
                 'message': 'القاعة محجوزة - يوجد تداخل في التوقيت',
-                'conflicts': conflicts
+                'conflicts': [
+                    {
+                        'id': entry.group_id,
+                        'name': entry.group_name,
+                        'teacher': entry.teacher.full_name if entry.teacher else '-',
+                        'day': entry.get_day_display(),
+                        'time_start': entry.start_time.strftime('%I:%M %p'),
+                        'time_end': entry.get_end_time().strftime('%I:%M %p'),
+                        'duration': entry.get_duration_display(),
+                    }
+                    for entry in conflicting
+                ],
             })
 
         return JsonResponse({
             'success': True,
             'available': True,
-            'message': 'القاعة متاحة في هذا التوقيت'
+            'message': 'القاعة متاحة في هذا التوقيت',
         })
 
-    except Room.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'القاعة غير موجودة'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    except Exception as exc:
+        return _server_error('room_availability_check', exc)
 
 
 @ajax_login_required
 def room_statistics_api(request):
     """
     API Endpoint: إحصائيات القاعات
+
+    Two queries in total: the rooms, plus one grouped count of active enrolments
+    per group. The previous implementation walked every room three times and ran
+    a ``COUNT`` per group (~3 × rooms × groups queries).
     """
     try:
-        rooms = Room.objects.filter(is_active=True)
+        rooms = list(
+            Room.objects.filter(is_active=True)
+            .annotate(
+                active_groups_count=Count(
+                    'groups',
+                    filter=Q(groups__is_active=True, groups__deleted_at__isnull=True),
+                    distinct=True,
+                )
+            )
+            .order_by('name')
+        )
 
-        total_rooms = rooms.count()
-        total_capacity = sum(r.capacity for r in rooms)
+        # Largest single session per room — capacity is per session. One
+        # grouped query for every group in the system, folded in Python.
+        peak_by_room = {}
+        group_counts = (
+            Group.objects.filter(is_active=True, room__isnull=False)
+            .values_list('room_id', 'group_id')
+            .annotate(
+                students=Count(
+                    'studentgroupenrollment',
+                    filter=Q(studentgroupenrollment__is_active=True),
+                    distinct=True,
+                )
+            )
+        )
+        for room_pk, _group_pk, students in group_counts:
+            if students > peak_by_room.get(room_pk, 0):
+                peak_by_room[room_pk] = students
 
-        # حساب السعة المستخدمة
+        total_rooms = len(rooms)
+        total_capacity = sum(room.capacity for room in rooms)
         total_capacity_used = 0
         active_groups_count = 0
-
-        for room in rooms:
-            active_groups = room.groups.filter(is_active=True)
-            active_groups_count += active_groups.count()
-
-            for group in active_groups:
-                students_count = StudentGroupEnrollment.objects.filter(
-                    group=group,
-                    is_active=True
-                ).count()
-                total_capacity_used += students_count
-
-        # القاعات الكاملة
         full_rooms = []
-        for room in rooms:
-            room_used = 0
-            for group in room.groups.filter(is_active=True):
-                room_used += StudentGroupEnrollment.objects.filter(
-                    group=group,
-                    is_active=True
-                ).count()
+        empty_rooms = []
 
-            if room_used >= room.capacity:
+        for room in rooms:
+            peak = peak_by_room.get(room.pk, 0)
+            total_capacity_used += peak
+            active_groups_count += room.active_groups_count
+
+            if room.active_groups_count == 0:
+                empty_rooms.append({
+                    'id': room.room_id,
+                    'name': room.name,
+                    'capacity': room.capacity,
+                })
+            elif peak >= room.capacity:
                 full_rooms.append({
                     'id': room.room_id,
                     'name': room.name,
                     'capacity': room.capacity,
-                    'used': room_used
-                })
-
-        # القاعات الفارغة
-        empty_rooms = []
-        for room in rooms:
-            if not room.groups.filter(is_active=True).exists():
-                empty_rooms.append({
-                    'id': room.room_id,
-                    'name': room.name,
-                    'capacity': room.capacity
+                    'used': peak,
                 })
 
         return JsonResponse({
@@ -308,21 +334,18 @@ def room_statistics_api(request):
                 'total_rooms': total_rooms,
                 'total_capacity': total_capacity,
                 'total_capacity_used': total_capacity_used,
-                'total_capacity_available': total_capacity - total_capacity_used,
-                'occupancy_rate': round((total_capacity_used / total_capacity * 100) if total_capacity > 0 else 0, 1),
+                'total_capacity_available': max(total_capacity - total_capacity_used, 0),
+                'occupancy_rate': _occupancy(total_capacity_used, total_capacity),
                 'active_groups_count': active_groups_count,
                 'full_rooms_count': len(full_rooms),
-                'empty_rooms_count': len(empty_rooms)
+                'empty_rooms_count': len(empty_rooms),
             },
             'full_rooms': full_rooms,
-            'empty_rooms': empty_rooms
+            'empty_rooms': empty_rooms,
         })
 
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    except Exception as exc:
+        return _server_error('room_statistics_api', exc)
 
 
 @ajax_login_required
@@ -331,76 +354,54 @@ def room_schedule_api(request, room_id):
     API Endpoint: جدول قاعة محددة لهذا الأسبوع
     """
     try:
-        room = Room.objects.get(pk=room_id, is_active=True)
+        room = Room.objects.filter(pk=room_id, is_active=True).first()
+        if room is None:
+            return JsonResponse({'success': False, 'error': 'القاعة غير موجودة'}, status=404)
 
-        # جلب جميع المجموعات في القاعة
-        groups = room.groups.filter(is_active=True).select_related('teacher').prefetch_related(
-            'enrolled_students__student'
+        groups = _active_groups(room)
+
+        # One query for every enrolled student in the room instead of one per group.
+        students_by_group = {}
+        enrollments = (
+            StudentGroupEnrollment.objects
+            .filter(group__in=groups, is_active=True)
+            .select_related('student')
         )
+        for enrollment in enrollments:
+            students_by_group.setdefault(enrollment.group_id, []).append({
+                'id': enrollment.student.student_id,
+                'name': enrollment.student.full_name,
+                'code': enrollment.student.student_code,
+                'financial_status': enrollment.get_financial_status_display(),
+            })
 
         schedule_data = {}
-
-        DAYS = ['Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-        DAYS_AR = {
-            'Saturday': 'السبت',
-            'Sunday': 'الأحد',
-            'Monday': 'الاثنين',
-            'Tuesday': 'الثلاثاء',
-            'Wednesday': 'الأربعاء',
-            'Thursday': 'الخميس',
-            'Friday': 'الجمعة'
-        }
-
-        for day in DAYS:
-            day_groups = groups.filter(schedule_day=day).order_by('schedule_time')
-            if day_groups.exists():
-                schedule_data[day] = {
-                    'ar_name': DAYS_AR.get(day, day),
-                    'sessions': []
-                }
-
-                for group in day_groups:
-                    # جلب الطلاب المسجلين
-                    enrolled_students = StudentGroupEnrollment.objects.filter(
-                        group=group,
-                        is_active=True
-                    ).select_related('student')
-
-                    students_list = []
-                    for enrollment in enrolled_students:
-                        students_list.append({
-                            'id': enrollment.student.student_id,
-                            'name': enrollment.student.full_name,
-                            'code': enrollment.student.student_code,
-                            'financial_status': enrollment.get_financial_status_display()
-                        })
-
-                    schedule_data[day]['sessions'].append({
-                        'id': group.group_id,
-                        'name': group.group_name,
-                        'teacher': group.teacher.full_name if group.teacher else '-',
-                        'time': group.schedule_time.strftime('%I:%M %p'),
-                        'students_count': len(students_list),
-                        'students': students_list
-                    })
+        for day, entries in room_week_entries(room, groups=groups).items():
+            schedule_data[day] = {
+                'ar_name': WEEK_DAYS_AR.get(day, day),
+                'sessions': [
+                    {
+                        'id': entry.group_id,
+                        'name': entry.group_name,
+                        'teacher': entry.teacher.full_name if entry.teacher else '-',
+                        'time': entry.start_time.strftime('%I:%M %p'),
+                        'time_end': entry.get_end_time().strftime('%I:%M %p'),
+                        'students_count': len(students_by_group.get(entry.group_id, [])),
+                        'students': students_by_group.get(entry.group_id, []),
+                    }
+                    for entry in entries
+                ],
+            }
 
         return JsonResponse({
             'success': True,
             'room': {
                 'id': room.room_id,
                 'name': room.name,
-                'capacity': room.capacity
+                'capacity': room.capacity,
             },
-            'schedule': schedule_data
+            'schedule': schedule_data,
         })
 
-    except Room.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'القاعة غير موجودة'
-        }, status=404)
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    except Exception as exc:
+        return _server_error('room_schedule_api', exc)

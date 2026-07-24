@@ -9,7 +9,19 @@ build/
 
 # Virtual environments
 venv/
+.venv/
+env/
+
+# Secrets / local environment
+# NOTE: .env is currently still TRACKED in git history. This rule only stops
+# *new* additions; untracking it (git rm --cached .env) and rotating the leaked
+# credentials is a deliberate human action - see SEC-02/SEC-03.
 .env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
 
 # Django
 db.sqlite3

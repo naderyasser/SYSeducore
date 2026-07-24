@@ -1,10 +1,11 @@
 from django.http import JsonResponse
-from django.contrib.auth.decorators import login_required
+
+from apps.accounts.decorators import ajax_login_required
 
 from .models import Group
 
 
-@login_required
+@ajax_login_required
 def groups_filter_api(request):
     """
     API: فلترة المجموعات حسب المرحلة / السنة / المادة / المدرس
@@ -16,7 +17,11 @@ def groups_filter_api(request):
     subject_id = request.GET.get('subject_id', '').strip()
     teacher_id = request.GET.get('teacher_id', '').strip()
 
-    qs = Group.objects.filter(is_active=True).select_related('teacher', 'room')
+    qs = (
+        Group.objects.filter(is_active=True)
+        .select_related('teacher', 'room')
+        .prefetch_related('schedules', 'teacher__subjects')
+    )
 
     if stage:
         qs = qs.filter(education_stage=stage)
@@ -33,9 +38,12 @@ def groups_filter_api(request):
         subjects = ', '.join(
             s.name for s in g.teacher.subjects.all()
         ) if g.teacher else '-'
-        day = g.get_schedule_day_display()
-        time = g.schedule_time.strftime('%I:%M %p') if g.schedule_time else ''
-        label = f"{teacher_name} — {subjects} — {day} {time}"
+        # كل مواعيد المجموعة، لا اليوم الأول فقط (GroupSchedule هو المصدر)
+        schedule = ' ، '.join(
+            f"{entry.get_day_display()} {entry.start_time.strftime('%I:%M %p')}"
+            for entry in g.get_schedule_entries()
+        ) or '-'
+        label = f"{teacher_name} — {subjects} — {schedule}"
         results.append({'id': g.group_id, 'label': label})
 
     return JsonResponse(results, safe=False)

@@ -5,9 +5,17 @@ Django settings for attendance_system project.
 import os
 import sys
 from pathlib import Path
-from decouple import config, Csv
 
-TESTING = 'test' in sys.argv
+from decouple import config, Csv
+from django.core.exceptions import ImproperlyConfigured
+
+_SETTINGS_MODULE = os.environ.get('DJANGO_SETTINGS_MODULE', '')
+TESTING = (
+    'test' in sys.argv
+    or os.path.basename(sys.argv[0] or '').startswith('pytest')
+    or _SETTINGS_MODULE.endswith('settings_test')
+    or any('settings_test' in arg for arg in sys.argv if arg.startswith('--settings'))
+)
 
 # Optional Celery import
 try:
@@ -22,11 +30,36 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+# SEC-04: a development-only fallback is provided when DEBUG (or the test runner)
+# is active. With DEBUG=False the application REFUSES to boot unless a real
+# SECRET_KEY is supplied through the environment.
+DEV_INSECURE_SECRET_KEY = 'django-insecure-change-this-in-production'
+
+# Placeholder values that must never be accepted as a production secret.
+_INSECURE_SECRET_KEYS = {
+    '',
+    DEV_INSECURE_SECRET_KEY,
+    'your-secret-key-here-change-in-production',
+    'change-me',
+}
+
+SECRET_KEY = config('SECRET_KEY', default='')
+
+if SECRET_KEY in _INSECURE_SECRET_KEYS:
+    if DEBUG or TESTING:
+        SECRET_KEY = DEV_INSECURE_SECRET_KEY
+    else:
+        raise ImproperlyConfigured(
+            "SECRET_KEY is missing or still set to a well-known placeholder while "
+            "DEBUG=False. Refusing to start. Generate a unique key, e.g.: "
+            "python -c \"from django.core.management.utils import get_random_secret_key; "
+            "print(get_random_secret_key())\" and set it in the SECRET_KEY environment "
+            "variable (see .env.example)."
+        )
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 if TESTING and 'testserver' not in ALLOWED_HOSTS:
@@ -50,6 +83,7 @@ INSTALLED_APPS = [
     'django_celery_beat',
     
     # Local apps
+    'apps.core',
     'apps.accounts',
     'apps.students',
     'apps.teachers',
@@ -73,8 +107,9 @@ MIDDLEWARE = [
     'apps.accounts.middleware.SessionTimeoutMiddleware',
 ]
 
-# System Lockout - set to True to block all access
-SYSTEM_LOCKOUT = False
+# System Lockout - set SYSTEM_LOCKOUT=True in the environment to block all access.
+# SEC-13: env-driven so the kill-switch can be flipped without a code change/redeploy.
+SYSTEM_LOCKOUT = config('SYSTEM_LOCKOUT', default=False, cast=bool)
 
 ROOT_URLCONF = 'config.urls'
 
@@ -158,8 +193,17 @@ STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 
-# WhiteNoise for production static files
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+# WhiteNoise for production static files.
+# SEC-10: STATICFILES_STORAGE is deprecated in Django 5.0 and removed in 5.1,
+# so the storage backends are declared through the STORAGES dict instead.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
 
 # Media files
 MEDIA_URL = '/media/'
@@ -200,18 +244,22 @@ REST_FRAMEWORK = {
 
 
 # CORS Settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-    "https://sys.educore.software",
-]
+# SEC-12: env-driven, same pattern as CSRF_TRUSTED_ORIGINS.
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:8000,http://127.0.0.1:8000,https://sys.educore.software',
+    cast=Csv(),
+)
 CORS_ALLOW_CREDENTIALS = True
 
 
 # Session Settings
 SESSION_COOKIE_AGE = 3600  # 1 hour
 SESSION_COOKIE_HTTPONLY = True
-SESSION_SAVE_EVERY_REQUEST = True
+# SEC-14: writing the session row on *every* request (including static/media) is a
+# needless DB write. SessionTimeoutMiddleware already touches the session on each
+# authenticated request, which keeps the inactivity window accurate.
+SESSION_SAVE_EVERY_REQUEST = False
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 
 
@@ -221,22 +269,37 @@ CSRF_USE_SESSIONS = False
 CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='http://localhost:8000,https://sys.educore.software', cast=Csv())
 CSRF_FAILURE_VIEW = 'apps.accounts.views.csrf_failure'
 
-# Proxy SSL Header (always set for reverse proxy)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Proxy SSL Header.
+# SEC-05: only trust X-Forwarded-Proto when the deployment really is behind a
+# reverse proxy that *overwrites* the header. If gunicorn is reachable directly,
+# a client could otherwise spoof `X-Forwarded-Proto: https` and defeat
+# SECURE_SSL_REDIRECT / "secure" cookies. Default is OFF (fail closed).
+TRUST_PROXY_SSL_HEADER = config('TRUST_PROXY_SSL_HEADER', default=False, cast=bool)
+if TRUST_PROXY_SSL_HEADER:
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 
 # Redis Configuration
 REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 
+# SEC-09: a Redis outage must not turn every rate-limited view (login, scanner)
+# into a 500. IGNORE_EXCEPTIONS makes cache operations degrade to a miss, and the
+# short socket timeouts stop requests from hanging on an unreachable Redis.
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': REDIS_URL,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }
+            'IGNORE_EXCEPTIONS': True,
+            'SOCKET_CONNECT_TIMEOUT': 3,  # seconds
+            'SOCKET_TIMEOUT': 3,  # seconds
+        },
     }
 }
+
+# Log the exceptions that IGNORE_EXCEPTIONS swallows, so an outage is visible.
+DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
 
 
 # Celery Configuration
@@ -293,6 +356,11 @@ GLM4_API_KEY = config('GLM4_API_KEY', default='')
 GLM4_API_URL = config('GLM4_API_URL', default='https://api.glm4.example.com')
 
 
+# The health endpoint (OPS-06) must stay reachable over plain HTTP so container
+# and load-balancer probes are not answered with a 301 to https.
+SECURE_REDIRECT_EXEMPT = [r'^health/?$']
+
+
 # Security Settings (for production)
 if not DEBUG and not TESTING:
     SECURE_SSL_REDIRECT = True
@@ -311,32 +379,54 @@ RATELIMIT_ENABLE = config('RATELIMIT_ENABLE', default=True, cast=bool)
 
 
 # Logging
+LOG_DIR = Path(config('LOG_DIR', default='logs'))
+if not LOG_DIR.is_absolute():
+    LOG_DIR = BASE_DIR / LOG_DIR
+
+# SEC-11: never let a read-only (or otherwise unwritable) filesystem crash the
+# settings import. If the log directory cannot be created/written we simply fall
+# back to console-only logging instead of taking the whole process down.
+LOG_TO_FILE = True
+try:
+    os.makedirs(LOG_DIR, exist_ok=True)
+    if not os.access(LOG_DIR, os.W_OK):
+        LOG_TO_FILE = False
+except OSError:
+    LOG_TO_FILE = False
+
+_LOG_HANDLERS = {
+    'console': {
+        'level': 'INFO',
+        'class': 'logging.StreamHandler',
+    },
+}
+
+if LOG_TO_FILE:
+    # SEC-08: rotate the log file instead of growing without bound.
+    _LOG_HANDLERS['file'] = {
+        'level': 'INFO',
+        'class': 'logging.handlers.RotatingFileHandler',
+        'filename': str(LOG_DIR / 'django.log'),
+        'maxBytes': 10 * 1024 * 1024,  # 10 MB
+        'backupCount': 5,
+        'encoding': 'utf-8',  # Arabic log messages
+    }
+
+_ACTIVE_LOG_HANDLERS = list(_LOG_HANDLERS.keys())
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
-    'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
-        },
-        'console': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-        },
-    },
+    'handlers': _LOG_HANDLERS,
     'root': {
-        'handlers': ['console', 'file'],
+        'handlers': _ACTIVE_LOG_HANDLERS,
         'level': 'INFO',
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file'],
+            'handlers': _ACTIVE_LOG_HANDLERS,
             'level': 'INFO',
             'propagate': False,
         },
     },
 }
-
-# Create logs directory if it doesn't exist
-os.makedirs(BASE_DIR / 'logs', exist_ok=True)

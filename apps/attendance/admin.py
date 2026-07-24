@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.db.models import Count, Q
+
 from .models import Session, Attendance, ActivityLog, ExceptionRecord
 
 
@@ -31,11 +33,19 @@ class SessionAdmin(admin.ModelAdmin):
 
     actions = ['mark_teacher_attended', 'cancel_sessions', 'mark_notified']
 
+    def get_queryset(self, request):
+        """
+        Annotate the counts the list column needs. Reading them off ``obj``
+        cost two queries per row (N+1) on every page of the changelist.
+        """
+        return super().get_queryset(request).select_related('group').annotate(
+            _present_count=Count('attendances', filter=Q(attendances__status='present')),
+            _attendance_count=Count('attendances'),
+        )
+
     def get_attendance_count(self, obj):
         """عدد الطلاب الحاضرين"""
-        count = obj.attendances.filter(status='present').count()
-        total = obj.attendances.count()
-        return f'{count}/{total}'
+        return f'{obj._present_count}/{obj._attendance_count}'
     get_attendance_count.short_description = 'الحضور'
 
     def mark_teacher_attended(self, request, queryset):
@@ -83,6 +93,11 @@ class AttendanceAdmin(admin.ModelAdmin):
 
     readonly_fields = ['created_at']  # السماح بتعديل scan_time
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'student', 'session', 'session__group', 'supervisor'
+        )
+
     actions = ['mark_present', 'mark_late', 'mark_absent', 'delete_attendances']
 
     def mark_present(self, request, queryset):
@@ -121,6 +136,9 @@ class ActivityLogAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
     readonly_fields = ['user', 'action', 'description', 'target_model', 'target_id', 'ip_address', 'created_at']
 
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('user')
+
     def has_add_permission(self, request):
         return False  # Logs are created programmatically only
 
@@ -139,6 +157,11 @@ class ExceptionRecordAdmin(admin.ModelAdmin):
     date_hierarchy = 'created_at'
     autocomplete_fields = ['student', 'group', 'session', 'approved_by']
     readonly_fields = ['created_at']
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related(
+            'student', 'group', 'session', 'approved_by'
+        )
 
     fieldsets = (
         ('معلومات الاستثناء', {

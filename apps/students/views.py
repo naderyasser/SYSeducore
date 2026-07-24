@@ -1,20 +1,32 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from apps.accounts.decorators import ajax_login_required
 from django.contrib import messages
-from django.db.models import Count, Q, Prefetch, Exists, OuterRef
+from django.core.paginator import Paginator
+from django.db.models import Count, Q, Prefetch
 from django.db import models, transaction, IntegrityError
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponse
 from datetime import timedelta
+from decimal import Decimal
 import json
+import logging
 
 from .models import Student, StudentGroupEnrollment
-from .forms import StudentForm, StudentQuickForm
+from .forms import StudentForm
+from .utils import normalize_financial_status, parse_money
 from apps.teachers.models import Group
-from apps.accounts.decorators import supervisor_required
+from apps.accounts.decorators import (
+    ajax_login_required,
+    ajax_supervisor_required,
+    supervisor_required,
+)
 from apps.attendance.models import Attendance, ActivityLog
 from apps.payments.models import Payment
+
+logger = logging.getLogger(__name__)
+
+#: Students shown per page in the HTML list view.
+STUDENTS_PER_PAGE = 25
 
 
 @login_required
@@ -23,9 +35,6 @@ def student_list(request):
     List all students with filtering and search functionality.
     View as table with barcode display and action buttons.
     """
-    from apps.payments.models import Payment
-    from django.utils import timezone
-    
     # Get filter parameters
     search = request.GET.get('search', '')
     group_filter = request.GET.get('group', '')
@@ -33,11 +42,17 @@ def student_list(request):
     gender_filter = request.GET.get('gender', '')
     education_stage_filter = request.GET.get('education_stage', '')
 
-    # Build query with annotations
+    # Build query with annotations.
+    # NOTE: counting 'groups' (M2M) while filtering on 'group_enrollments'
+    # (reverse FK) joins two independent relations and multiplies the rows —
+    # the count was wrong for every student in more than one group, and the
+    # with_groups/no_groups filters below are built on it. Count the enrollment
+    # rows themselves instead.
     students = Student.objects.all().annotate(
         groups_count=Count(
-            'groups',
-            filter=Q(group_enrollments__is_active=True)
+            'group_enrollments',
+            filter=Q(group_enrollments__is_active=True),
+            distinct=True,
         )
     ).prefetch_related(
         Prefetch(
@@ -81,19 +96,33 @@ def student_list(request):
     if education_stage_filter:
         students = students.filter(education_stage=education_stage_filter)
 
-    # Order by most recent first
-    students = students.order_by('-created_at')
-    
-    # Add payment status for current month (use localtime to match scanner)
-    current_month = timezone.localtime().date().replace(day=1)
+    # Order by most recent first (stable secondary key so pagination cannot
+    # show the same student on two pages when created_at ties)
+    students = students.order_by('-created_at', '-student_id')
+
+    # Paginate: the view used to materialise EVERY student and then loop over
+    # them in Python (and the template renders a barcode per row).
+    paginator = Paginator(students, STUDENTS_PER_PAGE)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
+    # Add payment status for current month (use localtime to match scanner) —
+    # only for the students actually on this page.
+    current_month = timezone.localdate().replace(day=1)
+    page_student_ids = [s.student_id for s in page_obj.object_list]
     paid_student_ids = set(
         Payment.objects.filter(
+            student_id__in=page_student_ids,
             month=current_month,
             status='paid'
         ).values_list('student_id', flat=True)
     )
-    for student in students:
+    for student in page_obj.object_list:
         student.has_paid_current_month = student.student_id in paid_student_ids
+
+    # Querystring without 'page' so pagination links keep the active filters
+    querydict = request.GET.copy()
+    querydict.pop('page', None)
+    filter_querystring = querydict.urlencode()
 
     # Get all groups for filter dropdown
     all_groups = Group.objects.filter(is_active=True).select_related('teacher')
@@ -117,7 +146,13 @@ def student_list(request):
     }
 
     context = {
-        'students': students,
+        # 'students' stays the iterable the template loops over (now a Page);
+        # 'page_obj'/'paginator' drive the pagination controls.
+        'students': page_obj,
+        'page_obj': page_obj,
+        'paginator': paginator,
+        'is_paginated': page_obj.has_other_pages(),
+        'filter_querystring': filter_querystring,
         'all_groups': all_groups,
         'stats': stats,
         'current_search': search,
@@ -151,7 +186,6 @@ def student_detail(request, student_id):
     ).order_by('-scan_time')[:20]
 
     # Attendance statistics (single query with conditional aggregation)
-    from django.db.models import Case, When, IntegerField as AggIntField
     attendance_agg = Attendance.objects.filter(
         student=student,
         scan_time__gte=thirty_days_ago
@@ -215,25 +249,22 @@ def student_create(request):
         if form.is_valid():
             try:
                 with transaction.atomic():
-                    # If no code provided, generate one fresh (avoids pre-fill race condition)
-                    if not form.cleaned_data.get('student_code'):
-                        form.instance.student_code = Student.generate_next_code()
+                    # An empty code is generated (and retried on collision) by
+                    # Student.save() itself — see models.CODE_GENERATION_ATTEMPTS.
                     student = form.save()
 
                     # Add to selected groups if any, with financial status
                     for group_id in selected_groups:
                         try:
                             group = Group.objects.get(pk=group_id)
-                            financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
-                            if financial_status not in ('normal', 'symbolic', 'exempt', 'per_session'):
-                                financial_status = 'normal'
+                            financial_status = normalize_financial_status(
+                                request.POST.get(f'financial_status_{group_id}', 'normal')
+                            )
                             custom_fee = None
                             if financial_status == 'symbolic':
-                                try:
-                                    custom_fee = request.POST.get(f'custom_fee_{group_id}')
-                                    custom_fee = float(custom_fee) if custom_fee else None
-                                except (ValueError, TypeError):
-                                    custom_fee = None
+                                custom_fee = parse_money(
+                                    request.POST.get(f'custom_fee_{group_id}')
+                                )
                             StudentGroupEnrollment.objects.create(
                                 student=student,
                                 group=group,
@@ -242,46 +273,50 @@ def student_create(request):
                                 is_active=True
                             )
 
-                            # Handle initial payment if provided
-                            initial_payment = request.POST.get(f'initial_payment_{group_id}')
-                            if initial_payment:
-                                try:
-                                    amount = float(initial_payment)
-                                    if amount > 0:
-                                        amount_due = float(custom_fee) if custom_fee else float(group.standard_fee)
-                                        if financial_status == 'exempt':
-                                            amount_due = 0
-                                        payment_status = 'paid' if amount >= amount_due else ('partial' if amount > 0 else 'unpaid')
-                                        Payment.objects.create(
-                                            student=student,
-                                            group=group,
-                                            month=timezone.localtime().date().replace(day=1),
-                                            amount_due=amount_due,
-                                            amount_paid=amount,
-                                            payment_date=timezone.now(),
-                                            status=payment_status,
-                                        )
-                                except (ValueError, TypeError):
-                                    pass
+                            # Handle initial payment if provided (Decimal only —
+                            # float money silently reintroduces rounding errors)
+                            amount = parse_money(request.POST.get(f'initial_payment_{group_id}'))
+                            if amount and amount > 0:
+                                if financial_status == 'exempt':
+                                    amount_due = Decimal('0')
+                                elif custom_fee is not None:
+                                    amount_due = custom_fee
+                                else:
+                                    amount_due = Decimal(group.standard_fee)
+                                payment_status = 'paid' if amount >= amount_due else 'partial'
+                                Payment.objects.create(
+                                    student=student,
+                                    group=group,
+                                    month=timezone.localdate().replace(day=1),
+                                    amount_due=amount_due,
+                                    amount_paid=amount,
+                                    payment_date=timezone.now(),
+                                    status=payment_status,
+                                )
                         except Group.DoesNotExist:
                             pass
 
             except IntegrityError as e:
+                logger.exception('Failed to create student (POST by user %s)', request.user.pk)
                 if 'student_code' in str(e).lower() or 'unique' in str(e).lower():
                     messages.error(request, 'حدث تعارض في رقم الكود بسبب إضافة متزامنة. يرجى المحاولة مرة أخرى.')
                 else:
-                    messages.error(request, f'خطأ في حفظ البيانات: {str(e)}')
+                    messages.error(request, 'حدث خطأ أثناء حفظ البيانات. يرجى المحاولة مرة أخرى.')
                 return render(request, 'students/form.html', {
                     'form': form,
                     'groups': groups,
                     'is_create': True
                 })
 
-            # Generate QR code image
+            # Generate QR code image (non-critical: the card view renders the
+            # barcode on the fly, but a persistent failure must be visible)
             try:
                 student.save_barcode_image()
             except Exception:
-                pass  # Non-critical error
+                logger.exception(
+                    'Failed to save barcode image for student %s (code=%s)',
+                    student.pk, student.student_code,
+                )
 
             # Activity logging
             ActivityLog.log(
@@ -342,31 +377,50 @@ def student_update(request, student_id):
             with transaction.atomic():
                 form.save()
 
-                # Add new enrollments
-                for group_id in selected_group_ids - current_group_ids:
+                # Create / re-activate / update every selected enrollment.
+                #
+                # This used to iterate ``selected - current`` and call
+                # get_or_create(): a group the student had been *removed* from
+                # is not in ``current_group_ids`` (that set only holds active
+                # rows), so it looked new, get_or_create GOT the inactive row
+                # and ignored ``defaults`` — the student was never re-enrolled.
+                # Financial edits to rows that stayed selected were dropped on
+                # the floor for the same reason. Both are handled here.
+                for group_id in selected_group_ids:
                     try:
                         group = Group.objects.get(pk=group_id)
-                        financial_status = request.POST.get(f'financial_status_{group_id}', 'normal')
-                        if financial_status not in ('normal', 'symbolic', 'exempt', 'per_session'):
-                            financial_status = 'normal'
-                        custom_fee = None
-                        if financial_status == 'symbolic':
-                            try:
-                                custom_fee = request.POST.get(f'custom_fee_{group_id}')
-                                custom_fee = float(custom_fee) if custom_fee else None
-                            except (ValueError, TypeError):
-                                custom_fee = None
-                        StudentGroupEnrollment.objects.get_or_create(
-                            student=student,
-                            group=group,
-                            defaults={
-                                'financial_status': financial_status,
-                                'custom_fee': custom_fee,
-                                'is_active': True
-                            }
-                        )
                     except Group.DoesNotExist:
-                        pass
+                        continue
+
+                    posted_status = request.POST.get(f'financial_status_{group_id}')
+                    financial_status = normalize_financial_status(posted_status or 'normal')
+                    custom_fee = None
+                    if financial_status == 'symbolic':
+                        custom_fee = parse_money(request.POST.get(f'custom_fee_{group_id}'))
+
+                    enrollment, created = StudentGroupEnrollment.objects.get_or_create(
+                        student=student,
+                        group=group,
+                        defaults={
+                            'financial_status': financial_status,
+                            'custom_fee': custom_fee,
+                            'is_active': True
+                        }
+                    )
+                    if not created:
+                        updated_fields = []
+                        # Only overwrite the financial terms when the request
+                        # actually carried them, so a caller that posts nothing
+                        # cannot silently reset an exemption to 'normal'.
+                        if posted_status is not None:
+                            enrollment.financial_status = financial_status
+                            enrollment.custom_fee = custom_fee
+                            updated_fields += ['financial_status', 'custom_fee']
+                        if not enrollment.is_active:
+                            enrollment.is_active = True
+                            updated_fields.append('is_active')
+                        if updated_fields:
+                            enrollment.save(update_fields=updated_fields)
 
                 # Deactivate removed enrollments
                 for group_id in current_group_ids - selected_group_ids:
@@ -403,8 +457,16 @@ def student_delete(request, student_id):
     student = get_object_or_404(Student, pk=student_id)
 
     if request.method == 'POST':
-        student.soft_delete(user=request.user)
-        
+        with transaction.atomic():
+            student.soft_delete(user=request.user)
+            # Enrollments are queried directly by the auto-absence and
+            # notification crons, which join through the FK and never look at
+            # student.deleted_at — a deleted student kept collecting absences
+            # and WhatsApp messages. Deactivate them with the student.
+            StudentGroupEnrollment.objects.filter(
+                student=student, is_active=True,
+            ).update(is_active=False)
+
         # Log the deletion
         ActivityLog.log(
             user=request.user,
@@ -442,7 +504,7 @@ def student_id_card(request, student_id):
         'student': student,
         'enrollments': active_enrollments,
         'barcode_base64': barcode_base64,
-        'today': timezone.now().date(),
+        'today': timezone.localdate(),
     }
 
     return render(request, 'students/id_card.html', context)
@@ -466,7 +528,7 @@ def student_id_card_print(request, student_id):
         'student': student,
         'enrollments': active_enrollments,
         'barcode_base64': barcode_base64,
-        'today': timezone.now().date(),
+        'today': timezone.localdate(),
         'print_mode': True
     }
 
@@ -515,13 +577,17 @@ def get_next_code(request):
     })
 
 
-@login_required
+@ajax_supervisor_required
 def student_toggle_status(request, student_id):
     """
     Toggle student active status.
+
+    Deactivating a student stops them entering the centre, so this is a desk
+    operation (supervisor+) exactly like create/update/delete — it used to be
+    open to any authenticated account, including 'teacher'.
     """
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'message': 'Method not allowed'})
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
 
     student = get_object_or_404(Student, pk=student_id)
     student.is_active = not student.is_active

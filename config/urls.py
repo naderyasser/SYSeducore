@@ -1,15 +1,106 @@
 """
 URL configuration for attendance_system project.
 """
+import logging
+
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import HttpResponse
+from django.shortcuts import render
+from django.template import TemplateDoesNotExist
 from django.views.generic import RedirectView
+
+from config.health import health_check
+
+logger = logging.getLogger(__name__)
+
+
+# --- QUAL-07: project-level error handlers -----------------------------------
+# These render templates/404.html and templates/500.html when those templates
+# exist, and otherwise fall back to a self-contained Arabic RTL response. The
+# fallback must never raise, so template rendering is wrapped defensively: a 500
+# page that itself explodes would hide the original error.
+
+_ERROR_PAGE = """<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+body{{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:#f6f7fb;color:#22252a;
+margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}}
+.box{{background:#fff;padding:2.5rem 3rem;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.08);max-width:32rem}}
+h1{{font-size:3.5rem;margin:0;color:#4054b2}}
+h2{{font-size:1.25rem;margin:.5rem 0 1rem}}
+p{{color:#666;margin:0 0 1.5rem}}
+a{{display:inline-block;background:#4054b2;color:#fff;text-decoration:none;padding:.6rem 1.4rem;border-radius:8px}}
+</style>
+</head>
+<body>
+<div class="box">
+<h1>{code}</h1>
+<h2>{title}</h2>
+<p>{message}</p>
+<a href="/">العودة إلى الصفحة الرئيسية</a>
+</div>
+</body>
+</html>
+"""
+
+
+def _fallback_error_response(code, title, message):
+    return HttpResponse(
+        _ERROR_PAGE.format(code=code, title=title, message=message),
+        status=code,
+        content_type='text/html; charset=utf-8',
+    )
+
+
+def _render_or_fallback(request, template_name, code, title, message):
+    try:
+        return render(request, template_name, status=code)
+    except TemplateDoesNotExist:
+        pass  # no project template yet - use the built-in page below
+    except Exception:  # noqa: BLE001 - the error page must never raise
+        logger.exception('Error handler could not render %s', template_name)
+    return _fallback_error_response(code, title, message)
+
+
+def error_404(request, exception=None):
+    """Arabic 404 page. Uses templates/404.html when that template exists."""
+    return _render_or_fallback(
+        request,
+        '404.html',
+        404,
+        'الصفحة غير موجودة',
+        'الرابط الذي طلبته غير متاح أو تم نقله.',
+    )
+
+
+def error_500(request):
+    """Arabic 500 page. Uses templates/500.html when that template exists."""
+    return _render_or_fallback(
+        request,
+        '500.html',
+        500,
+        'خطأ في الخادم',
+        'حدث خطأ غير متوقع. تم تسجيل المشكلة وسيتم مراجعتها.',
+    )
+
+
+handler404 = 'config.urls.error_404'
+handler500 = 'config.urls.error_500'
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    
+
+    # Infrastructure health probe (nginx proxies /health/, no auth, no DB access)
+    path('health/', health_check, name='health_check'),
+
     # Redirect root to dashboard
     path('', RedirectView.as_view(url='/reports/', permanent=False)),
     path('dashboard/', RedirectView.as_view(url='/reports/', permanent=False)),

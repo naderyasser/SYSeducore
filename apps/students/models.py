@@ -1,6 +1,8 @@
 from django.db import models
 from django.core.validators import RegexValidator
 from django.conf import settings
+from django.utils import timezone
+import logging
 import os
 import io
 import base64
@@ -9,6 +11,12 @@ from barcode import Code128
 from barcode.writer import ImageWriter
 from PIL import Image
 from apps.core.models import SoftDeleteModel
+
+logger = logging.getLogger(__name__)
+
+#: How many times ``Student.save()`` retries an auto-generated ``student_code``
+#: when a concurrent insert grabbed the same number first.
+CODE_GENERATION_ATTEMPTS = 5
 
 
 class Student(SoftDeleteModel):
@@ -88,11 +96,6 @@ class Student(SoftDeleteModel):
         through='StudentGroupEnrollment',
         related_name='enrolled_students',
         verbose_name="المجموعات"
-    )
-
-    phone_regex = RegexValidator(
-        regex=r'^\+?1?\d{9,15}$',
-        message="رقم الهاتف يجب أن يكون بالصيغة: '+999999999'"
     )
 
     # Student phone - رقم الطالب (إجباري)
@@ -200,30 +203,60 @@ class Student(SoftDeleteModel):
                 })
 
     def save(self, *args, **kwargs):
-        """Auto-generate student code if not provided"""
-        if not self.student_code:
-            self.student_code = self.generate_next_code()
-        super().save(*args, **kwargs)
+        """
+        Auto-generate ``student_code`` when it is not provided.
+
+        ``generate_next_code`` cannot be made race-free with row locking alone
+        (an empty table has no rows to lock, and SQLite ignores
+        ``select_for_update`` entirely), so the insert itself is the arbiter:
+        the unique constraint rejects the loser and we simply pick the next
+        number and try again. Each attempt runs inside its own savepoint so a
+        failed insert never poisons an enclosing ``transaction.atomic()`` block.
+        """
+        from django.db import IntegrityError, transaction
+
+        if self.student_code:
+            return super().save(*args, **kwargs)
+
+        for attempt in range(CODE_GENERATION_ATTEMPTS):
+            code = self.generate_next_code()
+            self.student_code = code
+            try:
+                with transaction.atomic():
+                    return super().save(*args, **kwargs)
+            except IntegrityError:
+                self.student_code = ''
+                # Only a *code* collision is worth retrying — anything else
+                # (another unique constraint, a FK violation…) must surface.
+                taken = type(self).all_objects.filter(student_code=code).exists()
+                if not taken or attempt == CODE_GENERATION_ATTEMPTS - 1:
+                    raise
+                logger.warning(
+                    'student_code %s was taken concurrently, regenerating (attempt %s)',
+                    code, attempt + 1,
+                )
 
     @classmethod
     def generate_next_code(cls):
-        """توليد الكود التالي (آخر كود رقمي + 1)، يبدأ من 1001 - مع حماية من التزامن"""
-        from django.db import transaction
+        """
+        توليد الكود التالي (آخر كود رقمي + 1)، يبدأ من 1001
+
+        Soft-deleted students are included (``all_objects``) so a recycled code
+        is never handed out twice. The value is a *suggestion*: the caller must
+        be able to cope with a concurrent insert taking it first — see ``save``.
+        """
         from django.db.models import Max
         from django.db.models.functions import Cast
         from django.db.models import IntegerField
 
-        with transaction.atomic():
-            # Lock all numeric-code rows to prevent concurrent duplicate generation
-            locked_qs = cls.all_objects.select_for_update().filter(
-                student_code__regex=r'^\d+$'
-            )
-            last_numeric = locked_qs.annotate(
-                code_int=Cast('student_code', IntegerField())
-            ).aggregate(max_code=Max('code_int'))
+        last_numeric = cls.all_objects.filter(
+            student_code__regex=r'^\d+$'
+        ).annotate(
+            code_int=Cast('student_code', IntegerField())
+        ).aggregate(max_code=Max('code_int'))
 
-            last_code = last_numeric.get('max_code')
-            return str(last_code + 1) if last_code else '1001'
+        last_code = last_numeric.get('max_code')
+        return str(last_code + 1) if last_code else '1001'
 
     def generate_qr_image(self):
         """Generate QR code image for student"""
@@ -265,6 +298,11 @@ class Student(SoftDeleteModel):
             img.save(buffer, format='PNG')
             return base64.b64encode(buffer.getvalue()).decode()
         except Exception:
+            # A blank string renders as an empty ID card — never fail silently.
+            logger.exception(
+                'Failed to render Code128 barcode for student %s (code=%s)',
+                self.pk, self.student_code,
+            )
             return ''
 
     def save_barcode_image(self):
@@ -281,34 +319,35 @@ class Student(SoftDeleteModel):
 
     def get_monthly_fee_for_group(self, group):
         """احسب المصروفات الشهرية لمجموعة معينة حسب الحالة المالية"""
+        from decimal import Decimal
         try:
             enrollment = StudentGroupEnrollment.objects.get(
                 student=self,
                 group=group
             )
             if enrollment.financial_status == 'exempt':
-                return 0
+                return Decimal('0')
             elif enrollment.financial_status == 'symbolic':
-                return enrollment.custom_fee or 0
+                return enrollment.custom_fee or Decimal('0')
             else:
                 return group.standard_fee
         except StudentGroupEnrollment.DoesNotExist:
-            return 0
-    
+            return Decimal('0')
+
     def is_subscription_active(self):
         """التحقق من صلاحية الاشتراك"""
-        from django.utils import timezone
         # No subscription date set = subscription not configured, allow entry
         if not self.subscription_expiry_date:
             return True
-        return timezone.now().date() <= self.subscription_expiry_date
-    
+        # localdate(): the centre works in Africa/Cairo, so a subscription must
+        # live until the end of the *local* day, not the UTC one.
+        return timezone.localdate() <= self.subscription_expiry_date
+
     def activate_subscription(self, days=30):
         """تفعيل اشتراك الطالب لمدة محددة (افتراضي 30 يوم)"""
-        from django.utils import timezone
         from datetime import timedelta
-        
-        today = timezone.now().date()
+
+        today = timezone.localdate()
         self.last_payment_date = today
         self.subscription_expiry_date = today + timedelta(days=days)
         self.is_active = True
@@ -318,8 +357,6 @@ class Student(SoftDeleteModel):
     
     def get_subscription_status(self):
         """الحصول على حالة الاشتراك"""
-        from django.utils import timezone
-        
         if not self.subscription_expiry_date:
             return {
                 'status': 'inactive',
@@ -327,7 +364,7 @@ class Student(SoftDeleteModel):
                 'days_remaining': 0
             }
         
-        today = timezone.now().date()
+        today = timezone.localdate()
         days_remaining = (self.subscription_expiry_date - today).days
         
         if days_remaining < 0:
@@ -363,13 +400,20 @@ class Student(SoftDeleteModel):
         ).count()
 
     def get_total_paid_amount(self):
-        """Get total amount paid by student"""
+        """
+        Get total amount actually paid by the student.
+
+        Partially-paid rows carry a real ``amount_paid`` too — filtering on
+        ``status='paid'`` alone under-reports every student who paid in
+        instalments.
+        """
+        from decimal import Decimal
         from apps.payments.models import Payment
         total = Payment.objects.filter(
             student=self,
-            status='paid'
+            status__in=('paid', 'partial'),
         ).aggregate(total=models.Sum('amount_paid'))['total']
-        return total or 0
+        return total if total is not None else Decimal('0')
 
 
 class StudentGroupEnrollment(models.Model):
@@ -377,11 +421,16 @@ class StudentGroupEnrollment(models.Model):
     نموذج وسيط لربط الطالب بالمجموعة مع معلومات إضافية
     يسمح بتحديد الحالة المالية لكل مجموعة على حدة
     """
+    # 'per_session' (دفع بالحصة) used to be offered here but was never
+    # implemented: get_monthly_fee_for_group() fell through to standard_fee and
+    # AttendanceService.check_financial_status() treated it exactly like
+    # 'normal', so those students were billed a full month anyway. The choice is
+    # removed rather than half-kept; migration 0012 rewrites existing rows to
+    # 'normal' (their real, already-applied billing behaviour).
     FINANCIAL_STATUS_CHOICES = [
         ('normal', 'عادي'),
         ('symbolic', 'مبلغ رمزي'),
         ('exempt', 'إعفاء كامل'),
-        ('per_session', 'دفع بالحصة'),
     ]
 
     student = models.ForeignKey(
