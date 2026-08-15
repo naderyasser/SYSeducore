@@ -12,8 +12,11 @@ urlpatterns = [
     path('whatsapp/contacts/', views.contact_list, name='contact_list'),
     path('whatsapp/templates/', views.manage_templates, name='manage_templates'),
 
-    # Testing
-    path('test/', views.test_whatsapp, name='test'),
+    # BUG-04: the development-only ``/notifications/test/`` page rendered
+    # ``notifications/test.html``, a template that does not exist — every GET
+    # was a TemplateDoesNotExist 500. The view and its route are removed; the
+    # real send page (``whatsapp/send/``) covers the same need and records
+    # what it sends.
 
     # API Endpoints
     path('api/bulk-attendance-report/', views.send_bulk_attendance_report, name='bulk_attendance_report'),

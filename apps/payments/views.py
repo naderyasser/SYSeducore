@@ -1,65 +1,81 @@
-from django.shortcuts import render, get_object_or_404
+from datetime import date
+
 from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Exists, OuterRef, Q, Sum
 from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
+from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
-from django.db.models import Q
+
+from apps.accounts.decorators import admin_required
+from apps.teachers.models import Group, Teacher
+
 from .models import Payment
 from .services import SettlementService
-from apps.teachers.models import Teacher, Group
-from apps.attendance.models import ActivityLog
-from apps.students.models import Student
 
 
 def _ensure_monthly_payments(month_date):
     """
     Auto-generate Payment rows for every active enrollment that does not
-    already have one for *month_date*.  This guarantees that the payment
-    list page always shows every active student, and the scanner can always
-    find a Payment record to check.
+    already have one for *month_date*.
+
+    **Current month only.** Callers must never pass a historical month: the
+    fees used here are today's fees, so back-filling an old month would
+    invent an accounting history that never happened (a user browsing to
+    ``?month=2020-01`` used to create a full set of January-2020 rows priced
+    at current fees). :func:`payment_list` enforces this.
+
+    The missing enrollments are found with a single ``NOT EXISTS`` query
+    instead of walking every active enrollment in Python, so the normal case
+    — nothing to create — costs one cheap query that returns no rows.
 
     Returns the number of newly created payment records.
     """
     from apps.students.models import StudentGroupEnrollment
 
-    # Collect (student_id, group_id) pairs that already have a payment
-    existing = set(
-        Payment.objects.filter(month=month_date)
-        .values_list('student_id', 'group_id')
+    already_billed = Payment.objects.filter(
+        month=month_date,
+        student_id=OuterRef('student_id'),
+        group_id=OuterRef('group_id'),
     )
 
-    enrollments = StudentGroupEnrollment.objects.filter(
-        is_active=True,
-    ).select_related('student', 'group')
+    missing = (
+        StudentGroupEnrollment.objects
+        .filter(is_active=True)
+        # Soft-deleted students/groups must not be billed.
+        .filter(student__deleted_at__isnull=True, group__deleted_at__isnull=True)
+        .annotate(has_payment=Exists(already_billed))
+        .filter(has_payment=False)
+        .values_list(
+            'student_id', 'group_id', 'financial_status',
+            'custom_fee', 'group__standard_fee',
+        )
+    )
 
     to_create = []
-    for enr in enrollments:
-        if (enr.student_id, enr.group_id) in existing:
-            continue
-
-        # Compute fee directly from enrollment (avoids extra queries)
-        if enr.financial_status == 'exempt':
+    for student_id, group_id, financial_status, custom_fee, standard_fee in missing:
+        if financial_status == 'exempt':
             fee = 0
-        elif enr.financial_status == 'symbolic':
-            fee = enr.custom_fee or 0
-        else:  # normal / per_session
-            fee = enr.group.standard_fee or 0
+        elif financial_status == 'symbolic':
+            fee = custom_fee or 0
+        else:  # normal
+            fee = standard_fee or 0
 
         if fee <= 0:
-            # Exempt or zero-fee — still create a record so the scanner
-            # can mark it 'paid' automatically.
+            # Zero-fee row: still created so the scanner finds a record, but
+            # flagged ``is_exempt`` so it is not counted as a collection.
             to_create.append(Payment(
-                student=enr.student,
-                group=enr.group,
+                student_id=student_id,
+                group_id=group_id,
                 month=month_date,
                 amount_due=0,
                 amount_paid=0,
                 status='paid',
+                is_exempt=True,
             ))
         else:
             to_create.append(Payment(
-                student=enr.student,
-                group=enr.group,
+                student_id=student_id,
+                group_id=group_id,
                 month=month_date,
                 amount_due=fee,
                 amount_paid=0,
@@ -76,11 +92,11 @@ def _ensure_monthly_payments(month_date):
 def payment_list(request):
     """
     List payments with filters. Defaults to current month unpaid/partial.
-    Auto-generates payment records for active enrollments so every student
-    appears in the list.
+    Auto-generates payment records for active enrollments — **for the
+    current month only** — so every student appears in the list.
     """
     # Use localtime (Cairo) so the month matches what the scanner expects
-    current_month = timezone.localtime().date().replace(day=1)
+    current_month = timezone.localdate().replace(day=1)
 
     # Filter params
     month_filter = request.GET.get('month', current_month.strftime('%Y-%m'))
@@ -89,16 +105,18 @@ def payment_list(request):
     search = request.GET.get('search', '')
 
     try:
-        filter_year, filter_month = int(month_filter[:4]), int(month_filter[5:7])
-        from datetime import date
-        month_date = date(filter_year, filter_month, 1)
-    except Exception:
+        month_date = date(int(month_filter[:4]), int(month_filter[5:7]), 1)
+    except (TypeError, ValueError):
         month_date = current_month
 
-    # ── Auto-generate missing payment rows for this month ──
-    _ensure_monthly_payments(month_date)
+    # ── Auto-generate missing payment rows — current month only ──
+    # Browsing an archived month must never write to it.
+    if month_date == current_month:
+        _ensure_monthly_payments(month_date)
 
-    payments = Payment.objects.select_related('student', 'group', 'group__teacher').filter(month=month_date)
+    payments = Payment.objects.select_related(
+        'student', 'group', 'group__teacher'
+    ).filter(month=month_date)
 
     if status_filter:
         payments = payments.filter(status=status_filter)
@@ -113,14 +131,27 @@ def payment_list(request):
 
     payments = payments.order_by('status', 'student__full_name')
 
-    # Stats for current month
-    all_month_payments = Payment.objects.filter(month=month_date)
-    stats = {
-        'paid': all_month_payments.filter(status='paid').count(),
-        'partial': all_month_payments.filter(status='partial').count(),
-        'unpaid': all_month_payments.filter(status='unpaid').count(),
-        'total': all_month_payments.count(),
-    }
+    # Stats for the selected month — one aggregate query instead of four
+    # counts. Exempt (zero-fee) rows carry status='paid' so the scanner lets
+    # them in, but they are *not* a collection: they are counted separately
+    # and excluded from the collection rate.
+    billable = Q(is_exempt=False)
+    stats = Payment.objects.filter(month=month_date).aggregate(
+        paid=Count('pk', filter=billable & Q(status='paid')),
+        partial=Count('pk', filter=billable & Q(status='partial')),
+        unpaid=Count('pk', filter=billable & Q(status='unpaid')),
+        exempt=Count('pk', filter=Q(is_exempt=True)),
+        billable_total=Count('pk', filter=billable),
+        total=Count('pk'),
+        amount_due=Sum('amount_due', filter=billable),
+        amount_collected=Sum('amount_paid', filter=billable),
+    )
+    for key in ('amount_due', 'amount_collected'):
+        stats[key] = stats[key] or 0
+    stats['collection_rate'] = (
+        round(stats['paid'] * 100 / stats['billable_total'], 1)
+        if stats['billable_total'] else 0
+    )
 
     groups = Group.objects.filter(is_active=True).select_related('teacher')
 
@@ -129,6 +160,7 @@ def payment_list(request):
         'stats': stats,
         'groups': groups,
         'current_month': month_date,
+        'is_current_month': month_date == current_month,
         'month_filter': month_filter,
         'status_filter': status_filter,
         'group_filter': group_filter,
@@ -137,63 +169,40 @@ def payment_list(request):
     return render(request, 'payments/list.html', context)
 
 
-@login_required
+@admin_required
 def teacher_settlement(request, teacher_id):
     """
     Show teacher settlement for a specific month.
+
+    Settlement exposes the centre's revenue split and every teacher's
+    payout — an accounting function, not a desk operation, so it is
+    admin-only.
     """
     teacher = get_object_or_404(Teacher, pk=teacher_id)
-    
+
     if request.method == 'POST':
-        year = int(request.POST.get('year', timezone.now().year))
-        month = int(request.POST.get('month', timezone.now().month))
-        
+        today = timezone.localdate()
+        try:
+            year = int(request.POST.get('year', today.year))
+            month = int(request.POST.get('month', today.month))
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {'success': False, 'message': 'الشهر أو السنة غير صالحة'},
+                status=400,
+            )
+        if not 1 <= month <= 12 or not 2000 <= year <= 2200:
+            return JsonResponse(
+                {'success': False, 'message': 'الشهر أو السنة غير صالحة'},
+                status=400,
+            )
+
         result = SettlementService.calculate_teacher_settlement(teacher_id, year, month)
-        
+
         if result['success']:
             return render(request, 'payments/settlement.html', {
                 'teacher': teacher,
                 'settlement': result['data']
             })
-        else:
-            return JsonResponse(result, status=400)
-    
+        return JsonResponse(result, status=400)
+
     return render(request, 'payments/settlement.html', {'teacher': teacher})
-
-
-@login_required
-@require_http_methods(["POST"])
-def record_payment(request, payment_id):
-    """
-    Record a payment for a student.
-    When fully paid, also activate subscription + enrollment.
-    """
-    try:
-        payment = Payment.objects.get(pk=payment_id)
-        amount = float(request.POST.get('amount', 0))
-        
-        payment.amount_paid += amount
-        payment.payment_date = timezone.now()
-        
-        # Update status based on amount
-        if payment.amount_paid >= payment.amount_due:
-            payment.status = 'paid'
-        elif payment.amount_paid > 0:
-            payment.status = 'partial'
-        
-        payment.save()
-
-        # Auto-activate subscription + enrollment when fully paid
-        if payment.status == 'paid':
-            from .api_views import _activate_student_for_payment
-            _activate_student_for_payment(payment, user=request.user)
-        else:
-            ActivityLog.log(
-                user=request.user, action='payment_record',
-                description=f'تسجيل دفعة جزئية: {amount} جنيه للطالب {payment.student.full_name}',
-                target_model='Payment', target_id=payment.pk, request=request
-            )
-
-        return JsonResponse({'success': True, 'new_amount_paid': float(payment.amount_paid)})
-    except Payment.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'Payment not found'}, status=404)

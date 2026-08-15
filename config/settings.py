@@ -335,13 +335,22 @@ else:
     CELERY_BEAT_SCHEDULE = {}
 
 
-# WhatsApp Configuration (WASender API)
-WASENDER_API_TOKEN = config('WASENDER_API_TOKEN', default='')
-WASENDER_API_URL = config('WASENDER_API_URL', default='https://wasenderapi.com/api/send-message')
-
-# Legacy UltraMsg Configuration (deprecated)
-ULTRAMSG_INSTANCE_ID = config('ULTRAMSG_INSTANCE_ID', default='')
-ULTRAMSG_TOKEN = config('ULTRAMSG_TOKEN', default='')
+# WhatsApp Configuration (Wapilot API v2)
+#
+# The centre's WhatsApp account lives on Wapilot (https://app.wapilot.net), not
+# on WASender — the provider this project originally shipped against. The two
+# APIs differ in every part of the contract, so the transport in
+# ``apps.notifications.services`` was rewritten rather than re-pointed:
+#
+#   endpoint  POST {WAPILOT_API_BASE_URL}/{WAPILOT_INSTANCE_ID}/send-message
+#   auth      ``token: <api token>``   (not ``Authorization: Bearer``)
+#   body      ``{"chat_id": ..., "text": ...}``   (not ``{"to": ..., "text": ...}``)
+#
+# ``WAPILOT_INSTANCE_ID`` is the instance *name* shown in the dashboard
+# (e.g. ``instance5136``) — the bare digits are rejected with 404.
+WAPILOT_API_TOKEN = config('WAPILOT_API_TOKEN', default='')
+WAPILOT_INSTANCE_ID = config('WAPILOT_INSTANCE_ID', default='')
+WAPILOT_API_BASE_URL = config('WAPILOT_API_BASE_URL', default='https://api.wapilot.net/api/v2')
 
 # Notification Settings
 NOTIFICATION_METHOD = config('NOTIFICATION_METHOD', default='whatsapp')

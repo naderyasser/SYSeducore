@@ -200,14 +200,13 @@ def check_billing_cycles():
     }
 
     next_month_date = _next_month(current_month)
-    existing_next_month = {
-        (p.student_id, p.group_id)
-        for p in Payment.objects.filter(
+    existing_next_month = set(
+        Payment.objects.filter(
             student_id__in=student_ids,
             group_id__in=group_ids,
             month=next_month_date,
-        )
-    }
+        ).values_list('student_id', 'group_id')
+    )
 
     # ── 4. Decide, in memory ─────────────────────────────────────────────
     payments_to_update = []

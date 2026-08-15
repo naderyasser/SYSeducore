@@ -1,294 +1,300 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
-from apps.accounts.decorators import ajax_login_required
-from django.utils import timezone
-from django.db import models, transaction
-from django.db.models import Sum, Count, Q, F, Avg
-from django.db.models.deletion import ProtectedError
-from django.db.models.functions import TruncDate, TruncMonth
-from django.http import JsonResponse
-from datetime import timedelta, datetime
-from collections import defaultdict
+"""
+Reports app views.
+
+Authorization model (SEC-07 / AUTH-09…AUTH-11)
+----------------------------------------------
+There used to be a "report password" gate here (``REPORTS_PASSWORD``,
+``report_password_required``). It was inert: the decorator returned
+immediately for any authenticated user, and every view it decorated was also
+``@login_required`` — so the password branch was unreachable and the
+"protected" financial reports were open to every role. The gate, its
+hardcoded ``888888`` default and the three views that served it have been
+removed; these reports are now protected by the real role decorators:
+
+* ``dashboard`` / ``attendance_report`` — any authenticated user.
+* ``payment_report`` / ``tsfya`` — supervisor or admin (desk collection work).
+* ``financial_report`` — admin only (centre revenue + teacher settlements).
+* ``activity_log`` — admin only (it holds usernames and IP addresses).
+* recycle bin: view + restore are supervisor, permanent delete + empty are
+  admin.
+"""
 import json
-import functools
+import logging
+from collections import defaultdict
+from datetime import date, datetime, timedelta
+
 from django.contrib import messages
-from decouple import config
+from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Count, Q, Sum
+from django.db.models.deletion import ProtectedError
+from django.db.models.functions import TruncMonth
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.utils import timezone
 
-from apps.students.models import Student, StudentGroupEnrollment
-from apps.teachers.models import Teacher, Group, Room
-from apps.attendance.models import Attendance, Session, ActivityLog
+from apps.accounts.decorators import (
+    admin_required,
+    ajax_admin_required,
+    ajax_supervisor_required,
+    supervisor_required,
+)
+from apps.attendance.models import ActivityLog, Attendance, Session
 from apps.payments.models import Payment
+from apps.students.models import Student, StudentGroupEnrollment
+from apps.teachers.models import Group, Room, Teacher
+
+logger = logging.getLogger(__name__)
 
 
-# Password for accessing sensitive reports
-REPORTS_PASSWORD = config('REPORTS_PASSWORD', default='888888')
+# ==================== Shared helpers ====================
+
+#: The word an admin has to type before the recycle bin can be emptied.
+RECYCLE_EMPTY_CONFIRM = 'تفريغ'
+
+DAY_NAMES = {
+    0: 'Monday', 1: 'Tuesday', 2: 'Wednesday',
+    3: 'Thursday', 4: 'Friday', 5: 'Saturday', 6: 'Sunday',
+}
 
 
-def report_password_required(view_func):
+def AttendanceService_get_day_name(day=None):
     """
-    Decorator to require password for accessing sensitive reports.
-    Authenticated users bypass the password requirement.
-    Password must be entered on EVERY visit — no session persistence.
+    Weekday name of ``day`` (default: **today in the centre's timezone**).
+
+    Kept under its historical name because other modules import it.
     """
-    @functools.wraps(view_func)
-    def _wrapped_view(request, *args, **kwargs):
-        if request.user.is_authenticated:
-            return view_func(request, *args, **kwargs)
-        if not request.session.get('report_authenticated'):
-            request.session['report_redirect_after'] = request.get_full_path()
-            return redirect('reports:password_prompt')
-        del request.session['report_authenticated']
-        return view_func(request, *args, **kwargs)
-    return _wrapped_view
+    day = day or timezone.localdate()
+    return DAY_NAMES.get(day.weekday(), '')
 
 
-@login_required
-def password_prompt(request):
+def add_months(day, count):
+    """First day of the month ``count`` months after ``day``'s month."""
+    index = day.year * 12 + (day.month - 1) + count
+    return date(index // 12, index % 12 + 1, 1)
+
+
+def parse_month_param(value):
     """
-    Display password entry form for accessing protected reports.
+    Parse a ``?month=`` parameter into the first day of that month.
+
+    Accepts ``YYYY-MM`` (what ``<input type="month">`` submits) and
+    ``YYYY-MM-DD``; returns ``None`` when the value cannot be understood.
+
+    This exists because ``month`` is a ``DateField`` and the report used to
+    filter it with ``month__startswith=...``. Pattern lookups skip value
+    coercion, so the SQL became ``"payments"."month" LIKE '2026-02%'`` —
+    which SQLite tolerates (dates are text there) and PostgreSQL rejects
+    outright with ``operator does not exist: date ~~ unknown``. Callers use
+    the returned date with a half-open ``[month, next month)`` range instead
+    (BUG-06).
     """
-    return render(request, 'reports/password_prompt.html')
+    if not value:
+        return None
+    raw = str(value).strip()
+    for fmt in ('%Y-%m', '%Y-%m-%d', '%Y/%m'):
+        try:
+            return datetime.strptime(raw, fmt).date().replace(day=1)
+        except ValueError:
+            continue
+    return None
 
 
-@login_required
-def verify_password(request):
-    """
-    Verify the password and grant access if correct.
-    """
-    if request.method == 'POST':
-        password = request.POST.get('password', '')
-        if password == REPORTS_PASSWORD:
-            request.session['report_authenticated'] = True
-            # Set session to expire after 1 hour
-            request.session.set_expiry(3600)
-
-            # Redirect to the originally requested URL or dashboard
-            redirect_url = request.session.get('report_redirect_after')
-            if redirect_url:
-                del request.session['report_redirect_after']
-                return redirect(redirect_url)
-            return redirect('reports:dashboard')
-        else:
-            messages.error(request, 'Incorrect password. Please try again.')
-
-    return redirect('reports:password_prompt')
+def _month_filter(queryset, month_start, field='month'):
+    """Restrict ``queryset`` to a single calendar month, range-style."""
+    return queryset.filter(**{
+        f'{field}__gte': month_start,
+        f'{field}__lt': add_months(month_start, 1),
+    })
 
 
-@login_required
-def clear_report_session(request):
-    """
-    Clear the report authentication session.
-    """
-    if 'report_authenticated' in request.session:
-        del request.session['report_authenticated']
-    messages.success(request, 'You have been logged out from reports access.')
-    return redirect('reports:dashboard')
+def _rate(part, whole):
+    return (part / whole * 100) if whole else 0
 
 
-def AttendanceService_get_day_name():
-    """Helper to get current day name (uses local timezone)"""
-    days_map = {
-        0: 'Monday', 1: 'Tuesday', 2: 'Wednesday',
-        3: 'Thursday', 4: 'Friday', 5: 'Saturday', 6: 'Sunday',
-    }
-    return days_map.get(timezone.localtime().weekday(), '')
-
+# ==================== Dashboard ====================
 
 @login_required
 def dashboard(request):
     """
     Professional Dashboard with comprehensive statistics, charts,
-    schedule widget, and activity log
+    schedule widget, and activity log.
+
+    Everything below is resolved in the centre's local timezone: ``today`` is
+    ``timezone.localdate()`` and the "is this session running now?" comparison
+    uses ``timezone.localtime()``. Using ``timezone.now()`` compared local
+    ``schedule_time`` values against a UTC clock, which put every status badge
+    2-3 hours out of phase and made the day name disagree with the date after
+    midnight Cairo (TZ-01 / TZ-02).
     """
-    today = timezone.now().date()
+    today = timezone.localdate()
     this_month_start = today.replace(day=1)
-    current_day_name = AttendanceService_get_day_name()
+    current_day_name = AttendanceService_get_day_name(today)
+    current_time = timezone.localtime().time()
 
     # ====== KEY METRICS ======
-    total_students = Student.objects.filter(is_active=True).count()
+    student_totals = Student.objects.filter(is_active=True).aggregate(
+        total=Count('student_id'),
+        new_this_month=Count(
+            'student_id', filter=Q(created_at__date__gte=this_month_start)
+        ),
+    )
+    total_students = student_totals['total'] or 0
+    new_students_this_month = student_totals['new_this_month'] or 0
     total_teachers = Teacher.objects.filter(is_active=True).count()
     total_rooms = Room.objects.filter(is_active=True).count()
-    total_active_groups = Group.objects.filter(is_active=True).count()
-
-    # New students this month
-    new_students_this_month = Student.objects.filter(
-        is_active=True,
-        created_at__date__gte=this_month_start
-    ).count()
 
     # ====== TODAY'S OVERVIEW ======
-    # Today's sessions
-    today_sessions = Session.objects.filter(session_date=today, group__is_active=True)
-    today_active_sessions = today_sessions.filter(is_cancelled=False).count()
-    today_cancelled_sessions = today_sessions.filter(is_cancelled=True).count()
+    session_totals = Session.objects.filter(
+        session_date=today, group__is_active=True
+    ).aggregate(
+        total=Count('session_id'),
+        cancelled=Count('session_id', filter=Q(is_cancelled=True)),
+    )
+    today_total_sessions = session_totals['total'] or 0
+    today_cancelled_sessions = session_totals['cancelled'] or 0
+    today_active_sessions = today_total_sessions - today_cancelled_sessions
 
-    # Today's attendance
-    today_attendances = Attendance.objects.filter(session__session_date=today)
-    today_present = today_attendances.filter(status='present').count()
-    today_late = today_attendances.filter(status='late').count()
-    today_absent = today_attendances.filter(status='absent').count()
+    # ====== WEEK ATTENDANCE TREND (single grouped query) ======
+    # This used to be a 4-query-per-day loop (28 queries) plus 3 more for
+    # today; one GROUP BY over the same window now answers both (PERF-05).
+    week_start = today - timedelta(days=6)
+    per_day = defaultdict(lambda: defaultdict(int))
+    status_rows = (
+        Attendance.objects
+        .filter(session__session_date__gte=week_start,
+                session__session_date__lte=today)
+        .values('session__session_date', 'status')
+        .annotate(n=Count('attendance_id'))
+        .order_by()
+    )
+    for row in status_rows:
+        per_day[row['session__session_date']][row['status']] = row['n']
+
+    week_attendance_data = []
+    for offset in range(6, -1, -1):
+        day = today - timedelta(days=offset)
+        counts = per_day[day]
+        present = counts['present']
+        late = counts['late']
+        absent = counts['absent']
+        total = present + late + absent
+        week_attendance_data.append({
+            'date': day.strftime('%a'),
+            'full_date': day.strftime('%Y-%m-%d'),
+            'present': present,
+            'late': late,
+            'absent': absent,
+            'rate': round(_rate(present + late, total), 1),
+        })
+
+    today_counts = per_day[today]
+    # 'late' is a real, reachable status again — check_strict_time records the
+    # 1-10 minute window as 'late' — so this counter is no longer always zero
+    # (DATA-17).
+    today_present = today_counts['present']
+    today_late = today_counts['late']
+    today_absent = today_counts['absent']
     today_total_attendance = today_present + today_late + today_absent
-    today_attendance_rate = ((today_present + today_late) / today_total_attendance * 100) if today_total_attendance > 0 else 0
+    today_attendance_rate = _rate(today_present + today_late, today_total_attendance)
 
-    # Students absent today
-    absent_today = today_attendances.filter(status='absent').select_related('student', 'session__group')[:5]
+    absent_today = Attendance.objects.filter(
+        session__session_date=today, status='absent'
+    ).select_related('student', 'session__group')[:5]
 
     # ====== FINANCIAL SUMMARY ======
-    this_month_payments = Payment.objects.filter(month__gte=this_month_start)
-    month_total_due = this_month_payments.aggregate(total=Sum('amount_due'))['total'] or 0
-    month_total_paid = this_month_payments.aggregate(total=Sum('amount_paid'))['total'] or 0
+    month_totals = Payment.objects.filter(month__gte=this_month_start).aggregate(
+        total_due=Sum('amount_due'),
+        total_paid=Sum('amount_paid'),
+        pending=Count('payment_id', filter=Q(status__in=['unpaid', 'partial'])),
+    )
+    month_total_due = month_totals['total_due'] or 0
+    month_total_paid = month_totals['total_paid'] or 0
     month_remaining = month_total_due - month_total_paid
-    collection_rate = (month_total_paid / month_total_due * 100) if month_total_due > 0 else 0
+    collection_rate = _rate(month_total_paid, month_total_due)
+    pending_payments_count = month_totals['pending'] or 0
 
-    # Pending payments (unpaid + partial)
-    pending_payments_count = this_month_payments.filter(status__in=['unpaid', 'partial']).count()
     pending_payments_list = Payment.objects.filter(
         status__in=['unpaid', 'partial']
     ).select_related('student', 'group').order_by('-month')[:5]
 
-    # Recent payments
     recent_payments = Payment.objects.select_related('student', 'group').filter(
         status__in=['paid', 'partial']
     ).order_by('-payment_date')[:5]
 
+    # ====== GROUPS: today's schedule + enrolment health ======
+    # One query for the groups, one for their schedules (prefetch) and one
+    # grouped query for the enrolment counts — instead of a per-group
+    # ``GroupSchedule.objects.get()`` and a second annotated groups query.
+    enrolment_counts = dict(
+        StudentGroupEnrollment.objects
+        .filter(is_active=True, group__is_active=True)
+        .values_list('group_id')
+        .annotate(n=Count('id'))
+        .order_by()
+        .values_list('group_id', 'n')
+    )
+    active_groups = list(
+        Group.objects.filter(is_active=True)
+        .select_related('teacher', 'room')
+        .prefetch_related('schedules')
+    )
+    total_active_groups = len(active_groups)
+
     # ====== TODAY'S SCHEDULE ======
-    # Include groups from BOTH the legacy schedule_day field AND the
-    # GroupSchedule model (which supports multi-day schedules per group).
-    from apps.teachers.models import GroupSchedule
-
-    todays_groups = Group.objects.filter(
-        is_active=True,
-        schedule_day=current_day_name
-    ).select_related('teacher', 'room').annotate(
-        enrolled_count=Count(
-            'studentgroupenrollment',
-            filter=Q(studentgroupenrollment__is_active=True)
-        )
-    ).order_by('schedule_time')
-
+    # ``get_schedule_entries()`` (apps.teachers.models) is the single source of
+    # schedule truth: it returns one entry per weekly session from
+    # ``GroupSchedule``, falling back to the legacy schedule_day/schedule_time
+    # fields for groups that have no GroupSchedule rows (DATA-04).
     today_schedule = []
-    now = timezone.now()
-    current_time = now.time()
-    seen_group_ids = set()
+    for grp in active_groups:
+        for entry in grp.get_schedule_entries():
+            if entry.day_of_week != current_day_name:
+                continue
+            enrolled_count = enrolment_counts.get(grp.pk, 0)
+            capacity = grp.room.capacity if grp.room else 0
+            end_time = entry.get_end_time()
 
-    for grp in todays_groups:
-        enrolled_count = grp.enrolled_count
-        capacity = grp.room.capacity if grp.room else 0
-        end_time = grp.get_end_time()
+            session_status = 'upcoming'
+            if current_time > end_time:
+                session_status = 'completed'
+            elif current_time >= entry.start_time:
+                session_status = 'ongoing'
 
-        session_status = 'upcoming'
-        if current_time > end_time:
-            session_status = 'completed'
-        elif current_time >= grp.schedule_time:
-            session_status = 'ongoing'
+            today_schedule.append({
+                'id': grp.group_id,
+                'group_name': grp.group_name,
+                'teacher': grp.teacher.full_name if grp.teacher else '-',
+                'room': grp.room.name if grp.room else '-',
+                'sort_key': entry.start_time,
+                'time_start': entry.start_time.strftime('%I:%M %p'),
+                'time_end': end_time.strftime('%I:%M %p'),
+                'duration': entry.get_duration_display(),
+                'enrolled': enrolled_count,
+                'capacity': capacity,
+                'utilization': _rate(enrolled_count, capacity),
+                'status': session_status,
+            })
 
-        today_schedule.append({
-            'id': grp.group_id,
-            'group_name': grp.group_name,
-            'teacher': grp.teacher.full_name,
-            'room': grp.room.name if grp.room else '-',
-            'time_start': grp.schedule_time.strftime('%I:%M %p'),
-            'time_end': end_time.strftime('%I:%M %p'),
-            'duration': grp.get_duration_display(),
-            'enrolled': enrolled_count,
-            'capacity': capacity,
-            'utilization': (enrolled_count / capacity * 100) if capacity > 0 else 0,
-            'status': session_status,
-        })
-        seen_group_ids.add(grp.group_id)
-
-    # Also include groups that use GroupSchedule (multi-day) for today
-    gs_groups = Group.objects.filter(
-        is_active=True,
-        schedules__day_of_week=current_day_name,
-    ).exclude(
-        group_id__in=seen_group_ids,
-    ).select_related('teacher', 'room').annotate(
-        enrolled_count=Count(
-            'studentgroupenrollment',
-            filter=Q(studentgroupenrollment__is_active=True)
-        )
-    ).distinct()
-
-    for grp in gs_groups:
-        try:
-            gs = GroupSchedule.objects.get(group=grp, day_of_week=current_day_name)
-            start = gs.start_time
-            duration = gs.duration
-        except GroupSchedule.DoesNotExist:
-            continue
-        enrolled_count = grp.enrolled_count
-        capacity = grp.room.capacity if grp.room else 0
-        from datetime import datetime as _dt
-        end_dt = _dt.combine(today, start) + timedelta(minutes=duration)
-        end_time = end_dt.time()
-
-        session_status = 'upcoming'
-        if current_time > end_time:
-            session_status = 'completed'
-        elif current_time >= start:
-            session_status = 'ongoing'
-
-        today_schedule.append({
-            'id': grp.group_id,
-            'group_name': grp.group_name,
-            'teacher': grp.teacher.full_name,
-            'room': grp.room.name if grp.room else '-',
-            'time_start': start.strftime('%I:%M %p'),
-            'time_end': end_time.strftime('%I:%M %p'),
-            'duration': f'{duration} دقيقة',
-            'enrolled': enrolled_count,
-            'capacity': capacity,
-            'utilization': (enrolled_count / capacity * 100) if capacity > 0 else 0,
-            'status': session_status,
-        })
-
-    # Sort combined schedule by start time
-    today_schedule.sort(key=lambda s: s['time_start'])
-
-    # ====== WEEK ATTENDANCE TREND ======
-    week_attendance_data = []
-    for i in range(6, -1, -1):
-        date = today - timedelta(days=i)
-        day_attendances = Attendance.objects.filter(session__session_date=date)
-        total = day_attendances.count()
-        present = day_attendances.filter(status='present').count()
-        late = day_attendances.filter(status='late').count()
-        absent = day_attendances.filter(status='absent').count()
-        attendance_rate = ((present + late) / total * 100) if total > 0 else 0
-
-        week_attendance_data.append({
-            'date': date.strftime('%a'),
-            'full_date': date.strftime('%Y-%m-%d'),
-            'present': present,
-            'late': late,
-            'absent': absent,
-            'rate': round(attendance_rate, 1),
-        })
-
-    # ====== RECENT ACTIVITY ======
-    recent_attendances = Attendance.objects.select_related(
-        'student', 'session__group'
-    ).order_by('-scan_time')[:6]
-
-    # Activity log
-    recent_activities = ActivityLog.objects.select_related('user').order_by('-created_at')[:10]
+    # Sort on the real time — the formatted '%I:%M %p' string sorts
+    # "01:00 PM" before "09:00 AM".
+    today_schedule.sort(key=lambda s: s['sort_key'])
+    for slot in today_schedule:
+        del slot['sort_key']
 
     # ====== GROUPS STATUS ======
-    # Groups with low enrollment
     groups_low_enrollment = []
     groups_high_enrollment = []
-
-    for group in Group.objects.filter(is_active=True).select_related('teacher', 'room').annotate(
-        enrolled=Count('studentgroupenrollment', filter=Q(studentgroupenrollment__is_active=True))
-    ):
+    for group in active_groups:
+        enrolled = enrolment_counts.get(group.pk, 0)
         capacity = group.room.capacity if group.room else 0
-        utilization = (group.enrolled / capacity * 100) if capacity > 0 else 0
+        utilization = _rate(enrolled, capacity)
 
         group_info = {
             'name': group.group_name,
             'teacher': group.teacher.full_name if group.teacher else '-',
-            'enrolled': group.enrolled,
+            'enrolled': enrolled,
             'capacity': capacity,
             'utilization': utilization,
         }
@@ -298,21 +304,24 @@ def dashboard(request):
         elif utilization >= 90:
             groups_high_enrollment.append(group_info)
 
-    # ====== QUICK STATS ======
-    total_rooms_count = Room.objects.filter(is_active=True).count()
+    # ====== RECENT ACTIVITY ======
+    recent_attendances = Attendance.objects.select_related(
+        'student', 'session__group'
+    ).order_by('-scan_time')[:6]
+    recent_activities = ActivityLog.objects.select_related('user').order_by('-created_at')[:10]
 
     context = {
         # Key Metrics
         'total_students': total_students,
         'total_teachers': total_teachers,
-        'total_rooms': total_rooms_count,
+        'total_rooms': total_rooms,
         'total_groups': total_active_groups,
         'new_students_this_month': new_students_this_month,
 
         # Today's Overview
         'today_date': today,
         'today_day_name': current_day_name,
-        'today_total_sessions': today_sessions.count(),
+        'today_total_sessions': today_total_sessions,
         'today_active_sessions': today_active_sessions,
         'today_cancelled_sessions': today_cancelled_sessions,
         'today_present': today_present,
@@ -349,24 +358,24 @@ def dashboard(request):
     return render(request, 'reports/dashboard.html', context)
 
 
+# ==================== Attendance report ====================
+
 @login_required
 def attendance_report(request):
     """
     Comprehensive Attendance Report with filters and statistics
     """
-    from django.core.paginator import Paginator
-    
     # Get filter parameters
     date_from = request.GET.get('date_from')
     date_to = request.GET.get('date_to')
     group_id = request.GET.get('group')
     status = request.GET.get('status')
-    
+
     # Base queryset
     attendances = Attendance.objects.select_related(
         'student', 'session', 'session__group', 'session__group__teacher'
     ).order_by('-scan_time')
-    
+
     # Apply filters
     if date_from:
         attendances = attendances.filter(session__session_date__gte=date_from)
@@ -376,93 +385,105 @@ def attendance_report(request):
         attendances = attendances.filter(session__group__group_id=group_id)
     if status:
         attendances = attendances.filter(status=status)
-    
-    # Statistics
-    total_count = attendances.count()
-    present_count = attendances.filter(status='present').count()
-    late_count = attendances.filter(status='late').count()
-    absent_count = attendances.filter(status='absent').count()
-    
+
+    # Statistics — one aggregate instead of four COUNT round-trips.
+    stats = attendances.aggregate(
+        total=Count('attendance_id'),
+        present=Count('attendance_id', filter=Q(status='present')),
+        late=Count('attendance_id', filter=Q(status='late')),
+        absent=Count('attendance_id', filter=Q(status='absent')),
+    )
+
     # Group filter options
     groups = Group.objects.filter(is_active=True)
-    
+
     # Pagination
     paginator = Paginator(attendances, 25)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
-    
+
     context = {
         'page_obj': page_obj,
-        'total_count': total_count,
-        'present_count': present_count,
-        'late_count': late_count,
-        'absent_count': absent_count,
+        'total_count': stats['total'] or 0,
+        'present_count': stats['present'] or 0,
+        # Reachable again now that the scanner records the 1-10 minute
+        # window as 'late' (DATA-17).
+        'late_count': stats['late'] or 0,
+        'absent_count': stats['absent'] or 0,
         'groups': groups,
         'date_from': date_from,
         'date_to': date_to,
         'selected_group': group_id,
         'selected_status': status,
     }
-    
+
     return render(request, 'reports/attendance.html', context)
 
 
-@login_required
-@report_password_required
+# ==================== Payment report ====================
+
+@supervisor_required
 def payment_report(request):
     """
-    Comprehensive Payment Report with filters and statistics
+    Comprehensive Payment Report with filters and statistics.
+
+    Money report — supervisor or admin only (AUTH-09).
     """
-    from django.core.paginator import Paginator
-    
     # Get filter parameters
     month = request.GET.get('month')
     status = request.GET.get('status')
     group_id = request.GET.get('group')
     teacher_id = request.GET.get('teacher')
-    
+
     # Base queryset
     payments = Payment.objects.select_related(
         'student', 'group', 'group__teacher'
     ).order_by('-month', '-payment_date')
-    
+
     # Apply filters
     if month:
-        payments = payments.filter(month__startswith=month)
+        month_start = parse_month_param(month)
+        if month_start is None:
+            # An unparseable ?month= used to produce a LIKE that matched
+            # nothing; keep "no rows" rather than silently widening the report.
+            payments = payments.none()
+        else:
+            payments = _month_filter(payments, month_start)
     if status:
         payments = payments.filter(status=status)
     if group_id:
         payments = payments.filter(group__group_id=group_id)
     if teacher_id:
         payments = payments.filter(group__teacher__teacher_id=teacher_id)
-    
-    # Statistics
-    total_due = payments.aggregate(Sum('amount_due'))['amount_due__sum'] or 0
-    total_paid = payments.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
-    total_remaining = total_due - total_paid
-    
-    # Status counts
-    paid_count = payments.filter(status='paid').count()
-    partial_count = payments.filter(status='partial').count()
-    unpaid_count = payments.filter(status='unpaid').count()
-    
+
+    # Statistics — one aggregate instead of five round-trips.
+    stats = payments.aggregate(
+        total_due=Sum('amount_due'),
+        total_paid=Sum('amount_paid'),
+        paid=Count('payment_id', filter=Q(status='paid')),
+        partial=Count('payment_id', filter=Q(status='partial')),
+        unpaid=Count('payment_id', filter=Q(status='unpaid')),
+    )
+    total_due = stats['total_due'] or 0
+    total_paid = stats['total_paid'] or 0
+
     # Group and teacher filter options
     groups = Group.objects.filter(is_active=True)
     teachers = Teacher.objects.filter(is_active=True)
-    
+
     # Pagination
     paginator = Paginator(payments, 25)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
-    
+
     context = {
         'page_obj': page_obj,
         'total_due': total_due,
         'total_paid': total_paid,
-        'total_remaining': total_remaining,
-        'paid_count': paid_count,
-        'partial_count': partial_count,
-        'unpaid_count': unpaid_count,
+        'total_remaining': total_due - total_paid,
+        'paid_count': stats['paid'] or 0,
+        'partial_count': stats['partial'] or 0,
+        'unpaid_count': stats['unpaid'] or 0,
         'groups': groups,
         'teachers': teachers,
         'selected_month': month,
@@ -470,69 +491,106 @@ def payment_report(request):
         'selected_group': group_id,
         'selected_teacher': teacher_id,
     }
-    
+
     return render(request, 'reports/payments.html', context)
 
 
-@login_required
-@report_password_required
+# ==================== Financial report ====================
+
+@admin_required
 def financial_report(request):
     """
-    Detailed Financial Report
+    Detailed Financial Report — centre revenue and teacher settlements.
+
+    Admin only (AUTH-09): this is the whole centre's money, not desk work.
     """
-    today = timezone.now().date()
-    this_month = today.replace(day=1)
-    
-    # Monthly summary for the last 12 months
-    monthly_data = []
-    for i in range(11, -1, -1):
-        month_date = (this_month - timedelta(days=i*30)).replace(day=1)
-        month_end = (month_date + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-        
-        payments = Payment.objects.filter(
-            month__gte=month_date,
-            month__lte=month_end
+    this_month = timezone.localdate().replace(day=1)
+
+    # Twelve real calendar months. Subtracting ``i * 30`` days skipped and
+    # repeated months (PERF-07).
+    months = [add_months(this_month, -i) for i in range(11, -1, -1)]
+    range_start = months[0]
+    range_end = add_months(months[-1], 1)
+
+    # One grouped query for all twelve months instead of 4 aggregates × 12.
+    monthly_rows = {
+        row['bucket']: row
+        for row in (
+            Payment.objects
+            .filter(month__gte=range_start, month__lt=range_end)
+            .annotate(bucket=TruncMonth('month'))
+            .values('bucket')
+            .annotate(
+                total_due=Sum('amount_due'),
+                total_paid=Sum('amount_paid'),
+                paid_count=Count('payment_id', filter=Q(status='paid')),
+                unpaid_count=Count('payment_id', filter=Q(status='unpaid')),
+            )
+            .order_by()
         )
-        
+    }
+
+    monthly_data = []
+    for month_date in months:
+        row = monthly_rows.get(month_date) or {}
         monthly_data.append({
             'month_name': month_date.strftime('%B %Y'),
-            'total_due': payments.aggregate(Sum('amount_due'))['amount_due__sum'] or 0,
-            'total_paid': payments.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0,
-            'paid_count': payments.filter(status='paid').count(),
-            'unpaid_count': payments.filter(status='unpaid').count(),
+            'total_due': row.get('total_due') or 0,
+            'total_paid': row.get('total_paid') or 0,
+            'paid_count': row.get('paid_count') or 0,
+            'unpaid_count': row.get('unpaid_count') or 0,
         })
-    
-    # Teacher settlements summary
-    teacher_stats = []
-    for teacher in Teacher.objects.filter(is_active=True):
-        groups = Group.objects.filter(teacher=teacher, is_active=True)
-        group_ids = list(groups.values_list('group_id', flat=True))
-        
-        payments = Payment.objects.filter(group_id__in=group_ids)
-        total_revenue = payments.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
-        
-        teacher_stats.append({
+
+    # ---- Teacher settlements summary (3 queries, not 2 per teacher) ----
+    teachers = list(Teacher.objects.filter(is_active=True))
+    teacher_ids = [t.pk for t in teachers]
+
+    group_counts = dict(
+        Group.objects.filter(teacher_id__in=teacher_ids, is_active=True)
+        .values_list('teacher_id')
+        .annotate(n=Count('group_id'))
+        .order_by()
+        .values_list('teacher_id', 'n')
+    )
+    # Revenue is summed over ALL of the teacher's groups, active or not: a
+    # group deactivated mid-month still earned the money it collected, and
+    # filtering on ``is_active=True`` made that revenue disappear (DATA-23).
+    revenue = dict(
+        Payment.objects.filter(group__teacher_id__in=teacher_ids)
+        .values_list('group__teacher_id')
+        .annotate(total=Sum('amount_paid'))
+        .order_by()
+        .values_list('group__teacher_id', 'total')
+    )
+
+    teacher_stats = [
+        {
             'name': teacher.full_name,
-            'groups_count': groups.count(),
-            'total_revenue': total_revenue,
+            'groups_count': group_counts.get(teacher.pk, 0),
+            'total_revenue': revenue.get(teacher.pk) or 0,
             'is_active': teacher.is_active,
-        })
-    
+        }
+        for teacher in teachers
+    ]
+
     context = {
         'monthly_data': json.dumps(monthly_data, ensure_ascii=False, default=str),
         'teacher_stats': teacher_stats,
     }
-    
+
     return render(request, 'reports/financial.html', context)
 
 
 # ==================== Activity Log ====================
 
-@login_required
+@admin_required
 def activity_log(request):
-    """سجل النشاط - عرض جميع العمليات التي قام بها المستخدمون"""
+    """
+    سجل النشاط - عرض جميع العمليات التي قام بها المستخدمون
+
+    Admin only (AUTH-10): the log holds usernames and client IP addresses.
+    """
     from apps.accounts.models import User
-    from apps.accounts.decorators import admin_required
 
     logs = ActivityLog.objects.select_related('user').order_by('-created_at')
 
@@ -552,7 +610,6 @@ def activity_log(request):
         logs = logs.filter(created_at__date__lte=date_to)
 
     # Pagination
-    from django.core.paginator import Paginator
     paginator = Paginator(logs, 50)
     page = request.GET.get('page', 1)
     logs_page = paginator.get_page(page)
@@ -571,106 +628,122 @@ def activity_log(request):
 
 # ==================== Recycle Bin ====================
 
-@login_required
+RECYCLE_MODELS = {
+    'student': Student,
+    'teacher': Teacher,
+    'group': Group,
+    'room': Room,
+}
+
+
+def _bin_section(queryset, visible):
+    """Return ``(items_for_template, count)`` without counting twice."""
+    if visible:
+        items = list(queryset)
+        return items, len(items)
+    return [], queryset.count()
+
+
+@supervisor_required
 def recycle_bin(request):
     """
     سلة المهملات - عرض العناصر المحذوفة مع إمكانية الاستعادة أو الحذف النهائي
+
+    Supervisor or admin (AUTH-11). Permanent deletion stays admin-only.
     """
     filter_type = request.GET.get('type', 'all')
-    
-    deleted_students = Student.all_objects.dead().select_related('deleted_by')
-    deleted_teachers = Teacher.all_objects.dead().select_related('deleted_by')
-    deleted_groups = Group.all_objects.dead().select_related('deleted_by')
-    deleted_rooms = Room.all_objects.dead().select_related('deleted_by')
-    
+
+    students, students_count = _bin_section(
+        Student.all_objects.dead().select_related('deleted_by'),
+        filter_type in ('all', 'students'),
+    )
+    teachers, teachers_count = _bin_section(
+        Teacher.all_objects.dead().select_related('deleted_by'),
+        filter_type in ('all', 'teachers'),
+    )
+    groups, groups_count = _bin_section(
+        Group.all_objects.dead().select_related('deleted_by'),
+        filter_type in ('all', 'groups'),
+    )
+    rooms, rooms_count = _bin_section(
+        Room.all_objects.dead().select_related('deleted_by'),
+        filter_type in ('all', 'rooms'),
+    )
+
     context = {
-        'deleted_students': deleted_students if filter_type in ('all', 'students') else [],
-        'deleted_teachers': deleted_teachers if filter_type in ('all', 'teachers') else [],
-        'deleted_groups': deleted_groups if filter_type in ('all', 'groups') else [],
-        'deleted_rooms': deleted_rooms if filter_type in ('all', 'rooms') else [],
-        'students_count': deleted_students.count(),
-        'teachers_count': deleted_teachers.count(),
-        'groups_count': deleted_groups.count(),
-        'rooms_count': deleted_rooms.count(),
-        'total_count': deleted_students.count() + deleted_teachers.count() + deleted_groups.count() + deleted_rooms.count(),
+        'deleted_students': students,
+        'deleted_teachers': teachers,
+        'deleted_groups': groups,
+        'deleted_rooms': rooms,
+        'students_count': students_count,
+        'teachers_count': teachers_count,
+        'groups_count': groups_count,
+        'rooms_count': rooms_count,
+        'total_count': students_count + teachers_count + groups_count + rooms_count,
         'current_type': filter_type,
         'is_admin': request.user.role == 'admin',
+        'empty_confirm_word': RECYCLE_EMPTY_CONFIRM,
     }
-    
+
     return render(request, 'reports/recycle_bin.html', context)
 
 
-@ajax_login_required
+@ajax_supervisor_required
 def recycle_restore(request):
     """استعادة عنصر من سلة المهملات"""
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'message': 'Method not allowed'})
-    
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+
     item_type = request.POST.get('type')
     item_id = request.POST.get('id')
-    
+
     if not item_type or not item_id:
         return JsonResponse({'success': False, 'message': 'بيانات ناقصة'})
-    
-    model_map = {
-        'student': Student,
-        'teacher': Teacher,
-        'group': Group,
-        'room': Room,
-    }
-    
-    model = model_map.get(item_type)
+
+    model = RECYCLE_MODELS.get(item_type)
     if not model:
         return JsonResponse({'success': False, 'message': 'نوع غير صالح'})
-    
+
     try:
         obj = model.all_objects.get(pk=item_id)
         obj.restore()
-        
+
         ActivityLog.log(
             user=request.user,
-            action='update',
+            # 'update' was not a valid ACTION_CHOICES value, so the log line
+            # rendered raw and the filter dropdown could not select it
+            # (DATA-24).
+            action='restore',
             description=f'استعادة {item_type} من سلة المهملات: {obj}',
             target_model=item_type.capitalize(),
             target_id=item_id,
             request=request
         )
-        
+
         return JsonResponse({
             'success': True,
-            'message': f'تم استعادة العنصر بنجاح'
+            'message': 'تم استعادة العنصر بنجاح'
         })
     except model.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
 
 
-@ajax_login_required
+@ajax_admin_required
 def recycle_permanent_delete(request):
     """حذف نهائي من سلة المهملات - للمدير فقط"""
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'message': 'Method not allowed'})
-    
-    # Only admin can permanently delete
-    if request.user.role != 'admin':
-        return JsonResponse({'success': False, 'message': 'ليس لديك صلاحية الحذف النهائي. فقط المدير يمكنه ذلك.'})
-    
+        return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+
     item_type = request.POST.get('type')
     item_id = request.POST.get('id')
-    
+
     if not item_type or not item_id:
         return JsonResponse({'success': False, 'message': 'بيانات ناقصة'})
-    
-    model_map = {
-        'student': Student,
-        'teacher': Teacher,
-        'group': Group,
-        'room': Room,
-    }
-    
-    model = model_map.get(item_type)
+
+    model = RECYCLE_MODELS.get(item_type)
     if not model:
         return JsonResponse({'success': False, 'message': 'نوع غير صالح'})
-    
+
     try:
         obj = model.all_objects.get(pk=item_id)
         if not obj.is_deleted:
@@ -681,7 +754,7 @@ def recycle_permanent_delete(request):
 
         ActivityLog.log(
             user=request.user,
-            action='delete',
+            action='permanent_delete',
             description=f'حذف نهائي {item_type}: {obj_name}',
             target_model=item_type.capitalize(),
             target_id=item_id,
@@ -698,77 +771,179 @@ def recycle_permanent_delete(request):
         return JsonResponse({'success': False, 'message': 'لا يمكن حذف هذا العنصر لأنه مرتبط بسجلات أخرى (مدفوعات أو حضور). يرجى حذف السجلات المرتبطة أولاً.'})
 
 
-@login_required
+def _ids_with_financial_history(dead_students):
+    """Student ids that must never be purged: they have money or attendance."""
+    blocked = set(
+        Payment.objects.filter(student__in=dead_students)
+        .values_list('student_id', flat=True)
+    )
+    blocked |= set(
+        Attendance.objects.filter(student__in=dead_students)
+        .values_list('student_id', flat=True)
+    )
+    return blocked
+
+
+def _group_ids_with_financial_history(dead_groups):
+    """Group ids that must never be purged: they have money or attendance."""
+    blocked = set(
+        Payment.objects.filter(group__in=dead_groups)
+        .values_list('group_id', flat=True)
+    )
+    blocked |= set(
+        Attendance.objects.filter(session__group__in=dead_groups)
+        .values_list('session__group_id', flat=True)
+    )
+    return blocked
+
+
+@admin_required
 def recycle_empty(request):
-    """تفريغ سلة المهملات بالكامل مع حذف السجلات المرتبطة تدريجياً - للمدير فقط"""
+    """
+    تفريغ سلة المهملات - للمدير فقط.
+
+    This used to cascade-delete ``Attendance`` **and ``Payment``** rows for
+    every soft-deleted student and group before hard-deleting them: one POST
+    permanently destroyed the centre's accounting history, irreversibly, with
+    no export and no per-item confirmation (DATA-25).
+
+    It is now conservative:
+
+    * the admin must type the confirmation word (``RECYCLE_EMPTY_CONFIRM``)
+      into the form — a JS ``confirm()`` dialog is not consent for this;
+    * any student or group that still has a ``Payment`` or ``Attendance`` row
+      is **skipped**, never purged. Financial and attendance history is only
+      removable by someone who deliberately removes those records first;
+    * everything actually removed is written to the activity log, itemised.
+    """
     if request.method != 'POST':
-        return JsonResponse({'success': False, 'message': 'Method not allowed'})
-    
-    # Only admin can empty recycle bin
-    if request.user.role != 'admin':
-        messages.error(request, 'ليس لديك صلاحية تفريغ سلة المهملات. فقط المدير يمكنه ذلك.')
+        messages.error(request, 'طريقة غير مسموح بها.')
         return redirect('reports:recycle_bin')
 
-    from apps.attendance.models import Session
-    from apps.payments.models import Payment
-    from apps.students.models import StudentGroupEnrollment
-    from apps.attendance.models import Attendance as AttendanceModel
+    if request.POST.get('confirm', '').strip() != RECYCLE_EMPTY_CONFIRM:
+        messages.error(
+            request,
+            f'لتأكيد تفريغ سلة المهملات اكتب كلمة «{RECYCLE_EMPTY_CONFIRM}» في خانة التأكيد.'
+        )
+        return redirect('reports:recycle_bin')
 
-    count = 0
+    removed = {'students': 0, 'groups': 0, 'teachers': 0, 'rooms': 0}
+    kept = {'students': 0, 'groups': 0, 'teachers': 0, 'rooms': 0}
+    removed_names = []
 
     try:
         with transaction.atomic():
-            # ── Step 1: حذف الطلاب المحذوفين مع سجلاتهم ──────────────────
+            # ── 1) الطلاب المحذوفون بدون سجلات مالية أو حضور ──────────────
             dead_students = Student.all_objects.dead()
-            student_ids = list(dead_students.values_list('pk', flat=True))
-            if student_ids:
-                AttendanceModel.objects.filter(student_id__in=student_ids).delete()
-                Payment.objects.filter(student_id__in=student_ids).delete()
-                StudentGroupEnrollment.objects.filter(student_id__in=student_ids).delete()
-                count += dead_students.count()
-                dead_students.hard_delete()
+            blocked_students = _ids_with_financial_history(dead_students)
+            purgeable = list(
+                dead_students.exclude(pk__in=blocked_students)
+                .values_list('pk', 'full_name')
+            )
+            kept['students'] = len(blocked_students)
+            if purgeable:
+                ids = [pk for pk, _ in purgeable]
+                StudentGroupEnrollment.objects.filter(student_id__in=ids).delete()
+                Student.all_objects.filter(pk__in=ids).hard_delete()
+                removed['students'] = len(ids)
+                removed_names.extend(f'طالب: {name}' for _, name in purgeable)
 
-            # ── Step 2: حذف المجموعات المحذوفة مع سجلاتها ───────────────
+            # ── 2) المجموعات المحذوفة بدون سجلات مالية أو حضور ────────────
             dead_groups = Group.all_objects.dead()
-            group_ids = list(dead_groups.values_list('pk', flat=True))
-            if group_ids:
-                session_ids = list(Session.objects.filter(group_id__in=group_ids).values_list('pk', flat=True))
-                if session_ids:
-                    AttendanceModel.objects.filter(session_id__in=session_ids).delete()
-                    Session.objects.filter(pk__in=session_ids).delete()
-                StudentGroupEnrollment.objects.filter(group_id__in=group_ids).delete()
-                Payment.objects.filter(group_id__in=group_ids).delete()
-                count += dead_groups.count()
-                dead_groups.hard_delete()
+            blocked_groups = _group_ids_with_financial_history(dead_groups)
+            purgeable_groups = list(
+                dead_groups.exclude(pk__in=blocked_groups)
+                .values_list('pk', 'group_name')
+            )
+            kept['groups'] = len(blocked_groups)
+            if purgeable_groups:
+                ids = [pk for pk, _ in purgeable_groups]
+                Session.objects.filter(group_id__in=ids).delete()
+                StudentGroupEnrollment.objects.filter(group_id__in=ids).delete()
+                Group.all_objects.filter(pk__in=ids).hard_delete()
+                removed['groups'] = len(ids)
+                removed_names.extend(f'مجموعة: {name}' for _, name in purgeable_groups)
 
-            # ── Step 3: حذف المدرسين والقاعات المحذوفين ──────────────────
-            for model in [Teacher, Room]:
-                dead_qs = model.all_objects.dead()
-                count += dead_qs.count()
-                dead_qs.hard_delete()
+            # ── 3) المدرسون والقاعات المحذوفون بدون مجموعات مرتبطة ────────
+            dead_teachers = Teacher.all_objects.dead()
+            busy_teachers = set(
+                Group.all_objects.filter(teacher__in=dead_teachers)
+                .values_list('teacher_id', flat=True)
+            )
+            purgeable_teachers = list(
+                dead_teachers.exclude(pk__in=busy_teachers)
+                .values_list('pk', 'full_name')
+            )
+            kept['teachers'] = len(busy_teachers)
+            if purgeable_teachers:
+                ids = [pk for pk, _ in purgeable_teachers]
+                Teacher.all_objects.filter(pk__in=ids).hard_delete()
+                removed['teachers'] = len(ids)
+                removed_names.extend(f'مدرس: {name}' for _, name in purgeable_teachers)
 
-    except ProtectedError as e:
-        protected_names = ', '.join(str(obj) for obj in list(e.protected_objects)[:3])
-        messages.error(request, f'لا يمكن الحذف: بعض العناصر مرتبطة بسجلات أخرى ({protected_names}...)')
+            dead_rooms = Room.all_objects.dead()
+            busy_rooms = set(
+                Group.all_objects.filter(room__in=dead_rooms)
+                .values_list('room_id', flat=True)
+            )
+            purgeable_rooms = list(
+                dead_rooms.exclude(pk__in=busy_rooms).values_list('pk', 'name')
+            )
+            kept['rooms'] = len(busy_rooms)
+            if purgeable_rooms:
+                ids = [pk for pk, _ in purgeable_rooms]
+                Room.all_objects.filter(pk__in=ids).hard_delete()
+                removed['rooms'] = len(ids)
+                removed_names.extend(f'قاعة: {name}' for _, name in purgeable_rooms)
+
+    except ProtectedError as exc:
+        protected_names = ', '.join(str(obj) for obj in list(exc.protected_objects)[:3])
+        messages.error(
+            request,
+            f'لا يمكن الحذف: بعض العناصر مرتبطة بسجلات أخرى ({protected_names}...)'
+        )
         return redirect('reports:recycle_bin')
-    except Exception as e:
-        messages.error(request, f'حدث خطأ أثناء التفريغ: {str(e)}')
+    except Exception:
+        # QUAL-01: never echo the raw exception text to the browser — it leaks
+        # model names, SQL fragments and file paths. It goes to the log.
+        logger.exception('recycle_empty failed for user %s', request.user.pk)
+        messages.error(request, 'حدث خطأ أثناء تفريغ سلة المهملات. تمت مراجعة السجل.')
         return redirect('reports:recycle_bin')
+
+    total_removed = sum(removed.values())
+    total_kept = sum(kept.values())
 
     ActivityLog.log(
         user=request.user,
-        action='student_delete',
-        description=f'تفريغ سلة المهملات: {count} عنصر',
+        action='permanent_delete',
+        description=(
+            f'تفريغ سلة المهملات: حُذف نهائياً {total_removed} عنصر '
+            f'(طلاب: {removed["students"]}، مجموعات: {removed["groups"]}، '
+            f'مدرسون: {removed["teachers"]}، قاعات: {removed["rooms"]}). '
+            f'تم تخطي {total_kept} عنصر لارتباطه بسجلات مالية أو حضور. '
+            + ('العناصر المحذوفة: ' + ' | '.join(removed_names[:50]) if removed_names else '')
+        ),
         target_model='RecycleBin',
         target_id=0,
         request=request
     )
 
-    messages.success(request, f'تم تفريغ سلة المهملات ({count} عنصر)')
+    if total_removed:
+        messages.success(request, f'تم تفريغ سلة المهملات ({total_removed} عنصر)')
+    else:
+        messages.info(request, 'لا يوجد عنصر يمكن حذفه نهائياً من سلة المهملات.')
+    if total_kept:
+        messages.warning(
+            request,
+            f'تم الاحتفاظ بـ {total_kept} عنصر لأنه مرتبط بسجلات مالية أو سجلات حضور. '
+            'لا يتم حذف السجلات المالية تلقائياً.'
+        )
     return redirect('reports:recycle_bin')
 
 
-@login_required
+# ==================== Tsfya — monthly financial summary ====================
+
+@supervisor_required
 def monthly_financial_summary(request):
     """
     Tsfya (تصفية) — Monthly Financial Summary dashboard.
@@ -779,20 +954,12 @@ def monthly_financial_summary(request):
     - Remaining balances
     - Collection rates
     - Payment status distribution
-    """
-    from django.db.models import Q, OuterRef, Subquery
-    from apps.teachers.models import Teacher
 
+    Money report — supervisor or admin only (AUTH-09).
+    """
     # Determine month
-    month_param = request.GET.get('month')
-    if month_param:
-        try:
-            y, m = int(month_param[:4]), int(month_param[5:7])
-            report_month = datetime(y, m, 1).date()
-        except (ValueError, IndexError):
-            report_month = timezone.localtime().date().replace(day=1)
-    else:
-        report_month = timezone.localtime().date().replace(day=1)
+    report_month = parse_month_param(request.GET.get('month')) or \
+        timezone.localdate().replace(day=1)
 
     # All payments for the selected month
     payments_qs = Payment.objects.filter(month=report_month).select_related(
@@ -801,42 +968,61 @@ def monthly_financial_summary(request):
 
     # --- Summary statistics ---
     total_students = payments_qs.values('student').distinct().count()
-    paid_count = payments_qs.filter(status='paid').count()
-    partial_count = payments_qs.filter(status='partial').count()
-    unpaid_count = payments_qs.filter(status='unpaid').count()
-    total_due = payments_qs.aggregate(Sum('amount_due'))['amount_due__sum'] or 0
-    total_paid = payments_qs.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
-    total_remaining = total_due - total_paid
+    totals = payments_qs.aggregate(
+        paid=Count('payment_id', filter=Q(status='paid')),
+        partial=Count('payment_id', filter=Q(status='partial')),
+        unpaid=Count('payment_id', filter=Q(status='unpaid')),
+        total_due=Sum('amount_due'),
+        total_paid=Sum('amount_paid'),
+    )
+    total_due = totals['total_due'] or 0
+    total_paid = totals['total_paid'] or 0
 
     # --- Per-group breakdown ---
-    groups = Group.objects.filter(is_active=True).select_related('teacher').order_by('group_name')
+    # One GROUP BY query for every group instead of 7 queries per group
+    # (PERF-06). ``.order_by()`` is essential: the base queryset is ordered by
+    # status/amount, and those columns would otherwise join the GROUP BY.
+    rows = {
+        row['group_id']: row
+        for row in (
+            payments_qs
+            .values('group_id')
+            .annotate(
+                total_students=Count('payment_id'),
+                paid=Count('payment_id', filter=Q(status='paid')),
+                partial=Count('payment_id', filter=Q(status='partial')),
+                unpaid=Count('payment_id', filter=Q(status='unpaid')),
+                due=Sum('amount_due'),
+                paid_amount=Sum('amount_paid'),
+            )
+            .order_by()
+        )
+    }
+
+    groups = Group.objects.filter(
+        is_active=True, group_id__in=list(rows.keys())
+    ).select_related('teacher').order_by('group_name')
+
     group_breakdown = []
     for group in groups:
-        group_payments = payments_qs.filter(group=group)
-        if not group_payments.exists():
-            continue
-        g_paid = group_payments.filter(status='paid').count()
-        g_partial = group_payments.filter(status='partial').count()
-        g_unpaid = group_payments.filter(status='unpaid').count()
-        g_total = group_payments.count()
-        g_due = group_payments.aggregate(Sum('amount_due'))['amount_due__sum'] or 0
-        g_paid_amt = group_payments.aggregate(Sum('amount_paid'))['amount_paid__sum'] or 0
+        row = rows[group.group_id]
+        g_due = row['due'] or 0
+        g_paid_amt = row['paid_amount'] or 0
         group_breakdown.append({
             'group_id': group.group_id,
             'group_name': group.group_name,
             'teacher_name': group.teacher.full_name if group.teacher else '—',
-            'total_students': g_total,
-            'paid': g_paid,
-            'partial': g_partial,
-            'unpaid': g_unpaid,
+            'total_students': row['total_students'],
+            'paid': row['paid'],
+            'partial': row['partial'],
+            'unpaid': row['unpaid'],
             'due': g_due,
             'paid_amount': g_paid_amt,
             'remaining': g_due - g_paid_amt,
-            'collection_rate': round((g_paid_amt / g_due * 100) if g_due > 0 else 0, 1),
+            'collection_rate': round(_rate(g_paid_amt, g_due), 1),
         })
 
     # --- Payment records (paginated) ---
-    from django.core.paginator import Paginator
     paginator = Paginator(payments_qs, 30)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
@@ -849,13 +1035,13 @@ def monthly_financial_summary(request):
         'report_month': report_month,
         'distinct_months': distinct_months,
         'total_students': total_students,
-        'paid_count': paid_count,
-        'partial_count': partial_count,
-        'unpaid_count': unpaid_count,
+        'paid_count': totals['paid'] or 0,
+        'partial_count': totals['partial'] or 0,
+        'unpaid_count': totals['unpaid'] or 0,
         'total_due': total_due,
         'total_paid': total_paid,
-        'total_remaining': total_remaining,
-        'collection_rate': round((total_paid / total_due * 100) if total_due > 0 else 0, 1),
+        'total_remaining': total_due - total_paid,
+        'collection_rate': round(_rate(total_paid, total_due), 1),
         'group_breakdown': group_breakdown,
         'page_obj': page_obj,
         'monthly_data_json': json.dumps(group_breakdown, ensure_ascii=False, default=str),

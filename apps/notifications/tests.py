@@ -2,7 +2,9 @@
 Tests for Notification Service and Tasks
 """
 
-from django.test import TestCase
+from decimal import Decimal
+
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from datetime import datetime, timedelta, time
 from unittest.mock import patch, MagicMock
@@ -10,12 +12,44 @@ from apps.teachers.models import Teacher, Group
 from apps.students.models import Student
 from apps.attendance.models import Session, Attendance
 from apps.accounts.models import User
-from apps.notifications.tasks import send_attendance_notifications_task
+from apps.notifications.models import WhatsAppMessage
+from apps.notifications.tasks import (
+    send_attendance_notifications_task,
+    send_bulk_whatsapp_task,
+    send_monthly_reminders_task,
+)
 from apps.notifications.services import WhatsAppService, NotificationService
 
 
+#: Credentials the WhatsApp transport needs before it will attempt a call at
+#: all. ``WhatsAppService`` short-circuits with "إعدادات الواتساب غير مكتملة"
+#: when either is blank, so tests that assert a *send* must set both — without
+#: them the mocked ``requests.post`` is never reached and the assertion fails
+#: for a reason that has nothing to do with what is under test.
+WAPILOT_TEST_SETTINGS = {
+    'WAPILOT_API_TOKEN': 'test-token',
+    'WAPILOT_INSTANCE_ID': 'instance-test',
+    'WAPILOT_API_BASE_URL': 'https://api.wapilot.net/api/v2',
+}
+
+
+def _api_success():
+    """A mocked Wapilot response that the service reads as a success."""
+    response = MagicMock()
+    response.status_code = 200
+    response.json.return_value = {'success': True, 'message_id': '123456'}
+    return response
+
+
+@override_settings(NOTIFICATION_METHOD='whatsapp', **WAPILOT_TEST_SETTINGS)
 class NotificationTimingTest(TestCase):
-    """Test notification timing - should send after 10 minutes"""
+    """
+    Test notification timing - should send after 10 minutes.
+
+    ``NOTIFICATION_METHOD`` is forced on: with the test default (``'none'``)
+    the task short-circuits and these tests would assert nothing about the
+    notification path at all.
+    """
 
     def setUp(self):
         """Set up test data"""
@@ -147,6 +181,7 @@ class NotificationTimingTest(TestCase):
 
 
 
+@override_settings(**WAPILOT_TEST_SETTINGS)
 class WhatsAppServiceTest(TestCase):
     """Test WhatsApp service methods"""
 
@@ -248,6 +283,110 @@ class WhatsAppServiceTest(TestCase):
 
         self.assertFalse(result['success'])
         self.assertIn('error', result)
+
+    @patch('apps.notifications.services.requests.post')
+    def test_send_message_uses_wapilot_contract(self, mock_post):
+        """
+        The request must match Wapilot's contract, not the old WASender one.
+
+        This is the regression that cost the centre a working integration: the
+        transport kept posting ``{'to': ...}`` with ``Authorization: Bearer`` to
+        wasenderapi.com while the account lived on Wapilot, so every send came
+        back 401 and no parent was ever notified.
+        """
+        mock_post.return_value = _api_success()
+
+        self.service.send_message('01234567890', 'Test message')
+
+        args, kwargs = mock_post.call_args
+        self.assertEqual(
+            args[0], 'https://api.wapilot.net/api/v2/instance-test/send-message'
+        )
+        # Auth is a bare ``token`` header — not ``Authorization: Bearer``.
+        self.assertEqual(kwargs['headers']['token'], 'test-token')
+        self.assertNotIn('Authorization', kwargs['headers'])
+        # Recipient field is ``chat_id``; ``to`` belonged to the old provider.
+        self.assertEqual(kwargs['json']['chat_id'], '201234567890')
+        self.assertEqual(kwargs['json']['text'], 'Test message')
+        self.assertNotIn('to', kwargs['json'])
+
+    @patch('apps.notifications.services.requests.post')
+    def test_dedup_key_is_sent_as_idempotency_header(self, mock_post):
+        """A caller's dedup_key must reach Wapilot as ``Idempotency-Key``."""
+        mock_post.return_value = _api_success()
+
+        self.service.send_message(
+            '01234567890', 'Test message', idempotency_key='attendance:99:5'
+        )
+
+        _, kwargs = mock_post.call_args
+        self.assertEqual(kwargs['headers']['Idempotency-Key'], 'attendance:99:5')
+
+    @patch('apps.notifications.services.requests.post')
+    def test_no_idempotency_header_when_key_absent(self, mock_post):
+        """A human-typed message has no dedup_key; the header must be omitted."""
+        mock_post.return_value = _api_success()
+
+        self.service.send_message('01234567890', 'Test message')
+
+        _, kwargs = mock_post.call_args
+        self.assertNotIn('Idempotency-Key', kwargs['headers'])
+
+    @patch('apps.notifications.services.requests.post')
+    def test_validation_errors_are_surfaced(self, mock_post):
+        """A 422's per-field errors are more useful than its generic headline."""
+        mock_response = MagicMock()
+        mock_response.status_code = 422
+        mock_response.json.return_value = {
+            'success': False,
+            'message': 'Validation failed.',
+            'errors': {'chat_id': ['The chat id field is required.']},
+            'code': 'VALIDATION_ERROR',
+        }
+        mock_post.return_value = mock_response
+
+        result = self.service.send_message('01234567890', 'Test message')
+
+        self.assertFalse(result['success'])
+        self.assertIn('The chat id field is required.', result['error'])
+        self.assertIn('VALIDATION_ERROR', result['error'])
+
+    @patch('apps.notifications.services.requests.post')
+    def test_non_json_response_does_not_raise(self, mock_post):
+        """An HTML error page from a proxy must fail cleanly, not explode."""
+        mock_response = MagicMock()
+        mock_response.status_code = 502
+        mock_response.json.side_effect = ValueError('no json')
+        mock_post.return_value = mock_response
+
+        result = self.service.send_message('01234567890', 'Test message')
+
+        self.assertFalse(result['success'])
+        self.assertIn('502', result['error'])
+
+
+class WhatsAppServiceUnconfiguredTest(TestCase):
+    """The transport must refuse to call out when it is not fully configured."""
+
+    @override_settings(WAPILOT_API_TOKEN='', WAPILOT_INSTANCE_ID='instance-test')
+    @patch('apps.notifications.services.requests.post')
+    def test_missing_token_does_not_call_api(self, mock_post):
+        result = WhatsAppService().send_message('01234567890', 'Test')
+
+        self.assertFalse(result['success'])
+        mock_post.assert_not_called()
+
+    @override_settings(WAPILOT_API_TOKEN='test-token', WAPILOT_INSTANCE_ID='')
+    @patch('apps.notifications.services.requests.post')
+    def test_missing_instance_id_does_not_call_api(self, mock_post):
+        """
+        A blank instance id used to build ``…/api/v2//send-message`` and come
+        back 404 — an error that reads like an outage rather than a typo.
+        """
+        result = WhatsAppService().send_message('01234567890', 'Test')
+
+        self.assertFalse(result['success'])
+        mock_post.assert_not_called()
 
 
 class NotificationServiceTest(TestCase):

@@ -27,7 +27,23 @@ class WhatsAppMessage(models.Model):
     ]
 
     message_id = models.AutoField(primary_key=True)
-    
+
+    # مفتاح منع التكرار — ضمان عدم إرسال نفس الرسالة مرتين
+    # A unique idempotency key. Every automated sender (the attendance cron,
+    # the monthly reminder cron, the bulk-send Celery task) reserves the key
+    # *before* calling the API, so a retried / restarted / overlapping run can
+    # never deliver — and never pay for — the same message twice.
+    # ``NULL`` for messages typed by a human, and NULL is not compared by the
+    # unique constraint on either PostgreSQL or SQLite.
+    dedup_key = models.CharField(
+        max_length=150,
+        null=True,
+        blank=True,
+        unique=True,
+        verbose_name="مفتاح منع التكرار",
+        help_text="مفتاح فريد يمنع إرسال نفس الرسالة أكثر من مرة",
+    )
+
     # البيانات الأساسية
     phone_number = models.CharField(max_length=20, verbose_name="رقم الهاتف")
     message_text = models.TextField(verbose_name="نص الرسالة")

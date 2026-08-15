@@ -456,11 +456,9 @@ def scanner_pay_now(request):
             return JsonResponse({'success': False, 'message': 'payment_id أو student_id مطلوب'}, status=400)
 
         with transaction.atomic():
-            # Mark as paid
-            payment.amount_paid = payment.amount_due
-            payment.status = 'paid'
-            payment.payment_date = timezone.now()
-            payment.save(update_fields=['amount_paid', 'status', 'payment_date'])
+            # Settle through the payment ledger so the movement leaves a
+            # receipt row with its author, instead of overwriting amount_paid.
+            payment.settle_full(user=request.user, note='تسديد من الماسح الضوئي')
 
             # Activate subscription + enrollment
             _activate_student_for_payment(payment, user=request.user)

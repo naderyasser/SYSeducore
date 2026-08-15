@@ -85,14 +85,15 @@ def send_barcode_whatsapp(request, student_id):
     """
     Send the student's code to their parent via WhatsApp.
 
-    Rewritten to use the live ``WhatsAppService`` (WASender) that the rest of
+    Rewritten to use the live ``WhatsAppService`` (Wapilot) that the rest of
     the system uses. The previous implementation called the decommissioned
     UltraMsg *image* API behind ``ULTRAMSG_*`` settings that are empty by
     default, so the button always answered "إعدادات الواتساب غير مكتملة"; it
     also wrote a temp PNG into MEDIA_ROOT that leaked whenever the request
-    raised, and blocked the worker for up to 30s. WASender has no image
-    endpoint here, so a text message carrying the code is sent instead — the
-    printable card/sticker endpoints cover the image case.
+    raised, and blocked the worker for up to 30s. A text message carrying the
+    code is sent instead — the printable card/sticker endpoints cover the image
+    case. (Wapilot *does* expose a send-image endpoint, so this could carry the
+    barcode PNG one day; that is a feature, not a fix, and is not wired up.)
     """
     student = get_object_or_404(Student, pk=student_id)
 
