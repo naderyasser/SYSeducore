@@ -179,17 +179,13 @@ class Payment(models.Model):
             return 'partial'
         return 'unpaid'
 
-    def reconcile(self, user=None, save=True):
-        """
-        Recompute ``amount_paid`` / ``status`` / ``payment_date`` from the
-        ledger. Returns the ledger total.
-        """
-        total = self.sync_ledger(user=user)
+    def _apply_ledger_total(self, total, save=True):
+        """Write a known ledger total onto the payment row."""
         self.amount_paid = total
         self.status = self._derive_status(total)
 
         if total > 0:
-            last = self.transactions.order_by('-created_at', '-pk').first()
+            last = self.transactions.order_by('-created_at', '-transaction_id').first()
             self.payment_date = last.created_at if last else (self.payment_date or timezone.now())
         else:
             self.payment_date = None
@@ -197,6 +193,13 @@ class Payment(models.Model):
         if save:
             self.save(update_fields=['amount_paid', 'status', 'payment_date', 'updated_at'])
         return total
+
+    def reconcile(self, user=None, save=True):
+        """
+        Recompute ``amount_paid`` / ``status`` / ``payment_date`` from the
+        ledger. Returns the ledger total.
+        """
+        return self._apply_ledger_total(self.sync_ledger(user=user), save=save)
 
     @transaction.atomic
     def record_transaction(self, amount, user=None, note='', kind=None, allow_reversal=False):
@@ -250,7 +253,10 @@ class Payment(models.Model):
                 note=note,
             )
 
-        locked.reconcile(user=user)
+        # Apply the already-known total: re-reading the ledger through
+        # ``sync_ledger`` here would see the (now stale) ``amount_paid`` of
+        # the locked row and "restore" a reversal as an opening balance.
+        locked._apply_ledger_total(new_total)
 
         # Mirror the reconciled state onto the caller's instance.
         self.amount_paid = locked.amount_paid
@@ -258,6 +264,7 @@ class Payment(models.Model):
         self.payment_date = locked.payment_date
         return txn
 
+    @transaction.atomic
     def settle_full(self, user=None, note=''):
         """
         تسديد كامل — record the outstanding balance as one movement.
@@ -265,7 +272,8 @@ class Payment(models.Model):
         Idempotent: an already-settled payment records nothing and simply
         reconciles. Returns the created transaction or ``None``.
         """
-        outstanding = to_money(self.amount_due) - self.ledger_total()
+        ledger = self.sync_ledger(user=user)
+        outstanding = to_money(self.amount_due) - ledger
         if outstanding <= 0:
             self.reconcile(user=user)
             return None

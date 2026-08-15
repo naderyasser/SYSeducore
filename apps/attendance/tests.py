@@ -1261,3 +1261,407 @@ class GracePeriodFinancialCheckTest(TestCase):
                           'payment_info should be included in schedule rejection responses')
             self.assertEqual(result['payment_info']['error_type'], 'payment_required')
             self.assertEqual(result['payment_info']['student_id'], self.student.student_id)
+
+
+# ─────────────────────────────────────────────────────────────
+# Audit regression tests (2026-07 full-system audit)
+# ─────────────────────────────────────────────────────────────
+
+
+class AuditFixturesMixin:
+    """Shared objects for the audit regression tests below."""
+
+    def build_fixtures(self, day='Saturday', sessions_per_month=4):
+        self.admin = User.objects.create_user(
+            username='aud_admin', password='testpass123', role='admin'
+        )
+        self.supervisor = User.objects.create_user(
+            username='aud_sup', password='testpass123', role='supervisor'
+        )
+        self.teacher_user = User.objects.create_user(
+            username='aud_teacher', password='testpass123', role='teacher'
+        )
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس التدقيق', phone='+201000000010',
+            hire_date=timezone.localdate(),
+        )
+        self.room = Room.objects.create(name='قاعة التدقيق', capacity=30)
+        self.group = Group.objects.create(
+            group_name='مجموعة التدقيق',
+            teacher=self.teacher,
+            room=self.room,
+            schedule_day=day,
+            schedule_time=time(9, 0),
+            duration_minutes=120,
+            standard_fee=200.00,
+            sessions_per_month=sessions_per_month,
+        )
+        self.student = Student.objects.create(
+            student_code='7100', full_name='طالب التدقيق',
+            parent_phone='+201000000011',
+        )
+        self.enrollment = StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+
+
+class UnlimitedSessionsPerMonthTest(AuditFixturesMixin, TestCase):
+    """DATA-11: sessions_per_month = 0 means unlimited, not 'block everyone'."""
+
+    def setUp(self):
+        self.build_fixtures(sessions_per_month=0)
+
+    def test_zero_limit_does_not_block(self):
+        current_month = timezone.localdate().replace(day=1)
+        Payment.objects.create(
+            student=self.student, group=self.group, month=current_month,
+            amount_due=200, amount_paid=200, status='paid',
+        )
+        result = AttendanceService.check_financial_status(self.student, self.group)
+        self.assertTrue(result['allowed'])
+        self.assertNotEqual(result.get('error_type'), 'sessions_exhausted')
+
+    def test_zero_limit_still_allows_after_many_sessions(self):
+        current_month = timezone.localdate().replace(day=1)
+        Payment.objects.create(
+            student=self.student, group=self.group, month=current_month,
+            amount_due=200, amount_paid=200, status='paid',
+        )
+        for i in range(6):
+            session = Session.objects.create(
+                group=self.group, session_date=current_month + timedelta(days=i)
+            )
+            Attendance.objects.create(
+                student=self.student, session=session, status='present',
+            )
+        result = AttendanceService.check_financial_status(self.student, self.group)
+        self.assertTrue(result['allowed'])
+
+
+class ReadPathSideEffectTest(AuditFixturesMixin, TestCase):
+    """DATA-13: status checks must not create Payment rows."""
+
+    def setUp(self):
+        self.build_fixtures()
+
+    def test_get_instant_status_creates_nothing(self):
+        AttendanceService.get_instant_status(self.student, self.group)
+        self.assertEqual(Payment.objects.count(), 0)
+
+    def test_check_financial_status_creates_nothing(self):
+        result = AttendanceService.check_financial_status(self.student, self.group)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'payment_required')
+        self.assertIsNone(result['payment_id'])
+        self.assertEqual(result['amount_due'], 200.0)
+        self.assertEqual(Payment.objects.count(), 0)
+
+
+class OverdueMonthsTest(AuditFixturesMixin, TestCase):
+    """DATA-20: overdue months are months, not payment rows."""
+
+    def setUp(self):
+        self.build_fixtures()
+        self.group_b = Group.objects.create(
+            group_name='مجموعة التدقيق ب',
+            teacher=self.teacher, room=self.room,
+            schedule_day='Sunday', schedule_time=time(13, 0),
+            duration_minutes=120, standard_fee=150.00,
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group_b, financial_status='normal',
+        )
+
+    def test_one_unpaid_month_in_two_groups_counts_once(self):
+        last_month = (timezone.localdate().replace(day=1) - timedelta(days=1)).replace(day=1)
+        for group in (self.group, self.group_b):
+            Payment.objects.create(
+                student=self.student, group=group, month=last_month,
+                amount_due=100, amount_paid=0, status='unpaid',
+            )
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertEqual(dossier['financial_summary']['overdue_months'], 1)
+
+
+class AttendanceRateTest(AuditFixturesMixin, TestCase):
+    """DATA-21: the rate can never exceed 100%."""
+
+    def setUp(self):
+        self.build_fixtures()
+
+    def test_rate_ignores_groups_the_student_left(self):
+        other_group = Group.objects.create(
+            group_name='مجموعة سابقة', teacher=self.teacher, room=self.room,
+            schedule_day='Monday', schedule_time=time(18, 0),
+            duration_minutes=120, standard_fee=100.00,
+        )
+        current_month = timezone.localdate().replace(day=1)
+
+        # One session in the enrolled group (attended)
+        enrolled_session = Session.objects.create(
+            group=self.group, session_date=current_month
+        )
+        Attendance.objects.create(
+            student=self.student, session=enrolled_session, status='present',
+        )
+        # Two sessions in a group the student is no longer enrolled in
+        for i in range(2):
+            s = Session.objects.create(
+                group=other_group, session_date=current_month + timedelta(days=i)
+            )
+            Attendance.objects.create(student=self.student, session=s, status='present')
+
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertLessEqual(dossier['attendance_month']['rate'], 100.0)
+        self.assertEqual(dossier['attendance_month']['rate'], 100.0)
+
+
+class DossierArabicScheduleTest(AuditFixturesMixin, TestCase):
+    """DOC-05: day names in the dossier must render in Arabic."""
+
+    def setUp(self):
+        self.build_fixtures(day='Saturday')
+
+    def test_schedule_is_arabic(self):
+        dossier = AttendanceService.build_student_dossier(self.student)
+        entry = dossier['enrollments'][0]
+        self.assertIn('السبت', entry['schedule'])
+        self.assertEqual(entry['schedule_day_ar'], 'السبت')
+        self.assertNotIn('Saturday', entry['schedule'])
+
+
+class ScannerRolePermissionTest(AuditFixturesMixin, TestCase):
+    """AUTH-03 / AUTH-04 / AUTH-08: desk-only endpoints reject teachers."""
+
+    def setUp(self):
+        self.build_fixtures()
+        self.client = Client()
+        self.client.login(username='aud_teacher', password='testpass123')
+
+    def test_teacher_cannot_pay_now(self):
+        current_month = timezone.localdate().replace(day=1)
+        payment = Payment.objects.create(
+            student=self.student, group=self.group, month=current_month,
+            amount_due=200, amount_paid=0, status='unpaid',
+        )
+        resp = self.client.post(
+            reverse('attendance:scanner_pay_now'),
+            data=json.dumps({'payment_id': payment.pk}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, 'unpaid')
+
+    def test_teacher_cannot_grant_exception(self):
+        resp = self.client.post(
+            reverse('attendance:grant_exception'),
+            data=json.dumps({
+                'student_id': self.student.pk, 'exception_type': 'payment',
+                'reason_type': 'forgot_money',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_teacher_cannot_cancel_session(self):
+        session = Session.objects.create(
+            group=self.group, session_date=timezone.localdate()
+        )
+        resp = self.client.post(
+            reverse('attendance:cancel_session', kwargs={'session_id': session.pk}),
+            {'reason': 'اختبار'},
+        )
+        self.assertEqual(resp.status_code, 403)
+        session.refresh_from_db()
+        self.assertFalse(session.is_cancelled)
+
+    def test_teacher_cannot_check_teacher_in(self):
+        session = Session.objects.create(
+            group=self.group, session_date=timezone.localdate()
+        )
+        resp = self.client.post(
+            reverse('attendance:teacher_checkin', kwargs={'session_id': session.pk}),
+        )
+        self.assertEqual(resp.status_code, 403)
+
+
+class SessionAuditLogTest(AuditFixturesMixin, TestCase):
+    """AUTH-08 / QUAL-05: cancellations and payments are traceable."""
+
+    def setUp(self):
+        self.build_fixtures()
+        self.client = Client()
+        self.client.login(username='aud_sup', password='testpass123')
+
+    def test_cancel_session_is_logged(self):
+        from apps.attendance.models import ActivityLog
+        session = Session.objects.create(
+            group=self.group, session_date=timezone.localdate()
+        )
+        resp = self.client.post(
+            reverse('attendance:cancel_session', kwargs={'session_id': session.pk}),
+            {'reason': 'مرض المدرس'},
+        )
+        self.assertEqual(resp.status_code, 200)
+        log = ActivityLog.objects.filter(action='session_cancel').first()
+        self.assertIsNotNone(log)
+        self.assertEqual(log.user, self.supervisor)
+        self.assertIn('مرض المدرس', log.description)
+
+    def test_pay_now_is_logged(self):
+        from apps.attendance.models import ActivityLog
+        current_month = timezone.localdate().replace(day=1)
+        payment = Payment.objects.create(
+            student=self.student, group=self.group, month=current_month,
+            amount_due=200, amount_paid=0, status='unpaid',
+        )
+        resp = self.client.post(
+            reverse('attendance:scanner_pay_now'),
+            data=json.dumps({'payment_id': payment.pk}),
+            content_type='application/json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        log = ActivityLog.objects.filter(action='payment_record').first()
+        self.assertIsNotNone(log)
+        self.assertEqual(log.user, self.supervisor)
+        self.assertEqual(log.target_id, payment.pk)
+
+
+class GrantExceptionValidationTest(AuditFixturesMixin, TestCase):
+    """AUTH-04: exception_type / reason_type validated against their choices."""
+
+    def setUp(self):
+        self.build_fixtures()
+        self.client = Client()
+        self.client.login(username='aud_sup', password='testpass123')
+
+    def _post(self, **body):
+        return self.client.post(
+            reverse('attendance:grant_exception'),
+            data=json.dumps({'student_id': self.student.pk, **body}),
+            content_type='application/json',
+        )
+
+    def test_invalid_exception_type_rejected(self):
+        from apps.attendance.models import ExceptionRecord
+        resp = self._post(exception_type='whatever', reason_type='forgot_money')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(ExceptionRecord.objects.count(), 0)
+
+    def test_invalid_reason_type_rejected(self):
+        from apps.attendance.models import ExceptionRecord
+        resp = self._post(exception_type='payment', reason_type='because')
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(ExceptionRecord.objects.count(), 0)
+
+    def test_valid_values_accepted(self):
+        from apps.attendance.models import ExceptionRecord
+        resp = self._post(exception_type='payment', reason_type='forgot_money')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(ExceptionRecord.objects.count(), 1)
+
+
+class TodaySessionsReadOnlyTest(AuditFixturesMixin, TestCase):
+    """PERF-11: the stats poll must not create Session rows."""
+
+    def setUp(self):
+        self.build_fixtures(day=AttendanceService.get_current_day_name())
+        self.client = Client()
+        self.client.login(username='aud_sup', password='testpass123')
+
+    def test_get_does_not_create_sessions(self):
+        resp = self.client.get(reverse('attendance:today_sessions'))
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(len(data['sessions']), 1)
+        self.assertIsNone(data['sessions'][0]['session_id'])
+        self.assertEqual(Session.objects.count(), 0)
+
+
+class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
+    """DATA-18 / DATA-19: one absence implementation, and it updates billing."""
+
+    def setUp(self):
+        self.build_fixtures(day=AttendanceService.get_current_day_name())
+        # The session started well before now so the 10-minute rule fires.
+        self.group.schedule_time = time(0, 1)
+        self.group.save()
+        self.session = Session.objects.create(
+            group=self.group, session_date=timezone.localdate()
+        )
+
+    def test_absence_updates_payment_sessions(self):
+        from apps.attendance.tasks import auto_mark_absent_sessions
+
+        auto_mark_absent_sessions()
+
+        attendance = Attendance.objects.get(
+            student=self.student, session=self.session
+        )
+        self.assertEqual(attendance.status, 'absent')
+
+        payment = Payment.objects.get(
+            student=self.student, group=self.group,
+            month=timezone.localdate().replace(day=1),
+        )
+        self.assertEqual(payment.sessions_attended, 1)
+
+    def test_soft_deleted_student_is_skipped(self):
+        from apps.attendance.tasks import auto_mark_absent_sessions
+
+        self.student.soft_delete()
+        auto_mark_absent_sessions()
+        self.assertEqual(Attendance.objects.count(), 0)
+
+
+class BillingCycleTaskTest(AuditFixturesMixin, TestCase):
+    """BUG-16: the task actually writes the cycle dates it documents."""
+
+    def setUp(self):
+        self.build_fixtures(day='Saturday', sessions_per_month=2)
+        self.current_month = timezone.localdate().replace(day=1)
+
+    def test_cycle_dates_are_seeded(self):
+        from apps.attendance.tasks import check_billing_cycles
+
+        check_billing_cycles()
+        self.enrollment.refresh_from_db()
+        self.assertEqual(self.enrollment.cycle_start_date, self.current_month)
+        self.assertIsNotNone(self.enrollment.cycle_end_date)
+        self.assertGreater(self.enrollment.cycle_end_date, self.enrollment.cycle_start_date)
+
+    def test_completed_cycle_rolls_forward(self):
+        from apps.attendance.tasks import check_billing_cycles
+
+        payment = Payment.objects.create(
+            student=self.student, group=self.group, month=self.current_month,
+            amount_due=200, amount_paid=200, status='paid',
+        )
+        for i in range(2):
+            session = Session.objects.create(
+                group=self.group, session_date=self.current_month + timedelta(days=i)
+            )
+            Attendance.objects.create(
+                student=self.student, session=session, status='present',
+            )
+
+        check_billing_cycles()
+
+        payment.refresh_from_db()
+        self.assertTrue(payment.billing_cycle_completed)
+
+        self.enrollment.refresh_from_db()
+        self.assertEqual(
+            self.enrollment.cycle_start_date,
+            self.current_month + timedelta(days=2),
+        )
+
+        next_month = (self.current_month.replace(day=28) + timedelta(days=4)).replace(day=1)
+        self.assertTrue(
+            Payment.objects.filter(
+                student=self.student, group=self.group, month=next_month
+            ).exists()
+        )

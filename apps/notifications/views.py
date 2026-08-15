@@ -1,18 +1,34 @@
-from functools import wraps
-from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
-from django.views.decorators.http import require_http_methods
-from django.utils import timezone
-from django.contrib import messages as django_messages
-from django.conf import settings
-from django.db.models import Q, Count
 import json
-from .services import WhatsAppService
-from .models import WhatsAppMessage, WhatsAppTemplate
-from .forms import SendWhatsAppMessageForm, BulkWhatsAppForm
-from apps.teachers.models import Group
+import logging
+import uuid
+from datetime import datetime
+from functools import wraps
+
+from django.conf import settings
+from django.contrib import messages as django_messages
+from django.db.models import Q
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.utils import timezone
+from django.views.decorators.http import require_http_methods
+
+from apps.accounts.decorators import ajax_supervisor_required, supervisor_required
 from apps.students.models import Student, StudentGroupEnrollment
+from apps.teachers.models import Group
+
+from .forms import BulkWhatsAppForm, SendWhatsAppMessageForm
+from .models import WhatsAppMessage, WhatsAppTemplate
+from .services import WhatsAppService
+from .tasks import send_bulk_attendance_report_task, send_bulk_whatsapp_task
+
+logger = logging.getLogger('notifications')
+
+#: AUTH-12 — every view in this module used to be authentication-only, so any
+#: logged-in account (a teacher, say) could WhatsApp every parent in the centre
+#: with an arbitrary body. Messaging is a desk operation: admin or supervisor.
+WHATSAPP_DISABLED_MESSAGE = 'خدمة الواتساب معطلة حالياً'
+GENERIC_ERROR_MESSAGE = 'حدث خطأ أثناء تنفيذ العملية، يرجى المحاولة مرة أخرى'
+QUEUE_FAILED_MESSAGE = 'تعذر جدولة الإرسال حالياً، يرجى المحاولة لاحقاً'
 
 
 def whatsapp_required(view_func):
@@ -20,23 +36,51 @@ def whatsapp_required(view_func):
     @wraps(view_func)
     def _wrapped(request, *args, **kwargs):
         if getattr(settings, 'NOTIFICATION_METHOD', 'none') != 'whatsapp':
-            django_messages.warning(request, 'خدمة الواتساب معطلة حالياً')
+            django_messages.warning(request, WHATSAPP_DISABLED_MESSAGE)
             return redirect('reports:dashboard')
         return view_func(request, *args, **kwargs)
     return _wrapped
 
 
-@login_required
+def whatsapp_required_ajax(view_func):
+    """``whatsapp_required`` for fetch() endpoints: JSON, never a redirect."""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if getattr(settings, 'NOTIFICATION_METHOD', 'none') != 'whatsapp':
+            return JsonResponse(
+                {'success': False, 'error': WHATSAPP_DISABLED_MESSAGE}, status=503
+            )
+        return view_func(request, *args, **kwargs)
+    return _wrapped
+
+
+def _queue_bulk_send(**kwargs):
+    """
+    Hand a bulk send to Celery (PERF-03) and report whether it was accepted.
+
+    Bulk sending must never happen in the request thread: each message is a
+    blocking HTTP call with a 10 s timeout, so 100 recipients outlive
+    gunicorn's 120 s limit and the worker is killed with the batch half sent.
+    """
+    try:
+        send_bulk_whatsapp_task.delay(**kwargs)
+        return True
+    except Exception:
+        logger.exception('Could not queue bulk WhatsApp send')
+        return False
+
+
+@supervisor_required
 @whatsapp_required
 def whatsapp_dashboard(request):
     """
     لوحة تحكم إدارة الواتساب
     """
-    # إحصائيات الرسائل
+    # إحصائيات الرسائل — التاريخ المحلي وليس UTC
     today_messages = WhatsAppMessage.objects.filter(
-        created_at__date=timezone.now().date()
+        created_at__date=timezone.localdate()
     )
-    
+
     stats = {
         'total_today': today_messages.count(),
         'sent_today': today_messages.filter(status='sent').count(),
@@ -61,7 +105,7 @@ def whatsapp_dashboard(request):
     return render(request, 'notifications/whatsapp_dashboard.html', context)
 
 
-@login_required
+@supervisor_required
 @whatsapp_required
 def send_message(request):
     """
@@ -144,48 +188,56 @@ def send_message(request):
                         django_messages.error(request, f'فشل الإرسال: {result.get("error", "خطأ غير معروف")}')
 
                 elif recipient_type == 'group':
-                    # إرسال لجميع طلاب المجموعة
+                    # إرسال لجميع طلاب المجموعة — في الخلفية عبر Celery (PERF-03)
                     enrollments = StudentGroupEnrollment.objects.filter(
                         group=group,
-                        is_active=True
+                        is_active=True,
+                        student__deleted_at__isnull=True,
+                        student__is_active=True,
                     ).select_related('student')
 
-                    success_count = 0
-                    fail_count = 0
-
+                    recipients = []
                     for enrollment in enrollments:
                         student_obj = enrollment.student
-                        phone = student_obj.parent_phone  # نرسل لأولياء الأمور افتراضياً
+                        phone = (student_obj.parent_phone or '').strip()
+                        if not phone:
+                            continue
                         final_message = message_text
                         if include_name:
-                            final_message = f"أولياء أمور الطالب {student_obj.full_name}\n\n{message_text}"
+                            final_message = (
+                                f"أولياء أمور الطالب {student_obj.full_name}\n\n{message_text}"
+                            )
+                        recipients.append({
+                            'phone': phone,
+                            'student_id': student_obj.pk,
+                            'message': final_message,
+                        })
 
-                        result = whatsapp_service.send_message(phone, final_message)
-
-                        if result.get('success'):
-                            success_count += 1
-                        else:
-                            fail_count += 1
-
-                        # حفظ السجل
-                        WhatsAppMessage.objects.create(
-                            phone_number=phone,
-                            message_text=final_message,
-                            message_type='group',
-                            student=student_obj,
-                            group=group,
-                            sent_by=request.user,
-                            status='sent' if result.get('success') else 'failed',
-                            sent_at=timezone.now() if result.get('success') else None,
-                            error_message=result.get('error', '')
+                    if not recipients:
+                        django_messages.error(request, 'لا توجد أرقام للإرسال في هذه المجموعة')
+                    elif _queue_bulk_send(
+                        recipients=recipients,
+                        message=message_text,
+                        batch_key=uuid.uuid4().hex,
+                        sent_by_id=request.user.pk,
+                        group_id=group.pk,
+                        message_type='group',
+                    ):
+                        django_messages.success(
+                            request,
+                            f'تمت جدولة إرسال {len(recipients)} رسالة، '
+                            f'تابع الحالة في سجل الرسائل',
                         )
-
-                    django_messages.success(request, f'تم الإرسال: {success_count} نجح, {fail_count} فشل')
+                    else:
+                        django_messages.error(request, QUEUE_FAILED_MESSAGE)
 
                 return redirect('notifications:whatsapp_dashboard')
 
-            except Exception as e:
-                django_messages.error(request, f'حدث خطأ: {str(e)}')
+            except Exception:
+                # QUAL-01: the raw exception text leaked model names, SQL
+                # fragments and file paths to the browser.
+                logger.exception('WhatsApp send_message failed')
+                django_messages.error(request, GENERIC_ERROR_MESSAGE)
 
     else:
         form = SendWhatsAppMessageForm()
@@ -197,11 +249,15 @@ def send_message(request):
     return render(request, 'notifications/send_message.html', context)
 
 
-@login_required
+@supervisor_required
 @whatsapp_required
 def send_bulk_message(request):
     """
     صفحة الإرسال الجماعي
+
+    PERF-03: the request only *queues* the batch. Sending 100 messages inline
+    meant ~1000 s of blocking HTTP calls — the gunicorn worker was killed long
+    before that with the batch half delivered and no record of where it got to.
     """
     if request.method == 'POST':
         form = BulkWhatsAppForm(request.POST)
@@ -214,85 +270,84 @@ def send_bulk_message(request):
                 if template:
                     message_text = template.message_text
 
-                whatsapp_service = WhatsAppService()
-                phone_list = []
+                group = form.cleaned_data.get('group')
+                recipients = []
 
                 if bulk_type == 'group':
-                    group = form.cleaned_data['group']
                     recipient_role = form.cleaned_data.get('recipient_role', 'parent')
 
                     enrollments = StudentGroupEnrollment.objects.filter(
                         group=group,
-                        is_active=True
+                        is_active=True,
+                        student__deleted_at__isnull=True,
+                        student__is_active=True,
                     ).select_related('student')
 
                     for enrollment in enrollments:
-                        if recipient_role == 'parent':
-                            if enrollment.student.parent_phone:
-                                phone_list.append({
-                                    'phone': enrollment.student.parent_phone,
-                                    'student': enrollment.student
-                                })
-                        elif recipient_role == 'student':
-                            if enrollment.student.student_phone:
-                                phone_list.append({
-                                    'phone': enrollment.student.student_phone,
-                                    'student': enrollment.student
-                                })
-                        else:  # both
-                            if enrollment.student.parent_phone:
-                                phone_list.append({
-                                    'phone': enrollment.student.parent_phone,
-                                    'student': enrollment.student,
-                                    'role': 'parent'
-                                })
-                            if enrollment.student.student_phone:
-                                phone_list.append({
-                                    'phone': enrollment.student.student_phone,
-                                    'student': enrollment.student,
-                                    'role': 'student'
-                                })
+                        student = enrollment.student
+                        parent_phone = (student.parent_phone or '').strip()
+                        student_phone = (student.student_phone or '').strip()
+
+                        if recipient_role in ('parent', 'both') and parent_phone:
+                            recipients.append(
+                                {'phone': parent_phone, 'student_id': student.pk}
+                            )
+                        if recipient_role in ('student', 'both') and student_phone:
+                            recipients.append(
+                                {'phone': student_phone, 'student_id': student.pk}
+                            )
 
                 elif bulk_type == 'custom_list':
-                    phone_numbers = form.cleaned_data['phone_numbers']
-                    for phone in phone_numbers.split('\n'):
+                    phone_numbers = form.cleaned_data['phone_numbers'] or ''
+                    for phone in phone_numbers.replace('\r', '').split('\n'):
                         phone = phone.strip()
                         if phone:
-                            phone_list.append({'phone': phone})
+                            recipients.append({'phone': phone})
 
-                # إرسال الرسائل
-                success_count = 0
-                fail_count = 0
+                elif bulk_type == 'attendance_report':
+                    if not group:
+                        django_messages.error(request, 'اختر مجموعة')
+                        return redirect('notifications:send_bulk_message')
+                    try:
+                        send_bulk_attendance_report_task.delay(
+                            group_id=group.pk,
+                            batch_key=uuid.uuid4().hex,
+                            sent_by_id=request.user.pk,
+                        )
+                        django_messages.success(
+                            request, 'تمت جدولة إرسال تقرير الحضور، تابع الحالة في سجل الرسائل'
+                        )
+                    except Exception:
+                        logger.exception('Could not queue attendance report')
+                        django_messages.error(request, QUEUE_FAILED_MESSAGE)
+                    return redirect('notifications:whatsapp_dashboard')
 
-                for item in phone_list:
-                    phone = item['phone']
-                    student = item.get('student')
-                    result = whatsapp_service.send_message(phone, message_text)
-
-                    if result.get('success'):
-                        success_count += 1
-                        status = 'sent'
-                    else:
-                        fail_count += 1
-                        status = 'failed'
-
-                    # حفظ السجل
-                    WhatsAppMessage.objects.create(
-                        phone_number=phone,
-                        message_text=message_text,
-                        message_type=bulk_type,
-                        student=student,
-                        sent_by=request.user,
-                        status=status,
-                        sent_at=timezone.now() if status == 'sent' else None,
-                        error_message=result.get('error', '')
+                if not recipients:
+                    django_messages.error(request, 'لا توجد أرقام للإرسال')
+                elif _queue_bulk_send(
+                    recipients=recipients,
+                    message=message_text,
+                    batch_key=uuid.uuid4().hex,
+                    sent_by_id=request.user.pk,
+                    group_id=group.pk if (bulk_type == 'group' and group) else None,
+                    # 'custom_list' is not a WhatsAppMessage type — it used to be
+                    # written straight into the column as an invalid choice.
+                    message_type='group' if bulk_type == 'group' else 'custom',
+                ):
+                    django_messages.success(
+                        request,
+                        f'تمت جدولة إرسال {len(recipients)} رسالة، '
+                        f'تابع الحالة في سجل الرسائل',
                     )
+                else:
+                    django_messages.error(request, QUEUE_FAILED_MESSAGE)
 
-                django_messages.success(request, f'تم الإرسال الجماعي: {success_count} نجح, {fail_count} فشل')
                 return redirect('notifications:whatsapp_dashboard')
 
-            except Exception as e:
-                django_messages.error(request, f'حدث خطأ: {str(e)}')
+            except Exception:
+                # QUAL-01: no raw exception text in the response.
+                logger.exception('WhatsApp send_bulk_message failed')
+                django_messages.error(request, GENERIC_ERROR_MESSAGE)
 
     else:
         form = BulkWhatsAppForm()
@@ -304,7 +359,7 @@ def send_bulk_message(request):
     return render(request, 'notifications/send_bulk_message.html', context)
 
 
-@login_required
+@supervisor_required
 @whatsapp_required
 def message_history(request):
     """
@@ -354,7 +409,7 @@ def message_history(request):
     return render(request, 'notifications/message_history.html', context)
 
 
-@login_required
+@supervisor_required
 @whatsapp_required
 def contact_list(request):
     """
@@ -362,10 +417,13 @@ def contact_list(request):
     """
     contact_type = request.GET.get('type', 'all')  # all, student, parent
 
+    # BUG-11: ``student_phone`` / ``parent_phone`` are ``blank=True`` **without**
+    # ``null=True``, i.e. NOT NULL columns — ``__isnull=False`` matched every
+    # single row, so both filters were no-ops. A missing number is ``''``.
     if contact_type == 'student':
-        contacts = Student.objects.filter(is_active=True, student_phone__isnull=False)
+        contacts = Student.objects.filter(is_active=True).exclude(student_phone='')
     elif contact_type == 'parent':
-        contacts = Student.objects.filter(is_active=True, parent_phone__isnull=False)
+        contacts = Student.objects.filter(is_active=True).exclude(parent_phone='')
     else:
         contacts = Student.objects.filter(is_active=True)
 
@@ -391,7 +449,7 @@ def contact_list(request):
     return render(request, 'notifications/contact_list.html', context)
 
 
-@login_required
+@supervisor_required
 @whatsapp_required
 def manage_templates(request):
     """
@@ -436,106 +494,135 @@ def manage_templates(request):
     return render(request, 'notifications/manage_templates.html', context)
 
 
-@login_required
-@whatsapp_required
-def test_whatsapp(request):
-    """
-    Test WhatsApp sending (for development only).
-    """
-    if request.method == 'POST':
-        phone = request.POST.get('phone')
-        message = request.POST.get('message')
-
-        whatsapp_service = WhatsAppService()
-        result = whatsapp_service.send_message(phone, message)
-
-        return JsonResponse(result)
-
-    return render(request, 'notifications/test.html')
-
-
-@login_required
+@ajax_supervisor_required
+@whatsapp_required_ajax
 @require_http_methods(["POST"])
 def send_bulk_attendance_report(request):
     """
-    API: إرسال تقرير حضور/غياب جماعي عبر الواتساب
-    الإرسال الجماعي إلى أولياء أمور مجموعة كاملة
+    API: جدولة إرسال تقرير حضور/غياب جماعي عبر الواتساب
+
+    PERF-03: the report is built and delivered by a Celery worker; the request
+    returns as soon as the batch is queued.
     """
     try:
-        data = json.loads(request.body)
-        group_id = data.get('group_id')
-        session_date = data.get('session_date')  # Optional YYYY-MM-DD
+        data = json.loads(request.body or b'{}')
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'صيغة الطلب غير صحيحة'}, status=400)
 
-        if not group_id:
-            return JsonResponse({
-                'success': False,
-                'error': 'معرف المجموعة مطلوب'
-            }, status=400)
+    group_id = data.get('group_id')
+    session_date = data.get('session_date')  # Optional YYYY-MM-DD
 
-        group = Group.objects.get(pk=group_id)
+    if not group_id:
+        return JsonResponse(
+            {'success': False, 'error': 'معرف المجموعة مطلوب'}, status=400
+        )
 
-        whatsapp_service = WhatsAppService()
+    if not Group.objects.filter(pk=group_id).exists():
+        return JsonResponse(
+            {'success': False, 'error': 'المجموعة غير موجودة'}, status=404
+        )
 
-        from datetime import datetime as dt
-        date = dt.strptime(session_date, '%Y-%m-%d').date() if session_date else None
+    if session_date:
+        try:
+            datetime.strptime(str(session_date), '%Y-%m-%d')
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {'success': False, 'error': 'صيغة التاريخ غير صحيحة'}, status=400
+            )
 
-        result = whatsapp_service.send_bulk_attendance_report(group, date)
+    batch_key = uuid.uuid4().hex
+    try:
+        send_bulk_attendance_report_task.delay(
+            group_id=group_id,
+            session_date=session_date,
+            batch_key=batch_key,
+            sent_by_id=request.user.pk,
+        )
+    except Exception:
+        # QUAL-01: log the detail, tell the client nothing about our internals.
+        logger.exception('Could not queue attendance report for group %s', group_id)
+        return JsonResponse({'success': False, 'error': QUEUE_FAILED_MESSAGE}, status=503)
 
-        return JsonResponse({
-            'success': True,
-            'message': f'تم إرسال التقرير: {result.get("success_count", 0)} ناجح / {result.get("fail_count", 0)} فاشل',
-            'details': result
-        })
-
-    except Group.DoesNotExist:
-        return JsonResponse({'success': False, 'error': 'المجموعة غير موجودة'}, status=404)
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+    return JsonResponse({
+        'success': True,
+        'status': 'queued',
+        'batch_key': batch_key,
+        'message': 'تمت جدولة إرسال التقرير، تابع الحالة في سجل الرسائل',
+    })
 
 
-@login_required
+@ajax_supervisor_required
+@whatsapp_required_ajax
 @require_http_methods(["POST"])
 def send_bulk_custom_message(request):
     """
-    API: إرسال رسالة مخصصة جماعية
-    يمكن إرسال تنبيهات إلى قائمة أرقام
+    API: جدولة إرسال رسالة مخصصة جماعية
+
+    AUTH-12: this endpoint accepts a free-form list of phone numbers and an
+    arbitrary body. It used to be authentication-only — any account could
+    message every parent in the centre — and it did not even record what it
+    sent. It is now admin/supervisor only, and every message is written to
+    ``WhatsAppMessage`` by the Celery task (PERF-03) with the requesting user
+    attached.
     """
     try:
-        data = json.loads(request.body)
-        phone_numbers = data.get('phone_numbers', [])
-        message = data.get('message', '')
-        group_id = data.get('group_id')  # Optional: send to all parents in group
+        data = json.loads(request.body or b'{}')
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'صيغة الطلب غير صحيحة'}, status=400)
 
-        if not message:
-            return JsonResponse({
-                'success': False,
-                'error': 'نص الرسالة مطلوب'
-            }, status=400)
+    message = (data.get('message') or '').strip()
+    group_id = data.get('group_id')  # Optional: send to all parents in group
 
-        # If group_id provided, get all parent phones from that group
-        if group_id:
-            from apps.students.models import StudentGroupEnrollment
-            enrollments = StudentGroupEnrollment.objects.filter(
-                group_id=group_id,
-                is_active=True
-            ).select_related('student')
-            phone_numbers = [e.student.parent_phone for e in enrollments if e.student.parent_phone]
+    if not message:
+        return JsonResponse({'success': False, 'error': 'نص الرسالة مطلوب'}, status=400)
 
-        if not phone_numbers:
-            return JsonResponse({
-                'success': False,
-                'error': 'لا توجد أرقام للإرسال'
-            }, status=400)
+    recipients = []
+    if group_id:
+        if not Group.objects.filter(pk=group_id).exists():
+            return JsonResponse(
+                {'success': False, 'error': 'المجموعة غير موجودة'}, status=404
+            )
+        enrollments = StudentGroupEnrollment.objects.filter(
+            group_id=group_id,
+            is_active=True,
+            student__deleted_at__isnull=True,
+            student__is_active=True,
+        ).select_related('student')
+        for enrollment in enrollments:
+            phone = (enrollment.student.parent_phone or '').strip()
+            if phone:
+                recipients.append({'phone': phone, 'student_id': enrollment.student.pk})
+    else:
+        raw_numbers = data.get('phone_numbers') or []
+        if isinstance(raw_numbers, str):
+            raw_numbers = raw_numbers.replace('\r', '').split('\n')
+        if not isinstance(raw_numbers, (list, tuple)):
+            return JsonResponse(
+                {'success': False, 'error': 'قائمة الأرقام غير صحيحة'}, status=400
+            )
+        for phone in raw_numbers:
+            phone = str(phone or '').strip()
+            if phone:
+                recipients.append({'phone': phone})
 
-        whatsapp_service = WhatsAppService()
-        result = whatsapp_service.send_bulk_message(phone_numbers, message)
+    if not recipients:
+        return JsonResponse({'success': False, 'error': 'لا توجد أرقام للإرسال'}, status=400)
 
-        return JsonResponse({
-            'success': True,
-            'message': f'تم الإرسال: {result["success_count"]} ناجح / {result["fail_count"]} فاشل',
-            'details': result
-        })
+    batch_key = uuid.uuid4().hex
+    if not _queue_bulk_send(
+        recipients=recipients,
+        message=message,
+        batch_key=batch_key,
+        sent_by_id=request.user.pk,
+        group_id=group_id or None,
+        message_type='group' if group_id else 'custom',
+    ):
+        return JsonResponse({'success': False, 'error': QUEUE_FAILED_MESSAGE}, status=503)
 
-    except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)}, status=500)
-
+    return JsonResponse({
+        'success': True,
+        'status': 'queued',
+        'batch_key': batch_key,
+        'queued': len(recipients),
+        'message': f'تمت جدولة إرسال {len(recipients)} رسالة، تابع الحالة في سجل الرسائل',
+    })

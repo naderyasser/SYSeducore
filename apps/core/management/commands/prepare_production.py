@@ -15,7 +15,7 @@ from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room, Subject
 from apps.attendance.models import Session, Attendance, ActivityLog
 from apps.payments.models import Payment
-from apps.notifications.models import WhatsAppMessage, MessageTemplate
+from apps.notifications.models import WhatsAppMessage, WhatsAppTemplate
 
 User = get_user_model()
 
@@ -57,17 +57,17 @@ class Command(BaseCommand):
             with transaction.atomic():
                 # Count before deletion
                 counts = {
-                    'students': Student.objects.count(),
-                    'teachers': Teacher.objects.count(),
-                    'groups': Group.objects.count(),
+                    'students': Student.all_objects.count(),
+                    'teachers': Teacher.all_objects.count(),
+                    'groups': Group.all_objects.count(),
                     'enrollments': StudentGroupEnrollment.objects.count(),
                     'sessions': Session.objects.count(),
                     'attendance': Attendance.objects.count(),
                     'payments': Payment.objects.count(),
-                    'rooms': Room.objects.count(),
-                    'subjects': Subject.objects.count(),
+                    'rooms': Room.all_objects.count(),
+                    'subjects': Subject.all_objects.count(),
                     'messages': WhatsAppMessage.objects.count(),
-                    'templates': MessageTemplate.objects.count(),
+                    'templates': WhatsAppTemplate.objects.count(),
                     'activity_logs': ActivityLog.objects.count(),
                 }
 
@@ -96,7 +96,7 @@ class Command(BaseCommand):
                 deleted = WhatsAppMessage.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} WhatsApp messages')
 
-                deleted = MessageTemplate.objects.all().delete()[0]
+                deleted = WhatsAppTemplate.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} message templates')
 
                 # 4. Delete enrollments
@@ -104,21 +104,24 @@ class Command(BaseCommand):
                 self.stdout.write(f'  ✓ Deleted {deleted} student enrollments')
 
                 # 5. Delete groups
-                deleted = Group.objects.all().delete()[0]
+                # These models are SoftDeleteModel: .objects.delete() only sets
+                # deleted_at. Use all_objects.hard_delete() so a reset really
+                # removes the rows instead of hiding them.
+                deleted = Group.all_objects.all().hard_delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} groups')
 
                 # 6. Delete students and teachers
-                deleted = Student.objects.all().delete()[0]
+                deleted = Student.all_objects.all().hard_delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} students')
 
-                deleted = Teacher.objects.all().delete()[0]
+                deleted = Teacher.all_objects.all().hard_delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} teachers')
 
                 # 7. Delete rooms and subjects
-                deleted = Room.objects.all().delete()[0]
+                deleted = Room.all_objects.all().hard_delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} rooms')
 
-                deleted = Subject.objects.all().delete()[0]
+                deleted = Subject.all_objects.all().hard_delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} subjects')
 
                 # Verify admin accounts are preserved
