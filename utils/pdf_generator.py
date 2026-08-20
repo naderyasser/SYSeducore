@@ -33,33 +33,45 @@ class PDFGenerator:
         """
         Setup Arabic font for PDF generation
         """
-        try:
-            # Register Arabic font (you need to have an Arabic font file)
-            font_path = os.path.join(settings.BASE_DIR, 'static', 'fonts', 'ArabicFont.ttf')
-            
+        # Register an Arabic-capable font, trying the nicest option first and
+        # falling back to whatever is actually shipped in static/fonts/ (the
+        # dedicated 'ArabicFont.ttf' / 'Cairo-Regular.ttf' names are aspirational
+        # - only DejaVuSans is guaranteed to exist). Registration failures must
+        # not prevent the styles below from being created, or every call site
+        # blows up with KeyError: 'ArabicHeading'/'Arabic' further down.
+        fonts_dir = os.path.join(settings.BASE_DIR, 'static', 'fonts')
+        font_name = 'Helvetica'
+        for candidate in ('ArabicFont.ttf', 'Cairo-Regular.ttf', 'DejaVuSans.ttf'):
+            font_path = os.path.join(fonts_dir, candidate)
             if os.path.exists(font_path):
-                pdfmetrics.registerFont(TTFont('Arabic', font_path))
-                
-                # Create Arabic styles
-                self.styles.add(ParagraphStyle(
-                    name='ArabicHeading',
-                    parent=self.styles['Heading1'],
-                    fontName='Arabic',
-                    fontSize=18,
-                    alignment=TA_RIGHT,
-                    spaceAfter=20
-                ))
-                
-                self.styles.add(ParagraphStyle(
-                    name='ArabicNormal',
-                    parent=self.styles['Normal'],
-                    fontName='Arabic',
-                    fontSize=10,
-                    alignment=TA_RIGHT,
-                    wordWrap='RTL'
-                ))
-        except Exception as e:
-            print(f"Warning: Could not setup Arabic font: {str(e)}")
+                try:
+                    pdfmetrics.registerFont(TTFont('Arabic', font_path))
+                    font_name = 'Arabic'
+                    break
+                except Exception as e:
+                    print(f"Warning: Could not register font {candidate}: {str(e)}")
+
+        self.arabic_font_name = font_name
+
+        # Create Arabic styles unconditionally so downstream code can always
+        # rely on them existing, even when no Arabic font was found.
+        self.styles.add(ParagraphStyle(
+            name='ArabicHeading',
+            parent=self.styles['Heading1'],
+            fontName=font_name,
+            fontSize=18,
+            alignment=TA_RIGHT,
+            spaceAfter=20
+        ))
+
+        self.styles.add(ParagraphStyle(
+            name='ArabicNormal',
+            parent=self.styles['Normal'],
+            fontName=font_name,
+            fontSize=10,
+            alignment=TA_RIGHT,
+            wordWrap='RTL'
+        ))
     
     def generate_pdf(self, data, filename=None):
         """
@@ -153,7 +165,7 @@ class PDFGenerator:
             ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Arabic'),
+            ('FONTNAME', (0, 0), (-1, 0), self.arabic_font_name),
             ('FONTSIZE', (0, 0), (-1, 0), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
             ('BACKGROUND', (0, 1), (-1, -1), colors.beige),

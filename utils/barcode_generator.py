@@ -114,22 +114,24 @@ class BarcodeGenerator:
         results = {}
         
         for student in students:
+            student_id = None
             try:
                 # Get student ID
                 if isinstance(student, dict):
                     student_id = student.get('id')
                 else:
                     student_id = student.id
-                
+
                 # Generate barcode
                 barcode_buffer = self.generate_student_barcode(student_id)
-                
+
                 # Store result
                 results[student_id] = barcode_buffer
-                
+
             except Exception as e:
                 print(f"Error generating barcode for student {student_id}: {str(e)}")
-                results[student_id] = None
+                if student_id is not None and student_id not in results:
+                    results[student_id] = None
         
         return results
     
