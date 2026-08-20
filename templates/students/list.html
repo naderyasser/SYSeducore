@@ -739,7 +739,7 @@
                     <img src="data:image/png;base64,{{ student.get_barcode_base64 }}"
                          alt="Barcode"
                          class="barcode-thumb"
-                         onclick="showBarcode({{ student.student_id }}, '{{ student.full_name }}', '{{ student.student_code }}')"
+                         onclick="showBarcode({{ student.student_id }}, '{{ student.full_name|escapejs }}', '{{ student.student_code|escapejs }}')"
                          title="انقر لتكبير الباركود">
                 </td>
                 <td>
@@ -786,7 +786,7 @@
                     <button class="action-btn whatsapp" onclick="sendBarcodeWhatsApp({{ student.student_id }})" title="إرسال الباركود عبر الواتساب">
                         <i class="bi bi-whatsapp"></i>
                     </button>
-                    <button class="action-btn add-group" onclick="showAddToGroup({{ student.student_id }}, '{{ student.full_name }}')" title="إضافة لمجموعة">
+                    <button class="action-btn add-group" onclick="showAddToGroup({{ student.student_id }}, '{{ student.full_name|escapejs }}')" title="إضافة لمجموعة">
                         <i class="bi bi-plus-circle"></i>
                     </button>
                     <a href="{% url 'students:id_card' student_id=student.student_id %}" target="_blank" class="action-btn id-card" title="عرض/طباعة البطاقة">
@@ -812,6 +812,36 @@
             <i class="bi bi-person-plus me-1"></i>إضافة طالب
         </a>
     </div>
+    {% endif %}
+
+    {% if is_paginated %}
+    <nav class="mt-3" aria-label="ترقيم صفحات الطلاب">
+        <ul class="pagination justify-content-center mb-0">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}">السابق</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">السابق</span></li>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% else %}
+            <li class="page-item"><a class="page-link" href="?page={{ num }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}">{{ num }}</a></li>
+            {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if filter_querystring %}&{{ filter_querystring }}{% endif %}">التالي</a>
+            </li>
+            {% else %}
+            <li class="page-item disabled"><span class="page-link">التالي</span></li>
+            {% endif %}
+        </ul>
+    </nav>
     {% endif %}
 </div>
 
@@ -881,6 +911,14 @@
 // Global variables
 let currentStudentId = null;
 let currentBarcodeImage = null;
+
+// HTML escaping helper
+function escHtml(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
+}
 
 // Delete student
 function confirmDeleteStudent(studentId, studentName) {
@@ -1044,13 +1082,13 @@ function renderAvailableGroups() {
     const container = document.getElementById('availableGroupsList');
 
     container.innerHTML = availableGroupsCache.map(group => `
-        <div class="group-option" onclick="addToGroup(${group.group_id}, '${group.group_name.replace(/'/g, "\\'")}')">
-            <h6>${group.group_name}</h6>
-            <p><i class="bi bi-person me-1"></i>${group.teacher_name}</p>
+        <div class="group-option" onclick="addToGroup(${Number(group.group_id)}, '${escHtml(group.group_name).replace(/'/g, "\\'")}')">
+            <h6>${escHtml(group.group_name)}</h6>
+            <p><i class="bi bi-person me-1"></i>${escHtml(group.teacher_name)}</p>
             <div class="group-meta">
-                <span><i class="bi bi-calendar3 me-1"></i>${group.schedule_day}</span>
-                <span><i class="bi bi-clock me-1"></i>${group.schedule_time}</span>
-                <span><i class="bi bi-door-open me-1"></i>${group.room_name}</span>
+                <span><i class="bi bi-calendar3 me-1"></i>${escHtml(group.schedule_day)}</span>
+                <span><i class="bi bi-clock me-1"></i>${escHtml(group.schedule_time)}</span>
+                <span><i class="bi bi-door-open me-1"></i>${escHtml(group.room_name)}</span>
             </div>
             <div class="group-meta">
                 <span><i class="bi bi-people me-1"></i>${group.enrolled} / ${group.capacity}</span>

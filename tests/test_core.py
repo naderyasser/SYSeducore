@@ -20,6 +20,7 @@ from django.utils import timezone
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room
 from apps.attendance.models import Session, Attendance
+from tests.factories import create_group_with_schedule
 
 User = get_user_model()
 
@@ -39,7 +40,7 @@ class TestSoftDeleteBasics(TestCase):
 
     def test_soft_delete_hides_from_default_manager(self):
         """Soft-deleted group must disappear from Group.objects.all()."""
-        group = Group.objects.create(
+        group = create_group_with_schedule(
             group_name='ستحذف',
             teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(10, 0),
@@ -54,7 +55,7 @@ class TestSoftDeleteBasics(TestCase):
 
     def test_soft_delete_visible_in_all_objects(self):
         """Soft-deleted group must be visible via Group.all_objects.dead()."""
-        group = Group.objects.create(
+        group = create_group_with_schedule(
             group_name='ستحذف 2',
             teacher=self.teacher, room=self.room,
             schedule_day='Sunday', schedule_time=time(10, 0),
@@ -73,7 +74,7 @@ class TestSoftDeleteBasics(TestCase):
 
     def test_soft_delete_records_metadata(self):
         """Soft delete must record deleted_at timestamp and deleted_by user."""
-        group = Group.objects.create(
+        group = create_group_with_schedule(
             group_name='بيانات الحذف',
             teacher=self.teacher, room=self.room,
             schedule_day='Monday', schedule_time=time(10, 0),
@@ -129,7 +130,7 @@ class TestProtectedForeignKeys(TestCase):
             full_name='مدرس محمي', phone='01022220000',
             specialization='كيمياء', hire_date=date(2024, 1, 1),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة محمية',
             teacher=self.teacher, room=self.room,
             schedule_day='Wednesday', schedule_time=time(10, 0),
@@ -186,7 +187,7 @@ class TestSoftDeleteStudent(TestCase):
             full_name='مدرس طالب', phone='01044440000',
             specialization='رياضيات', hire_date=date(2024, 1, 1),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة طالب',
             teacher=self.teacher, room=self.room,
             schedule_day='Thursday', schedule_time=time(10, 0),

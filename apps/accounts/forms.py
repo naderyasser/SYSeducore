@@ -105,7 +105,9 @@ class UserCreateForm(_PasswordValidationMixin, forms.ModelForm):
         cleaned_data = super().clean()
         p1 = cleaned_data.get('password1')
         p2 = cleaned_data.get('password2')
-        if p1 and p1 != p2:
+        if p2 and not p1:
+            self.add_error('password1', 'كلمتا المرور غير متطابقتين')
+        elif p1 and p1 != p2:
             self.add_error('password2', 'كلمتا المرور غير متطابقتين')
         elif p1:
             # Only validate a password the admin actually typed; generated

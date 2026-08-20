@@ -15,28 +15,56 @@
         <div class="col-md-4">
           <div class="card bg-primary text-white">
             <div class="card-body text-center">
-              <h5>إجمالي الحصص</h5>
-              <h2>{{ settlement.total_sessions }}</h2>
+              <h5>إجمالي الإيرادات</h5>
+              <h2>{{ settlement.total_revenue }} ج.م</h2>
             </div>
           </div>
         </div>
         <div class="col-md-4">
           <div class="card bg-success text-white">
             <div class="card-body text-center">
-              <h5>المبلغ المستحق</h5>
-              <h2>{{ settlement.amount_due }}</h2>
+              <h5>نصيب المدرس</h5>
+              <h2>{{ settlement.teacher_share }} ج.م</h2>
             </div>
           </div>
         </div>
         <div class="col-md-4">
           <div class="card bg-info text-white">
             <div class="card-body text-center">
-              <h5>المبلغ المدفوع</h5>
-              <h2>{{ settlement.amount_paid|default:0 }}</h2>
+              <h5>نصيب المركز</h5>
+              <h2>{{ settlement.center_share }} ج.م</h2>
             </div>
           </div>
         </div>
       </div>
+      {% if settlement.breakdown %}
+      <div class="table-responsive">
+        <table class="table table-bordered table-sm">
+          <thead>
+            <tr>
+              <th>المجموعة</th>
+              <th>الطلاب</th>
+              <th>الإيرادات</th>
+              <th>نسبة المركز</th>
+              <th>نصيب المركز</th>
+              <th>نصيب المدرس</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in settlement.breakdown %}
+            <tr{% if not row.group_active %} class="text-muted"{% endif %}>
+              <td>{{ row.group_name }}{% if not row.group_active %} (محذوفة){% endif %}</td>
+              <td>{{ row.students }}</td>
+              <td>{{ row.revenue }} ج.م</td>
+              <td>{{ row.center_percentage }}%</td>
+              <td>{{ row.center_share }} ج.م</td>
+              <td>{{ row.teacher_share }} ج.م</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
       {% else %}
       <form method="post">
         {% csrf_token %}

@@ -14,6 +14,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from apps.teachers.models import Teacher, Group, Room
+from tests.factories import create_group_with_schedule
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import ActivityLog, Session, Attendance
 from apps.payments.admin import PaymentAdmin
@@ -40,7 +41,7 @@ class SettlementServiceTest(TestCase):
         self.room = Room.objects.create(name='Test Room', capacity=30)
 
         # Create group
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='Test Group',
             teacher=self.teacher,
             room=self.room,
@@ -187,7 +188,7 @@ class PaymentModelTest(TestCase):
             specialization='Science',
             hire_date=timezone.now().date(),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='Pay Group',
             teacher=self.teacher,
             room=self.room,
@@ -245,6 +246,21 @@ class PaymentModelTest(TestCase):
         s = str(self.payment)
         self.assertIsNotNone(s)
 
+    def test_zero_fee_payment_is_flagged_exempt_on_save(self):
+        """
+        Every creation path — not just ``_ensure_monthly_payments`` — must
+        yield ``is_exempt=True`` for a zero-fee row, or it is counted as a
+        real (100%) collection in the payments-page stats.
+        """
+        zero_fee = Payment.objects.create(
+            student=self.student, group=self.group,
+            month=date(2026, 6, 1), amount_due=Decimal('0.00'),
+            amount_paid=Decimal('0.00'), status='paid',
+        )
+        self.assertTrue(zero_fee.is_exempt)
+        zero_fee.refresh_from_db()
+        self.assertTrue(zero_fee.is_exempt)
+
 
 # ============================================================
 #  Payment ledger (QUAL-06) — audit trail, over/under-payment
@@ -267,7 +283,7 @@ class LedgerTestBase(TestCase):
             full_name='مدرس السجل', phone='01234500000',
             specialization='رياضيات', hire_date=timezone.localdate(),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة السجل', teacher=self.teacher, room=self.room,
             schedule_day='Tuesday', schedule_time=time(15, 0),
             standard_fee=Decimal('300.00'), center_percentage=Decimal('30.00'),
@@ -324,6 +340,16 @@ class PaymentLedgerTest(LedgerTestBase):
     def test_invalid_amount_raises_arabic_error(self):
         with self.assertRaises(PaymentAmountError) as ctx:
             self.payment.record_transaction('abc', user=self.supervisor)
+        self.assertIn('غير صالحة', str(ctx.exception))
+
+    def test_huge_exponent_amount_raises_arabic_error_not_500(self):
+        """
+        A value whose ``quantize()`` overflows the Decimal context precision
+        must surface as the same Arabic ``PaymentAmountError`` as any other
+        bad amount, not as an uncaught ``InvalidOperation``.
+        """
+        with self.assertRaises(PaymentAmountError) as ctx:
+            self.payment.record_transaction('1e30', user=self.supervisor)
         self.assertIn('غير صالحة', str(ctx.exception))
 
     def test_zero_amount_is_a_noop(self):
@@ -435,6 +461,28 @@ class PaymentAPIPermissionTest(LedgerTestBase):
             ).exists()
         )
 
+    def test_replaying_mark_as_paid_does_not_undo_deactivation(self):
+        """
+        A payment already settled must not be re-activated by a replayed
+        mark-paid POST — ``settle_full`` returns ``None`` (no ledger row),
+        so the student's deliberate deactivation must survive.
+        """
+        self.client.login(username='ledger_supervisor', password='TestPass123!')
+        self.client.post(self.mark_url)
+        self.assertEqual(self.payment.transactions.count(), 1)
+
+        self.student.is_active = False
+        self.student.subscription_expiry_date = date(2020, 1, 1)
+        self.student.save(update_fields=['is_active', 'subscription_expiry_date'])
+
+        response = self.client.post(self.mark_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.payment.transactions.count(), 1)
+
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+        self.assertEqual(self.student.subscription_expiry_date, date(2020, 1, 1))
+
     def test_settlement_page_is_admin_only(self):
         url = reverse('payments:settlement', kwargs={'teacher_id': self.teacher.pk})
         self.client.login(username='ledger_teacher_user', password='TestPass123!')
@@ -451,7 +499,7 @@ class ActivateStudentForPaymentTest(LedgerTestBase):
     def test_missing_enrollment_is_not_created(self):
         from apps.payments.api_views import _activate_student_for_payment
 
-        other_group = Group.objects.create(
+        other_group = create_group_with_schedule(
             group_name='مجموعة أخرى', teacher=self.teacher, room=self.room,
             schedule_day='Wednesday', schedule_time=time(17, 0),
             standard_fee=Decimal('200.00'), center_percentage=Decimal('30.00'),
@@ -543,6 +591,56 @@ class MonthlyGenerationTest(LedgerTestBase):
         self.assertFalse(
             Payment.objects.filter(student=gone, month=self.month).exists()
         )
+
+    def test_generation_skips_deactivated_group(self):
+        """A closed group (is_active=False) must stop generating new charges,
+        even though its enrollments stay active."""
+        third = Student.objects.create(
+            student_code='LDG005', full_name='طالب مجموعة مغلقة',
+            parent_phone='01234500005',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=third, group=self.group, financial_status='normal',
+        )
+        self.group.is_active = False
+        self.group.save(update_fields=['is_active'])
+
+        _ensure_monthly_payments(self.month)
+        self.assertFalse(
+            Payment.objects.filter(student=third, month=self.month).exists()
+        )
+
+
+class PaymentListVisibilityTest(LedgerTestBase):
+    """payment_list is supervisor+ and must not show soft-deleted students."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+
+    def test_teacher_role_is_forbidden(self):
+        self.client.login(username='ledger_teacher_user', password='TestPass123!')
+        response = self.client.get(reverse('payments:list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_role_is_allowed(self):
+        self.client.login(username='ledger_supervisor', password='TestPass123!')
+        response = self.client.get(reverse('payments:list'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_soft_deleted_student_is_excluded_from_list_and_stats(self):
+        self.student.soft_delete()
+
+        self.client.login(username='ledger_supervisor', password='TestPass123!')
+        response = self.client.get(reverse('payments:list'))
+
+        self.assertNotIn(
+            self.payment.pk,
+            [p.pk for p in response.context['payments']],
+        )
+        stats = response.context['stats']
+        self.assertEqual(stats['billable_total'], 0)
+        self.assertEqual(stats['unpaid'], 0)
 
 
 class SettlementInactiveGroupTest(LedgerTestBase):

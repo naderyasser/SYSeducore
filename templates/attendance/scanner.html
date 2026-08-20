@@ -1632,7 +1632,7 @@ function displayResult(data, code) {
         const paymentSkip = (data.skipped || []).find(s => s.error_type === 'payment_required') || data.payment_info;
         if (paymentSkip && paymentSkip.student_id) {
             const sid = paymentSkip.student_id;
-            const pid = paymentSkip.payment_id || '';
+            const pid = paymentSkip.payment_id ? String(paymentSkip.payment_id) : 'null';
             const amt = paymentSkip.amount_due || 0;
             detailHtml += `
             <div class="scanner-actions" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
@@ -1822,8 +1822,8 @@ function renderScansList() {
                 <i class="bi bi-${icon}-circle-fill"></i>
             </div>
             <div class="scan-item-info">
-                <h6>${scan.student}</h6>
-                <p>${scan.message}</p>
+                <h6>${escHtml(scan.student)}</h6>
+                <p>${escHtml(scan.message)}</p>
             </div>
             <div class="scan-item-time">${scan.time}</div>
         </div>
@@ -1902,11 +1902,11 @@ async function loadTodaySessions() {
         sessionsList.innerHTML = data.sessions.map(session => `
             <div class="session-item">
                 <div class="session-info">
-                    <h6>${session.group_name}</h6>
+                    <h6>${escHtml(session.group_name)}</h6>
                     <p>
                         <i class="bi bi-clock"></i> ${session.time}
                         <span style="margin: 0 8px;">•</span>
-                        <i class="bi bi-person"></i> ${session.teacher_name || '-'}
+                        <i class="bi bi-person"></i> ${escHtml(session.teacher_name) || '-'}
                     </p>
                 </div>
                 <div class="session-status">

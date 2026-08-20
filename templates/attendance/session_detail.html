@@ -18,7 +18,7 @@
             <strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}
           </p>
           <p>
-            <strong>الوقت:</strong> {{ session.group.schedule_time|time:"H:i" }}
+            <strong>الوقت:</strong> {{ schedule_entry.start_time|time:"H:i" }}
           </p>
           <p>
             <strong>حضور المدرس:</strong>
@@ -43,14 +43,15 @@
                 </tr>
               </thead>
               <tbody>
-                {% for attendance in session.attendances.all %}
+                {% for attendance in attendances %}
                 <tr>
                   <td>{{ attendance.student.full_name }}</td>
                   <td>
                     <span class="status-{{ attendance.status }}">
                       {% if attendance.status == 'present' %}حاضر {% elif
                       attendance.status == 'late' %}متأخر {% elif
-                      attendance.status == 'absent' %}غائب {% endif %}
+                      attendance.status == 'absent' %}غائب {% elif
+                      attendance.status == 'exception' %}استثناء {% endif %}
                     </span>
                   </td>
                   <td>{{ attendance.scan_time|time:"H:i" }}</td>

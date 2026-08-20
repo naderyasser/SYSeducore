@@ -158,6 +158,11 @@
         color: #991b1b;
     }
 
+    .status-badge-custom.exception {
+        background: #e0e7ff;
+        color: #3730a3;
+    }
+
     .pagination-modern {
         display: flex;
         justify-content: center;
@@ -288,6 +293,7 @@
                 <option value="present" {% if selected_status == 'present' %}selected{% endif %}>حاضر</option>
                 <option value="late" {% if selected_status == 'late' %}selected{% endif %}>متأخر</option>
                 <option value="absent" {% if selected_status == 'absent' %}selected{% endif %}>غائب</option>
+                <option value="exception" {% if selected_status == 'exception' %}selected{% endif %}>استثناء</option>
             </select>
         </div>
         <div class="col-12">
@@ -345,6 +351,11 @@
                         <span class="status-badge-custom late">
                             <i class="bi bi-clock-fill"></i>
                             متأخر
+                        </span>
+                        {% elif attendance.status == 'exception' %}
+                        <span class="status-badge-custom exception">
+                            <i class="bi bi-exclamation-circle-fill"></i>
+                            استثناء
                         </span>
                         {% else %}
                         <span class="status-badge-custom absent">

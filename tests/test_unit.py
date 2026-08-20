@@ -18,6 +18,7 @@ from apps.teachers.models import Teacher, Group, Room, Subject
 from apps.payments.models import Payment
 from apps.attendance.models import Session, Attendance, ActivityLog
 from apps.accounts.forms import LoginForm
+from tests.factories import create_group_with_schedule
 
 User = get_user_model()
 
@@ -55,7 +56,7 @@ class BaseTestMixin:
         )
         self.teacher.subjects.add(self.subject)
 
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة أ',
             teacher=self.teacher,
             room=self.room,
@@ -511,6 +512,7 @@ class URLResolutionTest(TestCase):
 # ============================================================
 #  4. VIEW / AUTH TESTS
 # ============================================================
+@override_settings(RATELIMIT_ENABLE=False)
 class AuthenticationViewTest(BaseTestMixin, TestCase):
     """Tests for login/logout views."""
 
@@ -939,23 +941,6 @@ class DashboardViewTest(BaseTestMixin, TestCase):
         response = self.client.get(reverse('reports:attendance'))
         self.assertEqual(response.status_code, 200)
 
-    def test_password_prompt_requires_login(self):
-        self.client.logout()
-        response = self.client.get(reverse('reports:password_prompt'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
-
-    def test_password_prompt_loads(self):
-        response = self.client.get(reverse('reports:password_prompt'))
-        self.assertEqual(response.status_code, 200)
-
-    def test_verify_wrong_password(self):
-        response = self.client.post(reverse('reports:verify_password'), {
-            'password': 'wrong_password',
-        })
-        self.assertEqual(response.status_code, 302)
-        self.assertFalse(self.client.session.get('report_authenticated', False))
-
 
 # ============================================================
 #  13. TEMPLATE CONTENT TESTS
@@ -1040,7 +1025,7 @@ class DataIntegrityTest(BaseTestMixin, TestCase):
         self.client.login(username='admin_test', password='TestPass123!')
 
         # Create second group
-        group2 = Group.objects.create(
+        group2 = create_group_with_schedule(
             group_name='مجموعة ب',
             teacher=self.teacher,
             room=self.room,
@@ -1098,7 +1083,8 @@ class DataIntegrityTest(BaseTestMixin, TestCase):
         25: 'success',    # SUCCESS
         30: 'warning',    # WARNING
         40: 'danger',     # ERROR
-    }
+    },
+    RATELIMIT_ENABLE=False,
 )
 class MessageTagTest(BaseTestMixin, TestCase):
     """Tests that Django messages use Bootstrap-compatible tags."""

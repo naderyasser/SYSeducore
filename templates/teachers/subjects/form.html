@@ -85,7 +85,7 @@
                     <small>يمكنك حذف هذه المادة الدراسية، لكن تأكد من أنه لا يوجد مدرسين مرتبطين بها.</small>
                 </p>
                 <a href="{% url 'teachers:subject_delete' subject.id %}" class="btn btn-outline-danger btn-sm"
-                   onclick="return confirm('هل أنت متأكد؟ لا يمكن استرجاع البيانات.')">
+                   onclick="return confirm('هل أنت متأكد؟ سيتم نقل المادة إلى سلة المهملات.')">
                     <i class="bi bi-trash"></i> حذف هذه المادة
                 </a>
             </div>

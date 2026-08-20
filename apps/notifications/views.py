@@ -6,6 +6,7 @@ from functools import wraps
 
 from django.conf import settings
 from django.contrib import messages as django_messages
+from django.core.paginator import Paginator
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -29,6 +30,8 @@ logger = logging.getLogger('notifications')
 WHATSAPP_DISABLED_MESSAGE = 'خدمة الواتساب معطلة حالياً'
 GENERIC_ERROR_MESSAGE = 'حدث خطأ أثناء تنفيذ العملية، يرجى المحاولة مرة أخرى'
 QUEUE_FAILED_MESSAGE = 'تعذر جدولة الإرسال حالياً، يرجى المحاولة لاحقاً'
+#: contact_list used to render every active student on one page.
+CONTACTS_PER_PAGE = 50
 
 
 def whatsapp_required(view_func):
@@ -240,7 +243,12 @@ def send_message(request):
                 django_messages.error(request, GENERIC_ERROR_MESSAGE)
 
     else:
-        form = SendWhatsAppMessageForm()
+        initial = {}
+        if request.GET.get('student'):
+            initial['student'] = request.GET.get('student')
+        if request.GET.get('type'):
+            initial['recipient_type'] = request.GET.get('type')
+        form = SendWhatsAppMessageForm(initial=initial)
 
     context = {
         'form': form,
@@ -365,7 +373,7 @@ def message_history(request):
     """
     سجل الرسائل المرسلة
     """
-    messages_query = WhatsAppMessage.objects.all()
+    messages_query = WhatsAppMessage.objects.select_related('student', 'sent_by')
 
     # التصفية بناءً على الحالة
     status = request.GET.get('status')
@@ -398,7 +406,11 @@ def message_history(request):
     }
 
     context = {
-        'messages': messages_query[:100],  # آخر 100 رسالة
+        # 'whatsapp_messages', not 'messages' — the latter key is owned by
+        # django.contrib.messages' context processor (base.html's flash
+        # banners); shadowing it hid every real success/error message and
+        # rendered one bogus alert per row instead.
+        'whatsapp_messages': messages_query[:100],  # آخر 100 رسالة
         'stats': stats,
         'status_filter': status,
         'type_filter': msg_type,
@@ -439,8 +451,16 @@ def contact_list(request):
 
     contacts = contacts.order_by('full_name')
 
+    # An unfiltered visit used to serialise the whole active-student table
+    # into one page (plus a separate COUNT for {{ contacts.count }}) — cap
+    # and paginate like every other listing view.
+    total_contacts = contacts.count()
+    paginator = Paginator(contacts, CONTACTS_PER_PAGE)
+    page_obj = paginator.get_page(request.GET.get('page'))
+
     context = {
-        'contacts': contacts,
+        'contacts': page_obj,
+        'total_contacts': total_contacts,
         'contact_type': contact_type,
         'search_query': search,
         'page_title': 'قائمة جهات الاتصال'
@@ -460,10 +480,15 @@ def manage_templates(request):
 
         if action == 'create':
             name = request.POST.get('name')
-            description = request.POST.get('description')
+            # description is TextField(blank=True) — NOT NULL. The shipped
+            # form always posts an (empty) textarea, but a raw POST/API
+            # client that omits the key sends None, which IntegrityErrors.
+            description = request.POST.get('description') or ''
             message_text = request.POST.get('message_text')
 
-            if name and message_text:
+            if name and message_text and len(name) > 100:
+                django_messages.error(request, 'اسم القالب طويل جداً (الحد الأقصى 100 حرف)')
+            elif name and message_text:
                 WhatsAppTemplate.objects.create(
                     name=name,
                     description=description,
@@ -473,13 +498,34 @@ def manage_templates(request):
             else:
                 django_messages.error(request, 'الاسم والنص مطلوبان')
 
+        elif action == 'update':
+            template_id = request.POST.get('template_id')
+            name = request.POST.get('name')
+            description = request.POST.get('description') or ''
+            message_text = request.POST.get('message_text')
+            try:
+                template = WhatsAppTemplate.objects.get(pk=template_id)
+            except (WhatsAppTemplate.DoesNotExist, ValueError, TypeError):
+                django_messages.error(request, 'القالب غير موجود')
+            else:
+                if not (name and message_text):
+                    django_messages.error(request, 'الاسم والنص مطلوبان')
+                elif len(name) > 100:
+                    django_messages.error(request, 'اسم القالب طويل جداً (الحد الأقصى 100 حرف)')
+                else:
+                    template.name = name
+                    template.description = description
+                    template.message_text = message_text
+                    template.save(update_fields=['name', 'description', 'message_text', 'updated_at'])
+                    django_messages.success(request, f'تم تحديث القالب "{name}" بنجاح')
+
         elif action == 'delete':
             template_id = request.POST.get('template_id')
             try:
                 template = WhatsAppTemplate.objects.get(pk=template_id)
                 template.delete()
                 django_messages.success(request, 'تم حذف القالب بنجاح')
-            except WhatsAppTemplate.DoesNotExist:
+            except (WhatsAppTemplate.DoesNotExist, ValueError, TypeError):
                 django_messages.error(request, 'القالب غير موجود')
 
         return redirect('notifications:manage_templates')
@@ -515,6 +561,13 @@ def send_bulk_attendance_report(request):
     if not group_id:
         return JsonResponse(
             {'success': False, 'error': 'معرف المجموعة مطلوب'}, status=400
+        )
+
+    try:
+        group_id = int(group_id)
+    except (TypeError, ValueError):
+        return JsonResponse(
+            {'success': False, 'error': 'المجموعة غير موجودة'}, status=404
         )
 
     if not Group.objects.filter(pk=group_id).exists():
@@ -578,6 +631,12 @@ def send_bulk_custom_message(request):
 
     recipients = []
     if group_id:
+        try:
+            group_id = int(group_id)
+        except (TypeError, ValueError):
+            return JsonResponse(
+                {'success': False, 'error': 'المجموعة غير موجودة'}, status=404
+            )
         if not Group.objects.filter(pk=group_id).exists():
             return JsonResponse(
                 {'success': False, 'error': 'المجموعة غير موجودة'}, status=404

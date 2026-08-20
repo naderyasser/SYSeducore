@@ -9,6 +9,7 @@ from django.utils import timezone
 from datetime import datetime, timedelta, time
 from unittest.mock import patch, MagicMock
 from apps.teachers.models import Teacher, Group
+from tests.factories import create_group_with_schedule
 from apps.students.models import Student
 from apps.attendance.models import Session, Attendance
 from apps.accounts.models import User
@@ -74,7 +75,7 @@ class NotificationTimingTest(TestCase):
         self.room = Room.objects.create(name='Notif Room', capacity=30)
 
         # Create group with session at 10:00 AM
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='Test Group',
             teacher=self.teacher,
             room=self.room,

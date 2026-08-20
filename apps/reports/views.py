@@ -33,6 +33,7 @@ from django.db.models.functions import TruncMonth
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from apps.accounts.decorators import (
     admin_required,
@@ -111,6 +112,33 @@ def _month_filter(queryset, month_start, field='month'):
 
 def _rate(part, whole):
     return (part / whole * 100) if whole else 0
+
+
+def _parse_date_param(value):
+    """
+    Parse a ``?date_from=``/``?date_to=`` style GET param into a ``date``.
+
+    Returns ``None`` for a blank/absent value and for one that does not
+    parse — ``django.utils.dateparse.parse_date`` only accepts ISO
+    ``YYYY-MM-DD`` (what ``<input type="date">`` submits) and returns
+    ``None`` on anything else, rather than raising. Filtering with the raw
+    string instead used to raise ``ValidationError`` inside the ORM for a
+    malformed value (e.g. a hand-edited ``20/8/2026``), a 500 with no
+    exception middleware to catch it (unvalidated-get-filters-500).
+    """
+    if not value:
+        return None
+    return parse_date(str(value).strip())
+
+
+def _parse_int_param(value):
+    """Parse a ``?group=``/``?teacher=``/``?user=`` id param, or ``None``."""
+    if not value:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ==================== Dashboard ====================
@@ -204,23 +232,44 @@ def dashboard(request):
     ).select_related('student', 'session__group')[:5]
 
     # ====== FINANCIAL SUMMARY ======
-    month_totals = Payment.objects.filter(month__gte=this_month_start).aggregate(
+    # Half-open [this_month, next_month) range — a plain ``month__gte`` also
+    # swept in every future-dated row that ``check_billing_cycles`` bulk
+    # creates for enrollments whose cycle already closed, so "this month"
+    # kept growing by every upcoming month's dues (dashboard-month-gte-future-payments).
+    month_totals = _month_filter(Payment.objects.all(), this_month_start).aggregate(
         total_due=Sum('amount_due'),
         total_paid=Sum('amount_paid'),
-        pending=Count('payment_id', filter=Q(status__in=['unpaid', 'partial'])),
     )
     month_total_due = month_totals['total_due'] or 0
     month_total_paid = month_totals['total_paid'] or 0
     month_remaining = month_total_due - month_total_paid
     collection_rate = _rate(month_total_paid, month_total_due)
-    pending_payments_count = month_totals['pending'] or 0
 
-    pending_payments_list = Payment.objects.filter(
-        status__in=['unpaid', 'partial']
-    ).select_related('student', 'group').order_by('-month')[:5]
+    # Soft-deleted students/groups are excluded from both the count and the
+    # list below them — they used to share nothing, so a student who had
+    # been moved to the recycle bin still padded the "مدفوعات معلقة" badge
+    # and kept reappearing in the list underneath it forever
+    # (pending-payments-soft-delete-leak). Both now read the same
+    # month-scoped, soft-delete-excluding queryset.
+    pending_payments_qs = _month_filter(
+        Payment.objects.filter(
+            status__in=['unpaid', 'partial'],
+            student__deleted_at__isnull=True,
+            group__deleted_at__isnull=True,
+        ),
+        this_month_start,
+    )
+    pending_payments_count = pending_payments_qs.count()
+    pending_payments_list = pending_payments_qs.select_related(
+        'student', 'group'
+    ).order_by('-month')[:5]
 
+    # Exclude exempt (0 ج.م, no payment_date) rows and NULL payment_date so
+    # PostgreSQL's "NULLs first" DESC ordering doesn't fill the panel with
+    # zero-fee waivers instead of the day's real collections
+    # (recent-payments-null-payment-date-first).
     recent_payments = Payment.objects.select_related('student', 'group').filter(
-        status__in=['paid', 'partial']
+        status__in=['paid', 'partial'], is_exempt=False, payment_date__isnull=False
     ).order_by('-payment_date')[:5]
 
     # ====== GROUPS: today's schedule + enrolment health ======
@@ -237,23 +286,22 @@ def dashboard(request):
     )
     active_groups = list(
         Group.objects.filter(is_active=True)
-        .select_related('teacher', 'room')
-        .prefetch_related('schedules')
+        .select_related('teacher')
+        .prefetch_related('schedules__room')
     )
     total_active_groups = len(active_groups)
 
     # ====== TODAY'S SCHEDULE ======
     # ``get_schedule_entries()`` (apps.teachers.models) is the single source of
     # schedule truth: it returns one entry per weekly session from
-    # ``GroupSchedule``, falling back to the legacy schedule_day/schedule_time
-    # fields for groups that have no GroupSchedule rows (DATA-04).
+    # ``GroupSchedule``, each carrying its own room (DATA-04).
     today_schedule = []
     for grp in active_groups:
         for entry in grp.get_schedule_entries():
             if entry.day_of_week != current_day_name:
                 continue
             enrolled_count = enrolment_counts.get(grp.pk, 0)
-            capacity = grp.room.capacity if grp.room else 0
+            capacity = entry.room.capacity if entry.room else 0
             end_time = entry.get_end_time()
 
             session_status = 'upcoming'
@@ -266,7 +314,7 @@ def dashboard(request):
                 'id': grp.group_id,
                 'group_name': grp.group_name,
                 'teacher': grp.teacher.full_name if grp.teacher else '-',
-                'room': grp.room.name if grp.room else '-',
+                'room': entry.room.name if entry.room else '-',
                 'sort_key': entry.start_time,
                 'time_start': entry.start_time.strftime('%I:%M %p'),
                 'time_end': end_time.strftime('%I:%M %p'),
@@ -288,7 +336,7 @@ def dashboard(request):
     groups_high_enrollment = []
     for group in active_groups:
         enrolled = enrolment_counts.get(group.pk, 0)
-        capacity = group.room.capacity if group.room else 0
+        capacity = group.get_capacity()
         utilization = _rate(enrolled, capacity)
 
         group_info = {
@@ -376,13 +424,28 @@ def attendance_report(request):
         'student', 'session', 'session__group', 'session__group__teacher'
     ).order_by('-scan_time')
 
-    # Apply filters
+    # Apply filters — parsed first (unvalidated-get-filters-500): a
+    # malformed date or id used to reach ``.filter()`` raw and raise
+    # ValidationError/ValueError inside the ORM, a bare 500. An unparseable
+    # value now yields no rows, matching the existing ``?month=`` contract.
     if date_from:
-        attendances = attendances.filter(session__session_date__gte=date_from)
+        date_from_parsed = _parse_date_param(date_from)
+        attendances = (
+            attendances.filter(session__session_date__gte=date_from_parsed)
+            if date_from_parsed else attendances.none()
+        )
     if date_to:
-        attendances = attendances.filter(session__session_date__lte=date_to)
+        date_to_parsed = _parse_date_param(date_to)
+        attendances = (
+            attendances.filter(session__session_date__lte=date_to_parsed)
+            if date_to_parsed else attendances.none()
+        )
     if group_id:
-        attendances = attendances.filter(session__group__group_id=group_id)
+        group_id_parsed = _parse_int_param(group_id)
+        attendances = (
+            attendances.filter(session__group__group_id=group_id_parsed)
+            if group_id_parsed is not None else attendances.none()
+        )
     if status:
         attendances = attendances.filter(status=status)
 
@@ -452,9 +515,20 @@ def payment_report(request):
     if status:
         payments = payments.filter(status=status)
     if group_id:
-        payments = payments.filter(group__group_id=group_id)
+        # A non-numeric id used to raise ValueError inside the ORM — a 500
+        # (unvalidated-get-filters-500). Unparseable => no rows, matching
+        # the ``?month=`` contract just above.
+        group_id_parsed = _parse_int_param(group_id)
+        payments = (
+            payments.filter(group__group_id=group_id_parsed)
+            if group_id_parsed is not None else payments.none()
+        )
     if teacher_id:
-        payments = payments.filter(group__teacher__teacher_id=teacher_id)
+        teacher_id_parsed = _parse_int_param(teacher_id)
+        payments = (
+            payments.filter(group__teacher__teacher_id=teacher_id_parsed)
+            if teacher_id_parsed is not None else payments.none()
+        )
 
     # Statistics — one aggregate instead of five round-trips.
     stats = payments.aggregate(
@@ -603,11 +677,25 @@ def activity_log(request):
     if action_filter:
         logs = logs.filter(action=action_filter)
     if user_filter:
-        logs = logs.filter(user_id=user_filter)
+        # A non-numeric id used to raise ValueError inside the ORM — a 500
+        # (unvalidated-get-filters-500). Unparseable => no rows.
+        user_id_parsed = _parse_int_param(user_filter)
+        logs = (
+            logs.filter(user_id=user_id_parsed)
+            if user_id_parsed is not None else logs.none()
+        )
     if date_from:
-        logs = logs.filter(created_at__date__gte=date_from)
+        date_from_parsed = _parse_date_param(date_from)
+        logs = (
+            logs.filter(created_at__date__gte=date_from_parsed)
+            if date_from_parsed else logs.none()
+        )
     if date_to:
-        logs = logs.filter(created_at__date__lte=date_to)
+        date_to_parsed = _parse_date_param(date_to)
+        logs = (
+            logs.filter(created_at__date__lte=date_to_parsed)
+            if date_to_parsed else logs.none()
+        )
 
     # Pagination
     paginator = Paginator(logs, 50)
@@ -662,7 +750,10 @@ def recycle_bin(request):
         filter_type in ('all', 'teachers'),
     )
     groups, groups_count = _bin_section(
-        Group.all_objects.dead().select_related('deleted_by'),
+        # recycle_bin.html reads group.teacher.full_name in the loop for
+        # every deleted group (Group.teacher is non-nullable), which cost one
+        # extra SELECT per row without this (recycle-bin-unbounded-and-n1).
+        Group.all_objects.dead().select_related('deleted_by', 'teacher'),
         filter_type in ('all', 'groups'),
     )
     rooms, rooms_count = _bin_section(
@@ -724,7 +815,11 @@ def recycle_restore(request):
             'success': True,
             'message': 'تم استعادة العنصر بنجاح'
         })
-    except model.DoesNotExist:
+    except (model.DoesNotExist, ValueError, TypeError):
+        # A non-numeric id (hand-crafted request; the template only ever
+        # emits integer pks) makes ``pk=item_id`` raise ValueError instead of
+        # DoesNotExist, which used to escape as an uncaught 500 with an HTML
+        # body that broke the caller's ``r.json()`` (recycle-ajax-bad-id-500).
         return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
 
 
@@ -765,7 +860,11 @@ def recycle_permanent_delete(request):
             'success': True,
             'message': 'تم الحذف النهائي بنجاح'
         })
-    except model.DoesNotExist:
+    except (model.DoesNotExist, ValueError, TypeError):
+        # A non-numeric id (hand-crafted request; the template only ever
+        # emits integer pks) makes ``pk=item_id`` raise ValueError instead of
+        # DoesNotExist, which used to escape as an uncaught 500 with an HTML
+        # body that broke the caller's ``r.json()`` (recycle-ajax-bad-id-500).
         return JsonResponse({'success': False, 'message': 'العنصر غير موجود'})
     except ProtectedError:
         return JsonResponse({'success': False, 'message': 'لا يمكن حذف هذا العنصر لأنه مرتبط بسجلات أخرى (مدفوعات أو حضور). يرجى حذف السجلات المرتبطة أولاً.'})
@@ -999,8 +1098,16 @@ def monthly_financial_summary(request):
         )
     }
 
-    groups = Group.objects.filter(
-        is_active=True, group_id__in=list(rows.keys())
+    # ``rows`` is keyed by every group_id the month's payments touch, whether
+    # or not the group is still active. Resolving through the default
+    # ``is_active=True`` manager silently dropped deactivated/soft-deleted
+    # groups from this breakdown while the header tiles above (built from
+    # ``payments_qs`` directly) still counted their payments — the per-group
+    # column totals fell short of the header by exactly that group's money
+    # (tsfya-breakdown-drops-inactive-groups). ``all_objects`` includes
+    # soft-deleted groups too; the payment rows already scope the report.
+    groups = Group.all_objects.filter(
+        group_id__in=list(rows.keys())
     ).select_related('teacher').order_by('group_name')
 
     group_breakdown = []

@@ -322,9 +322,15 @@ class WhatsAppService:
                 student=student, session=session
             ).first()
 
-            if attendance:
+            # Only 'absent' (or no row at all) means غائب — 'present', 'late'
+            # and 'exception' (an approved late-arrival) all mean the student
+            # attended. attendance.status was never read before, so every
+            # auto-marked absentee (apps.attendance.tasks.auto_mark_absent_sessions
+            # writes status='absent') was reported حاضر.
+            if attendance and attendance.status != 'absent':
+                scan_time_str = timezone.localtime(attendance.scan_time).strftime('%I:%M %p')
                 message_parts.append(
-                    f'✅ {student.full_name} - حاضر ({attendance.scan_time.strftime("%I:%M %p")})'
+                    f'✅ {student.full_name} - حاضر ({scan_time_str})'
                 )
                 present_count += 1
             else:
@@ -418,7 +424,10 @@ class WhatsAppService:
         """
         if status == 'present':
             return self._get_present_message(student_name, time)
-        if status == 'late':
+        if status in ('late', 'exception'):
+            # 'exception' is an approved late-arrival exception (see
+            # AttendanceService.apply_late_exception) — the student is in the
+            # room, so this must not fall through to the absence message.
             return self._get_late_message(student_name, time)
         return self._get_absent_message(student_name)
 
@@ -482,7 +491,8 @@ class WhatsAppService:
 
     def _get_late_block_message(self, student_name):
         """Get late block message"""
-        time_str = timezone.now().strftime('%I:%M %p')
+        # TZ-07: format in Cairo local time, not UTC.
+        time_str = timezone.localtime(timezone.now()).strftime('%I:%M %p')
         return f'''⛔ *تم منع الدخول - تأخير*
 
 تم منع ابنكم *{student_name}* من دخول الحصة
@@ -506,7 +516,9 @@ _نظام الحضور الآلي_'''
     
     def _get_present_message(self, student_name, time):
         """Get present attendance message"""
-        time_str = time.strftime('%I:%M %p')
+        # TZ-07: 'time' comes from the DB as an aware UTC datetime — format
+        # in Cairo local time, not UTC.
+        time_str = timezone.localtime(time).strftime('%I:%M %p')
         return f'''✅ *تم تسجيل الحضور*
 
 وصل ابنكم *{student_name}* إلى السنتر بنجاح
@@ -517,7 +529,8 @@ _نظام الحضور الآلي_'''
     
     def _get_late_message(self, student_name, time):
         """Get late attendance message"""
-        time_str = time.strftime('%I:%M %p')
+        # TZ-07: format in Cairo local time, not UTC.
+        time_str = timezone.localtime(time).strftime('%I:%M %p')
         return f'''⚠️ *تم تسجيل الحضور - متأخر*
 
 وصل ابنكم *{student_name}* إلى السنتر
@@ -530,7 +543,9 @@ _نظام الحضور الآلي_'''
     
     def _get_absent_message(self, student_name):
         """Get absence message"""
-        date_str = timezone.now().strftime('%Y/%m/%d')
+        # TZ-07: timezone.now() is UTC — between 00:00 and 02:00/03:00 Cairo
+        # that prints yesterday's date.
+        date_str = timezone.localdate().strftime('%Y/%m/%d')
         return f'''❌ *تنبيه غياب*
 
 تغيب ابنكم *{student_name}* عن الحصة اليوم

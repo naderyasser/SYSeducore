@@ -17,6 +17,12 @@
                     <form method="post" id="bulkForm">
                         {% csrf_token %}
 
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                        {% endif %}
+
                         <!-- نوع الإرسال الجماعي -->
                         <div class="mb-3">
                             <label for="{{ form.bulk_type.id_for_label }}" class="form-label">

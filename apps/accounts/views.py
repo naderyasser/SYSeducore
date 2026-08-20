@@ -284,7 +284,11 @@ def user_update(request, user_id):
             request.POST, instance=target_user, request_user=request.user
         )
         if form.is_valid():
-            form.save()
+            updated_user = form.save()
+            if updated_user.pk == request.user.pk and form.cleaned_data.get('new_password'):
+                # Changing your own password rotates the session auth hash;
+                # without this the admin is logged out on their next request.
+                update_session_auth_hash(request, updated_user)
             ActivityLog.log(
                 user=request.user,
                 action='user_update',

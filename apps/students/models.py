@@ -247,12 +247,12 @@ class Student(SoftDeleteModel):
         """
         from django.db.models import Max
         from django.db.models.functions import Cast
-        from django.db.models import IntegerField
+        from django.db.models import BigIntegerField
 
         last_numeric = cls.all_objects.filter(
             student_code__regex=r'^\d+$'
         ).annotate(
-            code_int=Cast('student_code', IntegerField())
+            code_int=Cast('student_code', BigIntegerField())
         ).aggregate(max_code=Max('code_int'))
 
         last_code = last_numeric.get('max_code')

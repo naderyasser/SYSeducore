@@ -13,6 +13,7 @@ from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Session, Attendance
 from apps.payments.models import Payment
 from apps.attendance.services import AttendanceService
+from tests.factories import create_group_with_schedule
 
 
 class AttendanceServiceStrictTest(TestCase):
@@ -45,7 +46,7 @@ class AttendanceServiceStrictTest(TestCase):
         )
 
         # Create group (بدون grace_period - النظام الثابت)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة السبت',
             teacher=self.teacher,
             room=self.room,
@@ -164,7 +165,7 @@ class AttendanceFinancialCheckTest(TestCase):
 
         self.room = Room.objects.create(name='Room A', capacity=30)
 
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='Test Group',
             teacher=self.teacher,
             room=self.room,
@@ -342,7 +343,7 @@ class ProcessScanIntegrationTest(TestCase):
 
         self.room = Room.objects.create(name='Room A', capacity=30)
 
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='Test Group',
             teacher=self.teacher,
             room=self.room,
@@ -472,7 +473,7 @@ class FirstMonthPaymentFlagTest(TestCase):
             hire_date=timezone.now().date()
         )
         self.room = Room.objects.create(name='Room A', capacity=30)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='Test Group',
             teacher=self.teacher,
             room=self.room,
@@ -575,7 +576,7 @@ class DossierTest(TestCase):
             hire_date=timezone.now().date()
         )
         self.room = Room.objects.create(name='قاعة D', capacity=25)
-        self.group_a = Group.objects.create(
+        self.group_a = create_group_with_schedule(
             group_name='مجموعة ألفا',
             teacher=self.teacher,
             room=self.room,
@@ -583,7 +584,7 @@ class DossierTest(TestCase):
             schedule_time=time(10, 0),
             standard_fee=300.00
         )
-        self.group_b = Group.objects.create(
+        self.group_b = create_group_with_schedule(
             group_name='مجموعة بيتا',
             teacher=self.teacher,
             room=self.room,
@@ -759,7 +760,7 @@ class ScannerPayNowTest(TestCase):
             hire_date=timezone.now().date(),
         )
         self.room = Room.objects.create(name='قاعة اختبار الدفع', capacity=25)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة اختبار الدفع',
             teacher=self.teacher,
             room=self.room,
@@ -930,7 +931,7 @@ class ScannerGracePeriodTest(TestCase):
             hire_date=timezone.now().date(),
         )
         self.room = Room.objects.create(name='قاعة المهلة', capacity=20)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة المهلة',
             teacher=self.teacher,
             room=self.room,
@@ -1132,7 +1133,7 @@ class GracePeriodFinancialCheckTest(TestCase):
             hire_date=timezone.now().date(),
         )
         self.room = Room.objects.create(name='قاعة فحص المهلة', capacity=20)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة فحص المهلة',
             teacher=self.teacher,
             room=self.room,
@@ -1286,7 +1287,7 @@ class AuditFixturesMixin:
             hire_date=timezone.localdate(),
         )
         self.room = Room.objects.create(name='قاعة التدقيق', capacity=30)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة التدقيق',
             teacher=self.teacher,
             room=self.room,
@@ -1363,7 +1364,7 @@ class OverdueMonthsTest(AuditFixturesMixin, TestCase):
 
     def setUp(self):
         self.build_fixtures()
-        self.group_b = Group.objects.create(
+        self.group_b = create_group_with_schedule(
             group_name='مجموعة التدقيق ب',
             teacher=self.teacher, room=self.room,
             schedule_day='Sunday', schedule_time=time(13, 0),
@@ -1391,7 +1392,7 @@ class AttendanceRateTest(AuditFixturesMixin, TestCase):
         self.build_fixtures()
 
     def test_rate_ignores_groups_the_student_left(self):
-        other_group = Group.objects.create(
+        other_group = create_group_with_schedule(
             group_name='مجموعة سابقة', teacher=self.teacher, room=self.room,
             schedule_day='Monday', schedule_time=time(18, 0),
             duration_minutes=120, standard_fee=100.00,

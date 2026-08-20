@@ -13,7 +13,7 @@ import logging
 
 from .models import Student, StudentGroupEnrollment
 from .forms import StudentForm
-from .utils import normalize_financial_status, parse_money
+from .utils import enrollment_compatibility_errors, normalize_financial_status, parse_money
 from apps.teachers.models import Group
 from apps.accounts.decorators import (
     ajax_login_required,
@@ -59,7 +59,7 @@ def student_list(request):
             'group_enrollments',
             queryset=StudentGroupEnrollment.objects.filter(
                 is_active=True
-            ).select_related('group', 'group__teacher', 'group__room')[:3],
+            ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')[:3],
             to_attr='active_enrollments'
         )
     )
@@ -74,9 +74,13 @@ def student_list(request):
             Q(school_name__icontains=search)
         )
 
-    # Apply group filter
-    if group_filter:
-        students = students.filter(groups__group_id=group_filter)
+    # Apply group filter (ignore non-numeric junk instead of letting the ORM
+    # raise ValueError trying to cast it to the group_id field)
+    if group_filter and str(group_filter).isdigit():
+        students = students.filter(
+            group_enrollments__group_id=group_filter,
+            group_enrollments__is_active=True,
+        ).distinct()
 
     # Apply status filter
     if status_filter == 'with_groups':
@@ -132,12 +136,12 @@ def student_list(request):
         'total': Student.objects.filter(is_active=True).count(),
         'with_groups': Student.objects.filter(
             is_active=True,
-            groups__is_active=True
+            group_enrollments__is_active=True
         ).distinct().count(),
         'without_groups': Student.objects.filter(
             is_active=True
         ).exclude(
-            groups__is_active=True
+            group_enrollments__is_active=True
         ).count(),
         'recent': Student.objects.filter(
             is_active=True,
@@ -176,7 +180,7 @@ def student_detail(request, student_id):
     active_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
         is_active=True
-    ).select_related('group', 'group__teacher', 'group__room')
+    ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')
 
     # Get recent attendance (last 30 days)
     thirty_days_ago = timezone.now() - timedelta(days=30)
@@ -202,7 +206,7 @@ def student_detail(request, student_id):
         is_active=True
     ).exclude(
         group_id__in=enrolled_group_ids
-    ).select_related('teacher', 'room')
+    ).select_related('teacher')
 
     # Filter by gender compatibility
     if student.gender == 'male':
@@ -238,7 +242,7 @@ def student_create(request):
     """
     Create a new student with auto-generated code.
     """
-    groups = Group.objects.filter(is_active=True).select_related('teacher', 'room')
+    groups = Group.objects.filter(is_active=True).select_related('teacher')
 
     if request.method == 'POST':
         form = StudentForm(request.POST)
@@ -254,9 +258,16 @@ def student_create(request):
                     student = form.save()
 
                     # Add to selected groups if any, with financial status
-                    for group_id in selected_groups:
+                    # (mirror student_update: drop non-numeric ids instead of
+                    # letting Group.objects.get(pk=...) raise ValueError)
+                    for group_id in {int(g) for g in selected_groups if g.isdigit()}:
                         try:
                             group = Group.objects.get(pk=group_id)
+                            compatibility_errors = enrollment_compatibility_errors(student, group)
+                            if compatibility_errors:
+                                for error in compatibility_errors:
+                                    messages.error(request, error)
+                                continue
                             financial_status = normalize_financial_status(
                                 request.POST.get(f'financial_status_{group_id}', 'normal')
                             )
@@ -349,7 +360,7 @@ def student_update(request, student_id):
     Update an existing student.
     """
     student = get_object_or_404(Student, pk=student_id)
-    groups = Group.objects.filter(is_active=True).select_related('teacher', 'room')
+    groups = Group.objects.filter(is_active=True).select_related('teacher')
 
     # Get currently enrolled groups
     current_enrollments = StudentGroupEnrollment.objects.filter(
@@ -390,6 +401,12 @@ def student_update(request, student_id):
                     try:
                         group = Group.objects.get(pk=group_id)
                     except Group.DoesNotExist:
+                        continue
+
+                    compatibility_errors = enrollment_compatibility_errors(student, group)
+                    if compatibility_errors:
+                        for error in compatibility_errors:
+                            messages.error(request, error)
                         continue
 
                     posted_status = request.POST.get(f'financial_status_{group_id}')
@@ -495,7 +512,7 @@ def student_id_card(request, student_id):
     active_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
         is_active=True
-    ).select_related('group', 'group__teacher', 'group__room')[:3]
+    ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')[:3]
 
     # Generate barcode base64 for the card
     barcode_base64 = student.get_barcode_base64()
@@ -520,7 +537,7 @@ def student_id_card_print(request, student_id):
     active_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
         is_active=True
-    ).select_related('group', 'group__teacher', 'group__room')[:3]
+    ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')[:3]
 
     barcode_base64 = student.get_barcode_base64()
 

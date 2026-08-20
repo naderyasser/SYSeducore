@@ -265,7 +265,9 @@ class AttendanceService:
         # one query for the whole scan instead of one per group.
         enrollments = StudentGroupEnrollment.objects.filter(
             student=student,
-            is_active=True
+            is_active=True,
+            group__is_active=True,
+            group__deleted_at__isnull=True,
         ).select_related('group', 'group__teacher').prefetch_related('group__schedules')
 
         # جمع كل المجموعات المطابقة للجدول الآن
@@ -379,6 +381,15 @@ class AttendanceService:
                     session_date=timezone.localdate(),
                     defaults={'teacher_attended': False}
                 )
+
+                if session.is_cancelled:
+                    reason = session.cancellation_reason or 'تم إلغاء الحصة'
+                    skipped.append({
+                        'group_name': matching_group.group_name,
+                        'reason': f'الحصة ملغاة — {reason}',
+                        'error_type': 'session_cancelled',
+                    })
+                    continue
 
                 # Bug 1 fix: use get_or_create — repeat scan = success, not error
                 attendance, created = Attendance.objects.get_or_create(
@@ -710,7 +721,8 @@ class AttendanceService:
         sessions_count = Attendance.objects.filter(
             student=student,
             session__group=group,
-            session__session_date__gte=current_month
+            session__session_date__gte=current_month,
+            session__is_cancelled=False,
         ).count()
 
         # فحص هل هو الشهر الأول في هذه المجموعة
@@ -846,7 +858,11 @@ class AttendanceService:
         current_month = timezone.localdate().replace(day=1)
 
         enrollments = list(
-            student.group_enrollments.filter(is_active=True)
+            student.group_enrollments.filter(
+                is_active=True,
+                group__is_active=True,
+                group__deleted_at__isnull=True,
+            )
             .select_related('group', 'group__teacher')
             .prefetch_related('group__schedules')
         )
@@ -995,6 +1011,7 @@ class AttendanceService:
             student=student,
             session__group=group,
             session__session_date__gte=current_month,
+            session__is_cancelled=False,
         ).count()
 
         payment, created = Payment.objects.get_or_create(

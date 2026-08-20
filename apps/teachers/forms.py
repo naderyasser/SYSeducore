@@ -2,6 +2,7 @@ from decimal import Decimal
 
 from django import forms
 from django.db import transaction
+from django.db.models import Q
 
 from .models import Teacher, Group, Room, Subject, GroupSchedule
 
@@ -90,6 +91,31 @@ class RoomForm(forms.ModelForm):
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
+    def clean_name(self):
+        """
+        ``Room.name`` هو unique=True على مستوى القاعدة.
+
+        ``Room.objects`` يخفي القاعات المحذوفة (soft-delete)، فلا يرى تحقق
+        ``ModelForm`` من التفرد قاعة موجودة في سلة المهملات بنفس الاسم —
+        والحفظ كان ينفجر بـ ``IntegrityError`` خام. نفس النمط المستخدم في
+        ``TeacherForm.clean_email``.
+        """
+        name = (self.cleaned_data.get('name') or '').strip()
+        if not name:
+            return name
+
+        clash = Room.all_objects.filter(name__iexact=name)
+        if self.instance and self.instance.pk:
+            clash = clash.exclude(pk=self.instance.pk)
+        clash = clash.first()
+        if clash is not None:
+            if clash.deleted_at is not None:
+                raise forms.ValidationError(
+                    'هذا الاسم مستخدم بواسطة قاعة محذوفة موجودة في سلة المهملات'
+                )
+            raise forms.ValidationError('هذه القاعة موجودة بالفعل')
+        return name
+
 
 class GroupForm(forms.ModelForm):
     """
@@ -99,14 +125,13 @@ class GroupForm(forms.ModelForm):
     class Meta:
         model = Group
         fields = [
-            'group_name', 'teacher', 'room',
+            'group_name', 'teacher',
             'duration_minutes', 'gender_type', 'education_stage', 'education_year',
             'standard_fee', 'center_percentage', 'sessions_per_month', 'is_active'
         ]
         widgets = {
             'group_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اسم المجموعة'}),
             'teacher': forms.Select(attrs={'class': 'form-select'}),
-            'room': forms.Select(attrs={'class': 'form-select'}),
             'duration_minutes': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'placeholder': '120',
@@ -130,9 +155,15 @@ class GroupForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['teacher'].queryset = Teacher.objects.filter(is_active=True)
-        self.fields['room'].queryset = Room.objects.filter(is_active=True)
-        self.fields['room'].required = False
+        # A group being edited keeps its currently-assigned teacher in the
+        # choices even if that teacher has since been deactivated or
+        # soft-deleted — otherwise re-saving the group (it keeps generating
+        # sessions regardless) fails with an "invalid choice" error the
+        # moment its owner disappears from the active list, and the only way
+        # out through this form is to blank the field.
+        self.fields['teacher'].queryset = Teacher.all_objects.filter(
+            Q(is_active=True, deleted_at__isnull=True) | Q(pk=self.instance.teacher_id)
+        )
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
 
@@ -169,7 +200,8 @@ class GroupForm(forms.ModelForm):
         """
         Save the group and rebuild its ``GroupSchedule`` rows.
 
-        ``schedule_data``: ``[{'day': 'Saturday', 'time': time_obj, 'duration': 120}, ...]``
+        ``schedule_data``: ``[{'day': 'Saturday', 'time': time_obj, 'duration': 120,
+        'room': Room_instance_or_None}, ...]``
 
         Two things this method has to get right:
 
@@ -199,6 +231,7 @@ class GroupForm(forms.ModelForm):
                 day_of_week=entry['day'],
                 start_time=entry['time'],
                 duration=entry.get('duration') or group.duration_minutes,
+                room=entry.get('room'),
             )
             schedule.full_clean()
             schedule.save()

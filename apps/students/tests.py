@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from .models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room
+from tests.factories import create_group_with_schedule
 
 
 class StudentModelTest(TestCase):
@@ -78,7 +79,7 @@ class StudentGroupEnrollmentTest(TestCase):
         )
 
         # إنشاء مجموعة
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة السبت',
             teacher=self.teacher,
             room=self.room,
@@ -202,7 +203,7 @@ class AuditBaseTest(TestCase):
             specialization='رياضيات',
             hire_date=date(2024, 1, 1),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة أ',
             teacher=self.teacher,
             room=self.room,
@@ -210,7 +211,7 @@ class AuditBaseTest(TestCase):
             schedule_time=time(14, 0),
             standard_fee=Decimal('200.00'),
         )
-        self.group2 = Group.objects.create(
+        self.group2 = create_group_with_schedule(
             group_name='مجموعة ب',
             teacher=self.teacher,
             room=self.room,
@@ -507,7 +508,7 @@ class AddToGroupApiTest(AuditBaseTest):
         self.assertIsInstance(enrollment.custom_fee, Decimal)
 
     def test_incompatible_gender_rejected(self):
-        female_group = Group.objects.create(
+        female_group = create_group_with_schedule(
             group_name='مجموعة بنات',
             teacher=self.teacher,
             room=self.room,

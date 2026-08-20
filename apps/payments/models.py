@@ -36,7 +36,10 @@ def to_money(value):
             raise PaymentAmountError('قيمة المبلغ غير صالحة')
     if not amount.is_finite():
         raise PaymentAmountError('قيمة المبلغ غير صالحة')
-    return amount.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+    try:
+        return amount.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+    except InvalidOperation:
+        raise PaymentAmountError('قيمة المبلغ غير صالحة')
 
 
 class Payment(models.Model):
@@ -130,6 +133,22 @@ class Payment(models.Model):
 
     def __str__(self):
         return f"{self.student.full_name} - {self.group.group_name} - {self.month.strftime('%Y-%m')}"
+
+    def save(self, *args, **kwargs):
+        """
+        Enforce ``is_exempt`` for zero-fee rows regardless of which code
+        created them. ``_ensure_monthly_payments`` sets the flag explicitly,
+        but every other creation path (subscription activation, attendance
+        services, the student form) just writes ``amount_due=0`` — leaving
+        ``is_exempt`` False makes a zero-fee row look like a real (100%)
+        collection in the stats.
+        """
+        if self.amount_due is not None and self.amount_due <= 0 and not self.is_exempt:
+            self.is_exempt = True
+            update_fields = kwargs.get('update_fields')
+            if update_fields is not None and 'is_exempt' not in update_fields:
+                kwargs['update_fields'] = list(update_fields) + ['is_exempt']
+        super().save(*args, **kwargs)
 
     @property
     def remaining(self):

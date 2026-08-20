@@ -16,6 +16,7 @@ from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room, Subject
 from apps.payments.models import Payment
 from apps.attendance.models import Session, Attendance
+from tests.factories import create_group_with_schedule
 
 User = get_user_model()
 
@@ -40,7 +41,7 @@ class APITestBase(TestCase):
             hire_date=date(2024, 1, 1),
         )
         self.teacher.subjects.add(self.subject)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة API',
             teacher=self.teacher,
             room=self.room,
@@ -350,7 +351,7 @@ class AddToGroupAPITest(APITestBase):
             full_name='طالب ثاني',
             parent_phone='01098765433',
         )
-        self.group2 = Group.objects.create(
+        self.group2 = create_group_with_schedule(
             group_name='مجموعة ب',
             teacher=self.teacher,
             room=self.room,

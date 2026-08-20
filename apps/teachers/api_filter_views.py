@@ -19,7 +19,7 @@ def groups_filter_api(request):
 
     qs = (
         Group.objects.filter(is_active=True)
-        .select_related('teacher', 'room')
+        .select_related('teacher')
         .prefetch_related('schedules', 'teacher__subjects')
     )
 
@@ -28,9 +28,17 @@ def groups_filter_api(request):
     if grade:
         qs = qs.filter(education_year=grade)
     if teacher_id:
-        qs = qs.filter(teacher_id=teacher_id)
+        try:
+            qs = qs.filter(teacher_id=int(teacher_id))
+        except (TypeError, ValueError):
+            # Not a real id — no group can match it, so the queryset is left
+            # empty instead of raising ``ValueError`` (a 500 to a JSON caller).
+            qs = qs.none()
     if subject_id:
-        qs = qs.filter(teacher__subjects__pk=subject_id).distinct()
+        try:
+            qs = qs.filter(teacher__subjects__pk=int(subject_id)).distinct()
+        except (TypeError, ValueError):
+            qs = qs.none()
 
     results = []
     for g in qs.order_by('group_name'):

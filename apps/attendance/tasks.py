@@ -215,13 +215,45 @@ def check_billing_cycles():
 
     for enr in enrollments:
         sessions_per_cycle = cycle_size(enr)
-        dates = sorted(
-            d for d in consumed.get((enr.student_id, enr.group_id), [])
-            if d >= enr.cycle_start_date
-        )
-        if len(dates) < sessions_per_cycle:
+        all_dates = sorted(consumed.get((enr.student_id, enr.group_id), []))
+
+        # Consume as many complete cycles as the attendance already supports
+        # (several can complete inside one calendar month between two runs
+        # of this task), rolling cur_start forward each time.
+        cur_start = enr.cycle_start_date
+        last_completed_on = None
+        while True:
+            remaining = [d for d in all_dates if d >= cur_start]
+            if len(remaining) < sessions_per_cycle:
+                break
+            last_completed_on = remaining[sessions_per_cycle - 1]
+            cur_start = last_completed_on + timedelta(days=1)
+
+        if last_completed_on is None:
             continue
 
+        # Always roll the enrollment onto its next cycle, even when the
+        # payment for the completed month turns out to be already flagged
+        # below. Skipping this roll (as the old code did via `continue`)
+        # left cycle_start_date stalled, so the very same already-billed
+        # sessions kept being "just enough" to look complete on every later
+        # run and the cycle could never advance past a month boundary.
+        enr.cycle_start_date = cur_start
+        enr.cycle_end_date = _projected_cycle_end(
+            cur_start,
+            sessions_per_cycle,
+            len(enr.group.get_schedule_entries()),
+        )
+        if enr.pk not in dirty_ids:
+            enrollments_to_update.append(enr)
+            dirty_ids.add(enr.pk)
+        updated += 1
+
+        # Billing is decided by the calendar month the *last* completed
+        # cycle actually fell in, not unconditionally current_month.
+        target_month = last_completed_on.replace(day=1)
+        if target_month != current_month:
+            continue
         payment = payments.get((enr.student_id, enr.group_id))
         if payment is None or payment.billing_cycle_completed:
             continue
@@ -241,20 +273,6 @@ def check_billing_cycles():
                 status='unpaid',
                 sessions_total=sessions_per_cycle,
             ))
-
-        # Roll onto the next cycle: it starts the day after the session that
-        # completed this one.
-        completed_on = dates[sessions_per_cycle - 1]
-        enr.cycle_start_date = completed_on + timedelta(days=1)
-        enr.cycle_end_date = _projected_cycle_end(
-            enr.cycle_start_date,
-            sessions_per_cycle,
-            len(enr.group.get_schedule_entries()),
-        )
-        if enr.pk not in dirty_ids:
-            enrollments_to_update.append(enr)
-            dirty_ids.add(enr.pk)
-        updated += 1
 
     # ── 5. Write, in bulk ────────────────────────────────────────────────
     with transaction.atomic():

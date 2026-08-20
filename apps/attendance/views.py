@@ -35,7 +35,7 @@ def scanner_page(request):
 
 
 @ajax_login_required
-@ratelimit(key=ratelimit_key, rate='30/m', block=True)
+@ratelimit(key=ratelimit_key, rate='30/m', block=False)
 @require_http_methods(["POST"])
 def process_student_code(request):
     """
@@ -44,6 +44,17 @@ def process_student_code(request):
     النظام الجديد: استقبال كود الطالب يدوياً بدلاً من الباركود
     الخوارزمية: 4 خطوات صارمة
     """
+    # block=False (above) lets us return the scanner's own JSON 429 contract
+    # instead of django_ratelimit raising Ratelimited — a PermissionDenied
+    # subclass that Django renders as an HTML 403, which the scanner's
+    # `response.status === 429` branch can never see.
+    if getattr(request, 'limited', False):
+        return JsonResponse({
+            'success': False,
+            'message': 'تم تجاوز الحد المسموح من الطلبات، انتظر قليلاً',
+            'sound': 'error'
+        }, status=429)
+
     try:
         # قراءة البيانات من الطلب
         data = json.loads(request.body)
@@ -79,6 +90,12 @@ def process_student_code(request):
         })
 
 
+#: ``date.weekday()`` -> the English day names stored on ``GroupSchedule``.
+_WEEKDAY_NAMES = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+]
+
+
 @login_required
 def session_detail(request, session_id):
     """
@@ -86,9 +103,16 @@ def session_detail(request, session_id):
     """
     session = get_object_or_404(Session, pk=session_id)
     attendances = session.attendances.select_related('student').all()
+
+    # The group's own day for this session, not the legacy first-day column —
+    # a group meeting several days a week has a different time on each.
+    day_name = _WEEKDAY_NAMES[session.session_date.weekday()]
+    schedule_entry = session.group.get_schedule_for_day(day_name)
+
     return render(request, 'attendance/session_detail.html', {
         'session': session,
-        'attendances': attendances
+        'attendances': attendances,
+        'schedule_entry': schedule_entry,
     })
 
 
@@ -229,7 +253,7 @@ def today_sessions(request):
         # اليوم الأول فقط من الحقول القديمة)
         groups = (
             Group.objects.filter(is_active=True)
-            .select_related('teacher', 'room')
+            .select_related('teacher')
             .prefetch_related('schedules')
         )
 
@@ -389,7 +413,12 @@ def _resolve_scanner_payment(student, group_id=None):
 
     current_month = timezone.localdate().replace(day=1)
     enrollments = list(
-        StudentGroupEnrollment.objects.filter(student=student, is_active=True)
+        StudentGroupEnrollment.objects.filter(
+            student=student,
+            is_active=True,
+            group__is_active=True,
+            group__deleted_at__isnull=True,
+        )
         .select_related('group')
     )
     if not enrollments:
@@ -526,8 +555,15 @@ def scanner_grace_period(request):
         grace_date = today + timedelta(days=days)
 
         with transaction.atomic():
-            # Extend subscription by X days so Step 1.5 passes
-            student.activate_subscription(days=days)
+            # Extend subscription by X days so Step 1.5 passes — but only move
+            # the expiry FORWARD. A student who already paid through a later
+            # date must not have that date shortened by a shorter grace period.
+            if not student.subscription_expiry_date or student.subscription_expiry_date < grace_date:
+                student.activate_subscription(days=days)
+            else:
+                student.last_payment_date = today
+                student.is_active = True
+                student.save()
 
             enrollments = StudentGroupEnrollment.objects.filter(
                 student=student, is_active=True,

@@ -25,6 +25,7 @@ from .models import (
     WEEK_DAYS,
     WEEK_DAYS_AR,
     Group,
+    GroupSchedule,
     Room,
     find_room_conflicts,
     room_schedule_entries,
@@ -44,11 +45,12 @@ def _server_error(context, exc):
 
 
 def _active_groups(room):
-    """Active groups of ``room``, with their enrolment count annotated."""
+    """Active groups with at least one session in ``room``, enrolment count annotated."""
     return list(
-        room.groups.filter(is_active=True)
-        .select_related('teacher', 'room')
-        .prefetch_related('schedules')
+        Group.objects.filter(schedules__room=room, is_active=True, deleted_at__isnull=True)
+        .select_related('teacher')
+        .prefetch_related('schedules__room')
+        .distinct()
         .annotate(
             students_count=Count(
                 'studentgroupenrollment',
@@ -81,10 +83,11 @@ def room_list_api(request):
         for room in rooms:
             groups = _active_groups(room)
             peak = _peak_usage(groups)
+            students_by_group = {g.group_id: g.students_count for g in groups}
 
             groups_list = []
-            for entry in room_schedule_entries(room, groups=groups):
-                students_count = entry.group.students_count
+            for entry in room_schedule_entries(room):
+                students_count = students_by_group.get(entry.group_id, 0)
                 groups_list.append({
                     'id': entry.group_id,
                     'name': entry.group_name,
@@ -127,10 +130,11 @@ def room_detail_api(request, room_id):
 
         groups = _active_groups(room)
         peak = _peak_usage(groups)
+        students_by_group = {g.group_id: g.students_count for g in groups}
 
         schedule = {}
         sessions_per_week = 0
-        for day, entries in room_week_entries(room, groups=groups).items():
+        for day, entries in room_week_entries(room).items():
             sessions_per_week += len(entries)
             schedule[day] = [
                 {
@@ -140,9 +144,9 @@ def room_detail_api(request, room_id):
                     'time': entry.start_time.strftime('%I:%M %p'),
                     'time_end': entry.get_end_time().strftime('%I:%M %p'),
                     'duration': entry.get_duration_display(),
-                    'students_count': entry.group.students_count,
+                    'students_count': students_by_group.get(entry.group_id, 0),
                     'fee': float(entry.group.standard_fee),
-                    'is_full': entry.group.students_count >= room.capacity,
+                    'is_full': students_by_group.get(entry.group_id, 0) >= room.capacity,
                 }
                 for entry in entries
             ]
@@ -209,7 +213,10 @@ def room_availability_check(request):
         if day not in WEEK_DAYS:
             return JsonResponse({'success': False, 'error': 'اليوم غير صحيح'}, status=400)
 
-        room = Room.objects.filter(pk=room_id, is_active=True).first()
+        try:
+            room = Room.objects.filter(pk=int(room_id), is_active=True).first()
+        except (TypeError, ValueError):
+            room = None
         if room is None:
             return JsonResponse({'success': False, 'error': 'القاعة غير موجودة'}, status=404)
 
@@ -225,7 +232,13 @@ def room_availability_check(request):
         if duration < 1:
             return JsonResponse({'success': False, 'error': 'مدة الحصة غير صحيحة'}, status=400)
 
-        exclude_group_pk = data.get('exclude_group_id') or None
+        raw_exclude_group_pk = data.get('exclude_group_id') or None
+        exclude_group_pk = None
+        if raw_exclude_group_pk is not None:
+            try:
+                exclude_group_pk = int(raw_exclude_group_pk)
+            except (TypeError, ValueError):
+                return JsonResponse({'success': False, 'error': 'معرف المجموعة غير صحيح'}, status=400)
 
         # Smart overlap check against every scheduled session in the room —
         # including days 2..n of multi-day groups.
@@ -276,8 +289,11 @@ def room_statistics_api(request):
             Room.objects.filter(is_active=True)
             .annotate(
                 active_groups_count=Count(
-                    'groups',
-                    filter=Q(groups__is_active=True, groups__deleted_at__isnull=True),
+                    'schedule_entries__group',
+                    filter=Q(
+                        schedule_entries__group__is_active=True,
+                        schedule_entries__group__deleted_at__isnull=True,
+                    ),
                     distinct=True,
                 )
             )
@@ -288,15 +304,20 @@ def room_statistics_api(request):
         # grouped query for every group in the system, folded in Python.
         peak_by_room = {}
         group_counts = (
-            Group.objects.filter(is_active=True, room__isnull=False)
-            .values_list('room_id', 'group_id')
+            GroupSchedule.objects.filter(
+                room__isnull=False,
+                group__is_active=True,
+                group__deleted_at__isnull=True,
+            )
+            .values('room_id', 'group_id')
             .annotate(
                 students=Count(
-                    'studentgroupenrollment',
-                    filter=Q(studentgroupenrollment__is_active=True),
+                    'group__studentgroupenrollment',
+                    filter=Q(group__studentgroupenrollment__is_active=True),
                     distinct=True,
                 )
             )
+            .values_list('room_id', 'group_id', 'students')
         )
         for room_pk, _group_pk, students in group_counts:
             if students > peak_by_room.get(room_pk, 0):
@@ -376,7 +397,7 @@ def room_schedule_api(request, room_id):
             })
 
         schedule_data = {}
-        for day, entries in room_week_entries(room, groups=groups).items():
+        for day, entries in room_week_entries(room).items():
             schedule_data[day] = {
                 'ar_name': WEEK_DAYS_AR.get(day, day),
                 'sessions': [

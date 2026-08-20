@@ -721,7 +721,7 @@
                     </div>
                     <div class="col-4">
                         <div class="text-muted mb-2">المتبقي</div>
-                        <div class="fs-2 fw-bold {{ month_remaining|yesno:",text-warning," }}">{{ month_remaining|floatformat:0 }}</div>
+                        <div class="fs-2 fw-bold {% if month_remaining > 0 %}text-warning{% endif %}">{{ month_remaining|floatformat:0 }}</div>
                         <small class="text-muted">ج.م</small>
                     </div>
                 </div>

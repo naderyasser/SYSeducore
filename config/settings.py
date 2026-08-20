@@ -298,6 +298,17 @@ CACHES = {
     }
 }
 
+# TESTING must not share the real Redis cache: TestCases hitting the same rate
+# limit buckets/DB across the suite cause cross-test carry-over (e.g. a login
+# test tripping the 5/min bucket left over from a previous test). Tests that
+# want to exercise rate limiting explicitly re-enable it/override CACHES.
+if TESTING:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        }
+    }
+
 # Log the exceptions that IGNORE_EXCEPTIONS swallows, so an outage is visible.
 DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
 
@@ -385,6 +396,18 @@ if not DEBUG and not TESTING:
 
 # Rate Limiting
 RATELIMIT_ENABLE = config('RATELIMIT_ENABLE', default=True, cast=bool)
+# SEC-09 (cont.): when the counter store (Redis) is unreachable, django-ratelimit
+# cannot count at all - without FAIL_OPEN it treats "can't count" as "over the
+# limit" and every rate-limited view (login, scanner) hard-403s for as long as
+# Redis is down. IGNORE_EXCEPTIONS above already degrades cache ops to a miss;
+# this makes django-ratelimit itself fail open on that miss instead of fail closed.
+RATELIMIT_FAIL_OPEN = True
+
+# TESTING must not exercise real rate limiting - see the CACHES override above
+# for why (shared Redis buckets/DB causing cross-test carry-over). Tests that
+# specifically test rate limiting re-enable it via @override_settings.
+if TESTING:
+    RATELIMIT_ENABLE = False
 
 
 # Logging

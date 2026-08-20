@@ -178,13 +178,13 @@ class GroupScheduleTest(TestCase):
     def test_group_schedule_model(self):
         """GroupSchedule can be created for a group."""
         group = Group.objects.create(
-            group_name='Test Group', teacher=self.teacher, room=self.room,
+            group_name='Test Group', teacher=self.teacher,
             standard_fee=Decimal('100'), center_percentage=Decimal('30'),
             schedule_day='Saturday', schedule_time='14:00',
         )
         schedule = GroupSchedule.objects.create(
             group=group, day_of_week='Saturday',
-            start_time='14:00', duration=120,
+            start_time='14:00', duration=120, room=self.room,
         )
         self.assertEqual(schedule.group, group)
         self.assertEqual(schedule.day_of_week, 'Saturday')
@@ -285,7 +285,6 @@ class GroupCreatePostTest(TestCase):
         resp = self.client.post('/teachers/groups/create/', {
             'group_name': 'Math Group',
             'teacher': self.teacher.pk,
-            'room': self.room.pk,
             'duration_minutes': '90',
             'gender_type': 'mixed',
             'standard_fee': '200',

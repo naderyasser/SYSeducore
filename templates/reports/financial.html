@@ -264,7 +264,7 @@ const tableBody = document.getElementById('monthlyTableBody');
 monthlyData.forEach(month => {
     const percentage = month.total_due > 0 ? (month.total_paid / month.total_due * 100).toFixed(0) : 0;
     let statusBadge = '';
-    if (month.total_paid >= month.total_due) {
+    if (parseFloat(month.total_paid) >= parseFloat(month.total_due)) {
         statusBadge = '<span class="badge bg-success">مكتمل</span>';
     } else if (month.total_paid > 0) {
         statusBadge = '<span class="badge bg-warning">جزئي</span>';
