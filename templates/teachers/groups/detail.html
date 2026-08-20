@@ -294,17 +294,22 @@
     <div class="detail-header">
         <div class="detail-title">
             <h1><i class="bi bi-people me-2" style="color: #667eea;"></i>{{ group.group_name }}</h1>
-            <p class="detail-subtitle">{{ group.get_schedule_day_display }} | {{ group.schedule_time }}</p>
+            <p class="detail-subtitle">
+                {% for entry in schedule_entries %}{{ entry.get_schedule_day_display }} {{ entry.schedule_time|time:"H:i" }}{% if not forloop.last %} | {% endif %}{% empty %}{{ group.get_schedule_day_display }} | {{ group.schedule_time }}{% endfor %}
+            </p>
         </div>
         <div class="detail-actions">
             <a href="{% url 'teachers:group_update' group.group_id %}" class="btn-action btn-secondary">
                 <i class="bi bi-pencil"></i>
                 تعديل
             </a>
-            <a href="{% url 'teachers:group_delete' group.group_id %}" class="btn-action btn-danger" onclick="return confirm('هل أنت متأكد من حذف هذه المجموعة؟')">
-                <i class="bi bi-trash"></i>
-                حذف
-            </a>
+            <form method="post" action="{% url 'teachers:group_delete' group.group_id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn-action btn-danger" onclick="return confirm('هل أنت متأكد من حذف هذه المجموعة؟')">
+                    <i class="bi bi-trash"></i>
+                    حذف
+                </button>
+            </form>
         </div>
     </div>
 
@@ -329,8 +334,8 @@
                 المادة
             </div>
             <div class="info-card-value">
-                {% if group.subject %}
-                    {{ group.subject.name }}
+                {% if group.teacher %}
+                    {{ group.teacher.get_subjects_display }}
                 {% else %}
                     -
                 {% endif %}
@@ -343,11 +348,7 @@
                 القاعة
             </div>
             <div class="info-card-value">
-                {% if group.room %}
-                    {{ group.room.name }}
-                {% else %}
-                    -
-                {% endif %}
+                {{ group.get_rooms_display }}
             </div>
         </div>
 
@@ -381,7 +382,8 @@
             <h3><i class="bi bi-person-plus me-2"></i>الطلاب المسجلين</h3>
             <div class="enrollment-stats">
                 {% if capacity > 0 %}
-                    {% widthratio enrolled_count 1 capacity as enrollment_percent %}
+                    {% widthratio enrolled_count capacity 100 as enrollment_percent %}
+                    {% with enrollment_percent=enrollment_percent|add:0 %}
                     {% if enrollment_percent >= 100 %}
                         <div class="stat-badge full">
                             <i class="bi bi-exclamation-circle me-1"></i>
@@ -398,6 +400,7 @@
                             {{ enrolled_count }}/{{ capacity }}
                         </div>
                     {% endif %}
+                    {% endwith %}
                 {% else %}
                     <div class="stat-badge success">
                         <i class="bi bi-check-circle me-1"></i>

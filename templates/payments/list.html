@@ -269,7 +269,7 @@
 <div class="pay-header">
     <h4 class="mb-0"><i class="bi bi-wallet2 me-2 text-primary"></i>المدفوعات</h4>
     <div class="month-nav">
-        <a href="?month={{ current_month|date:'Y-m'|slice:':4' }}-{% if current_month.month == 1 %}12{% else %}{% widthratio current_month.month|add:"-1" 1 1 %}{% endif %}"
+        <a href="?month={% if current_month.month == 1 %}{{ current_month.year|add:"-1" }}-12{% else %}{{ current_month.year }}-{{ current_month.month|add:"-1" }}{% endif %}"
            title="الشهر السابق">&#8250;</a>
         <span>{{ current_month|date:"F Y" }}</span>
         <a href="?month={{ current_month|date:'Y-m' }}" title="هذا الشهر" style="font-size:0.8rem;color:#2563eb;">اليوم</a>
@@ -376,7 +376,7 @@
                         {% if payment.status == 'paid' %}
                         0
                         {% else %}
-                        {% widthratio payment.remaining 1 1 %} <small>ج.م</small>
+                        {{ payment.remaining }} <small>ج.م</small>
                         {% endif %}
                     </div>
                     <div class="key">المتبقي</div>
@@ -395,9 +395,9 @@
             <!-- Action Button -->
             {% if payment.status != 'paid' %}
             <button class="btn-pay full"
-                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name }}', {% localize off %}{{ payment.amount_due }}{% endlocalize %})">
+                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name|escapejs }}', {% localize off %}{{ payment.amount_due }}{% endlocalize %})">
                 <i class="bi bi-check-circle-fill"></i>
-                تسديد كامل {% widthratio payment.amount_due 1 1 %} ج.م + تفعيل اشتراك
+                تسديد كامل {{ payment.amount_due }} ج.م + تفعيل اشتراك
             </button>
             {% else %}
             <div class="btn-pay done">
@@ -443,7 +443,8 @@ function payAndActivate(paymentId, studentId, studentName, amountDue) {
 
     showLoading();
 
-    // Step 1: Mark payment as paid
+    // Mark payment as paid; mark-paid already activates the subscription
+    // and the enrollment for this group (see apps/payments/api_views.py).
     fetch(`/api/payments/${paymentId}/mark-paid/`, {
         method: 'POST',
         headers: {
@@ -458,20 +459,7 @@ function payAndActivate(paymentId, studentId, studentName, amountDue) {
     })
     .then(data => {
         if (!data.success) throw new Error(data.message || 'فشل تسديد الدفعة');
-        // Step 2: Activate subscription
-        return fetch(`/students/api/${studentId}/subscription/activate/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: 'days=30'
-        });
-    })
-    .then(response => {
-        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
-        if (!response.ok) throw new Error('خطأ في تفعيل الاشتراك');
-        return response.json();
+        return data;
     })
     .then(data => {
         hideLoading();

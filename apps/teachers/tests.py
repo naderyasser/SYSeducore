@@ -14,6 +14,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from apps.students.models import Student, StudentGroupEnrollment
+from tests.factories import create_group_with_schedule
 
 from .forms import GroupForm, TeacherForm
 from .models import Group, GroupSchedule, Room, Subject, Teacher
@@ -81,8 +82,8 @@ class GroupConflictValidationTest(TestCase):
         )
 
     def test_create_group_with_room(self):
-        """اختبار: إنشاء مجموعة مع قاعة"""
-        group = Group.objects.create(
+        """اختبار: إنشاء مجموعة مع قاعة (القاعة على الموعد وليس المجموعة)"""
+        group = create_group_with_schedule(
             group_name='مجموعة السبت',
             teacher=self.teacher1,
             room=self.room,
@@ -91,101 +92,78 @@ class GroupConflictValidationTest(TestCase):
             standard_fee=200.00
         )
 
-        self.assertEqual(group.room, self.room)
+        entry = group.get_schedule_for_day('Saturday')
+        self.assertEqual(entry.room, self.room)
         self.assertEqual(group.schedule_day, 'Saturday')
 
     def test_conflict_same_room_same_time(self):
-        """اختبار: منع إنشاء مجموعتين في نفس القاعة + نفس اليوم + نفس الوقت"""
-        # إنشاء المجموعة الأولى
-        Group.objects.create(
-            group_name='مجموعة 1',
-            teacher=self.teacher1,
-            room=self.room,
-            schedule_day='Saturday',
-            schedule_time='09:00',
-            standard_fee=200.00
+        """اختبار: منع إنشاء موعدين في نفس القاعة + نفس اليوم + نفس الوقت"""
+        group1 = create_group_with_schedule(
+            group_name='مجموعة 1', teacher=self.teacher1, room=self.room,
+            schedule_day='Saturday', schedule_time='09:00', standard_fee=200.00,
         )
 
-        # محاولة إنشاء مجموعة ثانية بنفس القاعة والوقت
+        # محاولة حجز موعد ثانٍ بنفس القاعة والوقت — فحص التعارض الحقيقي عبر full_clean()
         with self.assertRaises((ValidationError, IntegrityError)):
-            group2 = Group(
-                group_name='مجموعة 2',
-                teacher=self.teacher2,
-                room=self.room,
-                schedule_day='Saturday',  # نفس اليوم
-                schedule_time='09:00',    # نفس الوقت
-                standard_fee=200.00
+            group2 = Group.objects.create(
+                group_name='مجموعة 2', teacher=self.teacher2, standard_fee=200.00,
+                schedule_day='Saturday', schedule_time='09:00',
             )
-            group2.save()  # سيفشل بسبب الـ validation
+            schedule2 = GroupSchedule(
+                group=group2, room=self.room,
+                day_of_week='Saturday', start_time='09:00', duration=120,
+            )
+            schedule2.full_clean()
 
     def test_no_conflict_different_day(self):
         """اختبار: السماح بنفس القاعة والوقت لكن يوم مختلف"""
-        # المجموعة الأولى: السبت 9:00
-        Group.objects.create(
-            group_name='مجموعة السبت',
-            teacher=self.teacher1,
-            room=self.room,
-            schedule_day='Saturday',
-            schedule_time='09:00',
-            standard_fee=200.00
+        create_group_with_schedule(
+            group_name='مجموعة السبت', teacher=self.teacher1, room=self.room,
+            schedule_day='Saturday', schedule_time='09:00', standard_fee=200.00,
         )
 
-        # المجموعة الثانية: الأحد 9:00 (نفس القاعة، نفس الوقت، لكن يوم مختلف)
         group2 = Group.objects.create(
-            group_name='مجموعة الأحد',
-            teacher=self.teacher2,
-            room=self.room,
-            schedule_day='Sunday',  # يوم مختلف
-            schedule_time='09:00',
-            standard_fee=200.00
+            group_name='مجموعة الأحد', teacher=self.teacher2, standard_fee=200.00,
+            schedule_day='Sunday', schedule_time='09:00',
         )
+        schedule2 = GroupSchedule(
+            group=group2, room=self.room,
+            day_of_week='Sunday', start_time='09:00', duration=120,  # يوم مختلف
+        )
+        schedule2.full_clean()
+        schedule2.save()
 
-        self.assertIsNotNone(group2.pk)  # تم الحفظ بنجاح
+        self.assertIsNotNone(schedule2.pk)  # تم الحفظ بنجاح
 
     def test_no_conflict_different_time(self):
         """اختبار: السماح بنفس القاعة واليوم لكن وقت مختلف"""
-        # المجموعة الأولى: السبت 9:00
-        Group.objects.create(
-            group_name='مجموعة الصباح',
-            teacher=self.teacher1,
-            room=self.room,
-            schedule_day='Saturday',
-            schedule_time='09:00',
-            standard_fee=200.00
+        create_group_with_schedule(
+            group_name='مجموعة الصباح', teacher=self.teacher1, room=self.room,
+            schedule_day='Saturday', schedule_time='09:00', standard_fee=200.00,
         )
 
-        # المجموعة الثانية: السبت 11:00 (نفس القاعة، نفس اليوم، لكن وقت مختلف)
         group2 = Group.objects.create(
-            group_name='مجموعة الظهر',
-            teacher=self.teacher2,
-            room=self.room,
-            schedule_day='Saturday',
-            schedule_time='11:00',  # وقت مختلف
-            standard_fee=200.00
+            group_name='مجموعة الظهر', teacher=self.teacher2, standard_fee=200.00,
+            schedule_day='Saturday', schedule_time='11:00',
         )
+        schedule2 = GroupSchedule(
+            group=group2, room=self.room,
+            day_of_week='Saturday', start_time='11:00', duration=120,  # وقت مختلف
+        )
+        schedule2.full_clean()
+        schedule2.save()
 
-        self.assertIsNotNone(group2.pk)  # تم الحفظ بنجاح
+        self.assertIsNotNone(schedule2.pk)  # تم الحفظ بنجاح
 
     def test_no_conflict_no_room(self):
-        """اختبار: السماح بمجموعات بدون قاعة"""
-        # مجموعة 1 بدون قاعة
-        group1 = Group.objects.create(
-            group_name='مجموعة 1',
-            teacher=self.teacher1,
-            room=None,
-            schedule_day='Saturday',
-            schedule_time='09:00',
-            standard_fee=200.00
+        """اختبار: السماح بمواعيد بدون قاعة"""
+        group1 = create_group_with_schedule(
+            group_name='مجموعة 1', teacher=self.teacher1, room=None,
+            schedule_day='Saturday', schedule_time='09:00', standard_fee=200.00,
         )
-
-        # مجموعة 2 بدون قاعة (نفس اليوم والوقت)
-        group2 = Group.objects.create(
-            group_name='مجموعة 2',
-            teacher=self.teacher2,
-            room=None,
-            schedule_day='Saturday',
-            schedule_time='09:00',
-            standard_fee=200.00
+        group2 = create_group_with_schedule(
+            group_name='مجموعة 2', teacher=self.teacher2, room=None,
+            schedule_day='Saturday', schedule_time='09:00', standard_fee=200.00,
         )
 
         # يجب السماح لأنه لا توجد قاعة
@@ -194,13 +172,9 @@ class GroupConflictValidationTest(TestCase):
 
     def test_group_without_grace_period(self):
         """اختبار: المجموعة لا تحتوي على grace_period (النظام الثابت)"""
-        group = Group.objects.create(
-            group_name='مجموعة اختبار',
-            teacher=self.teacher1,
-            room=self.room,
-            schedule_day='Saturday',
-            schedule_time='09:00',
-            standard_fee=200.00
+        group = create_group_with_schedule(
+            group_name='مجموعة اختبار', teacher=self.teacher1, room=self.room,
+            schedule_day='Saturday', schedule_time='09:00', standard_fee=200.00,
         )
 
         # التأكد أن grace_period غير موجود
@@ -276,7 +250,6 @@ class GroupFormValidationTest(TestCase):
         data = {
             'group_name': 'مجموعة',
             'teacher': self.teacher.pk,
-            'room': self.room.pk,
             'duration_minutes': 120,
             'gender_type': 'mixed',
             'education_stage': '',
@@ -330,7 +303,6 @@ class GroupScheduleSourceOfTruthTest(TestCase):
         data = {
             'group_name': 'مجموعة',
             'teacher': self.teacher.pk,
-            'room': self.room.pk,
             'duration_minutes': 120,
             'gender_type': 'mixed',
             'education_stage': '',
@@ -347,8 +319,8 @@ class GroupScheduleSourceOfTruthTest(TestCase):
         form = self._form()
         self.assertTrue(form.is_valid(), form.errors)
         group = form.save_with_schedules([
-            {'day': 'Saturday', 'time': time(14, 0), 'duration': 120},
-            {'day': 'Monday', 'time': time(16, 0), 'duration': 90},
+            {'day': 'Saturday', 'time': time(14, 0), 'duration': 120, 'room': self.room},
+            {'day': 'Monday', 'time': time(16, 0), 'duration': 90, 'room': self.room},
         ])
 
         self.assertEqual(group.schedules.count(), 2)
@@ -368,15 +340,15 @@ class GroupScheduleSourceOfTruthTest(TestCase):
         first = self._form()
         self.assertTrue(first.is_valid(), first.errors)
         first.save_with_schedules([
-            {'day': 'Saturday', 'time': time(14, 0), 'duration': 120},
-            {'day': 'Monday', 'time': time(16, 0), 'duration': 120},
+            {'day': 'Saturday', 'time': time(14, 0), 'duration': 120, 'room': self.room},
+            {'day': 'Monday', 'time': time(16, 0), 'duration': 120, 'room': self.room},
         ])
 
         second = self._form(group_name='مجموعة 2', teacher=self.other_teacher.pk)
         self.assertTrue(second.is_valid(), second.errors)
         with self.assertRaises(ValidationError):
             second.save_with_schedules([
-                {'day': 'Monday', 'time': time(17, 0), 'duration': 120},
+                {'day': 'Monday', 'time': time(17, 0), 'duration': 120, 'room': self.room},
             ])
 
     def test_failed_schedule_save_is_rolled_back(self):
@@ -384,13 +356,13 @@ class GroupScheduleSourceOfTruthTest(TestCase):
         blocker_form = self._form(group_name='حاجز', teacher=self.other_teacher.pk)
         self.assertTrue(blocker_form.is_valid(), blocker_form.errors)
         blocker_form.save_with_schedules([
-            {'day': 'Tuesday', 'time': time(10, 0), 'duration': 120},
+            {'day': 'Tuesday', 'time': time(10, 0), 'duration': 120, 'room': self.room},
         ])
 
         form = self._form()
         self.assertTrue(form.is_valid(), form.errors)
         group = form.save_with_schedules([
-            {'day': 'Saturday', 'time': time(14, 0), 'duration': 120},
+            {'day': 'Saturday', 'time': time(14, 0), 'duration': 120, 'room': self.room},
         ])
         self.assertEqual(group.schedules.count(), 1)
 
@@ -398,8 +370,8 @@ class GroupScheduleSourceOfTruthTest(TestCase):
         self.assertTrue(update.is_valid(), update.errors)
         with self.assertRaises(ValidationError):
             update.save_with_schedules([
-                {'day': 'Saturday', 'time': time(14, 0), 'duration': 120},
-                {'day': 'Tuesday', 'time': time(10, 30), 'duration': 60},
+                {'day': 'Saturday', 'time': time(14, 0), 'duration': 120, 'room': self.room},
+                {'day': 'Tuesday', 'time': time(10, 30), 'duration': 60, 'room': self.room},
             ])
 
         group.refresh_from_db()
@@ -409,25 +381,29 @@ class GroupScheduleSourceOfTruthTest(TestCase):
     def test_room_conflicts_are_reported_without_a_field_key(self):
         """
         الخطأ يجب أن يكون non-field وإلا يتحول إلى 500 عند عرض النموذج
-        (``GroupForm`` لا يحتوي على حقل ``schedule_time``).
+        (``GroupForm`` لا يحتوي على حقل ``schedule_time``). هذا هو مسار
+        ``Group.clean()`` الحقيقي الذي تستخدمه الفيوز — يقرأ الجدول المعلَّق
+        عبر ``_pending_schedules`` قبل أن تُحفظ أي صفوف ``GroupSchedule``.
         """
-        Group.objects.create(
+        create_group_with_schedule(
             group_name='الأولى', teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(9, 0),
             standard_fee=Decimal('100'),
         )
         clash = Group(
-            group_name='الثانية', teacher=self.other_teacher, room=self.room,
-            schedule_day='Saturday', schedule_time=time(9, 30),
+            group_name='الثانية', teacher=self.other_teacher,
             standard_fee=Decimal('100'),
         )
+        clash._pending_schedules = [
+            {'day': 'Saturday', 'time': time(9, 30), 'duration': 120, 'room': self.room},
+        ]
         with self.assertRaises(ValidationError) as ctx:
             clash.full_clean()
         self.assertIn('__all__', ctx.exception.message_dict)
 
     def test_partial_save_skips_revalidation(self):
         """PERF-10 — soft delete must not re-run the whole model validation."""
-        group = Group.objects.create(
+        group = create_group_with_schedule(
             group_name='مجموعة', teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(9, 0),
             standard_fee=Decimal('100'),
@@ -436,13 +412,13 @@ class GroupScheduleSourceOfTruthTest(TestCase):
             group.save(update_fields=['deleted_at', 'deleted_by'])
 
     def test_conflict_check_can_be_skipped_without_skipping_other_rules(self):
-        Group.objects.create(
+        create_group_with_schedule(
             group_name='الأولى', teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(9, 0),
             standard_fee=Decimal('100'),
         )
         clash = Group(
-            group_name='الثانية', teacher=self.other_teacher, room=self.room,
+            group_name='الثانية', teacher=self.other_teacher,
             schedule_day='Saturday', schedule_time=time(9, 30),
             standard_fee=Decimal('100'),
         )
@@ -450,7 +426,7 @@ class GroupScheduleSourceOfTruthTest(TestCase):
         self.assertIsNotNone(clash.pk)
 
         bad_year = Group(
-            group_name='الثالثة', teacher=self.teacher, room=None,
+            group_name='الثالثة', teacher=self.teacher,
             schedule_day='Friday', schedule_time=time(9, 0),
             standard_fee=Decimal('100'),
             education_stage='secondary', education_year='6',
@@ -513,7 +489,7 @@ class TeachersRoleAccessTest(TestCase):
             full_name='مدرس', phone='0100', hire_date=date(2024, 1, 1),
         )
         self.room = Room.objects.create(name='قاعة ACL', capacity=20)
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة ACL', teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(9, 0),
             standard_fee=Decimal('100'),
@@ -599,7 +575,6 @@ class BookingCreateTest(TestCase):
         data = {
             'group_name': 'مجموعة الحجز',
             'subject_name': 'فيزياء',
-            'room': self.room.pk,
             'duration_minutes': '120',
             'standard_fee': '250',
             'center_percentage': '30',
@@ -607,8 +582,8 @@ class BookingCreateTest(TestCase):
             'education_stage': 'secondary',
             'education_year': '1',
             'schedules': json.dumps([
-                {'day': 'Saturday', 'time': '14:00'},
-                {'day': 'Monday', 'time': '16:00'},
+                {'day': 'Saturday', 'time': '14:00', 'room': self.room.pk},
+                {'day': 'Monday', 'time': '16:00', 'room': self.room.pk},
             ]),
         }
         data.update(overrides)
@@ -624,7 +599,8 @@ class BookingCreateTest(TestCase):
 
         group = Group.objects.get(group_name='مجموعة الحجز')
         self.assertEqual(group.teacher, self.teacher)
-        self.assertEqual(group.room, self.room)
+        self.assertEqual(group.get_schedule_for_day('Saturday').room, self.room)
+        self.assertEqual(group.get_schedule_for_day('Monday').room, self.room)
         self.assertEqual(group.standard_fee, Decimal('250'))
         self.assertEqual(group.schedules.count(), 2)
         self.assertEqual(group.schedule_day, 'Saturday')
@@ -698,7 +674,7 @@ class BookingCreateTest(TestCase):
         self.client.post(url, self._payload())
         response = self.client.post(url, self._payload(
             group_name='مجموعة متعارضة',
-            schedules=json.dumps([{'day': 'Monday', 'time': '16:30'}]),
+            schedules=json.dumps([{'day': 'Monday', 'time': '16:30', 'room': self.room.pk}]),
         ))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Group.objects.filter(group_name='مجموعة متعارضة').exists())
@@ -718,13 +694,14 @@ class BookingCalendarTest(TestCase):
         )
         self.room = Room.objects.create(name='قاعة التقويم', capacity=20)
         self.group = Group.objects.create(
-            group_name='مجموعة متعددة الأيام', teacher=self.teacher, room=self.room,
+            group_name='مجموعة متعددة الأيام', teacher=self.teacher,
             schedule_day='Saturday', schedule_time=time(14, 0),
             standard_fee=Decimal('100'),
         )
         for day, start in [('Saturday', time(14, 0)), ('Monday', time(16, 0))]:
             GroupSchedule.objects.create(
                 group=self.group, day_of_week=day, start_time=start, duration=120,
+                room=self.room,
             )
 
     def test_group_shows_on_every_scheduled_day(self):
@@ -755,11 +732,12 @@ class RoomCapacityTest(TestCase):
             ('Saturday', time(9, 0)), ('Sunday', time(9, 0)), ('Monday', time(9, 0)),
         ]):
             group = Group.objects.create(
-                group_name=f'مجموعة {index}', teacher=self.teacher, room=self.room,
+                group_name=f'مجموعة {index}', teacher=self.teacher,
                 schedule_day=day, schedule_time=start, standard_fee=Decimal('100'),
             )
             GroupSchedule.objects.create(
                 group=group, day_of_week=day, start_time=start, duration=120,
+                room=self.room,
             )
             self.groups.append(group)
 
@@ -820,13 +798,14 @@ class RoomAvailabilityApiTest(TestCase):
         )
         self.room = Room.objects.create(name='قاعة التوفر', capacity=20)
         self.group = Group.objects.create(
-            group_name='مجموعة', teacher=self.teacher, room=self.room,
+            group_name='مجموعة', teacher=self.teacher,
             schedule_day='Saturday', schedule_time=time(14, 0),
             standard_fee=Decimal('100'),
         )
         for day, start in [('Saturday', time(14, 0)), ('Wednesday', time(18, 0))]:
             GroupSchedule.objects.create(
                 group=self.group, day_of_week=day, start_time=start, duration=120,
+                room=self.room,
             )
 
     def _check(self, day, time_str):
@@ -905,7 +884,7 @@ class GroupAdminConflictOptInTest(TestCase):
             full_name='مدرس', phone='0100', hire_date=date(2024, 1, 1),
         )
         self.room = Room.objects.create(name='قاعة الأدمن', capacity=10)
-        self.existing = Group.objects.create(
+        self.existing = create_group_with_schedule(
             group_name='القائمة', teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(9, 0),
             standard_fee=Decimal('100'),

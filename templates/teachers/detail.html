@@ -73,11 +73,7 @@
                                     <span class="fw-semibold">{{ group.group_name }}</span>
                                 </td>
                                 <td>
-                                    {% if group.room %}
-                                    <span class="badge bg-secondary">{{ group.room.room_name }}</span>
-                                    {% else %}
-                                    <span class="text-muted">-</span>
-                                    {% endif %}
+                                    <span class="badge bg-secondary">{{ group.get_rooms_display }}</span>
                                 </td>
                                 <td>{{ group.get_schedule_day_display }}</td>
                                 <td>{{ group.schedule_time|time:"H:i" }}</td>
@@ -111,7 +107,7 @@
                         <div>
                             <h6 class="mb-1">{{ session.group.group_name }}</h6>
                             <small class="text-muted">
-                                <i class="bi bi-door-open me-1"></i>{{ session.group.room.name|default:"-" }}
+                                <i class="bi bi-door-open me-1"></i>{{ session.get_room.name|default:"-" }}
                             </small>
                         </div>
                         <div class="text-end">

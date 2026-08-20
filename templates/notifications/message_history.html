@@ -112,7 +112,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for message in messages %}
+                    {% for message in whatsapp_messages %}
                     <tr>
                         <td>
                             <code>{{ message.phone_number }}</code>
@@ -135,7 +135,7 @@
                             <small>{{ message.created_at|date:"d/m/Y H:i:s" }}</small>
                         </td>
                         <td>
-                            <small>{{ message.sent_by.get_full_name|default:message.sent_by.username }}</small>
+                            <small>{% if message.sent_by %}{{ message.sent_by.get_full_name|default:message.sent_by.username }}{% else %}—{% endif %}</small>
                         </td>
                         <td>
                             {% if message.student %}

@@ -18,6 +18,7 @@ from apps.payments.models import Payment
 from apps.payments.services import SettlementService
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room
+from tests.factories import create_group_with_schedule
 
 
 class TestTeacherSettlement(TestCase):
@@ -29,7 +30,7 @@ class TestTeacherSettlement(TestCase):
             full_name='مدرس مالي', phone='01099999999',
             specialization='فيزياء', hire_date=date(2024, 1, 1),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة مالية',
             teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(14, 0),
@@ -127,7 +128,7 @@ class TestMultiGroupSettlement(TestCase):
         )
 
         # Group A: 30% center
-        self.group_a = Group.objects.create(
+        self.group_a = create_group_with_schedule(
             group_name='مجموعة أ',
             teacher=self.teacher, room=self.room,
             schedule_day='Saturday', schedule_time=time(10, 0),
@@ -136,7 +137,7 @@ class TestMultiGroupSettlement(TestCase):
         )
 
         # Group B: 25% center (different day to avoid room conflict)
-        self.group_b = Group.objects.create(
+        self.group_b = create_group_with_schedule(
             group_name='مجموعة ب',
             teacher=self.teacher, room=self.room,
             schedule_day='Sunday', schedule_time=time(10, 0),
@@ -209,7 +210,7 @@ class TestPaymentStatusTransitions(TestCase):
             full_name='مدرس دفع', phone='01066666666',
             specialization='إنجليزي', hire_date=date(2024, 1, 1),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة دفع',
             teacher=self.teacher, room=self.room,
             schedule_day='Monday', schedule_time=time(16, 0),
@@ -275,7 +276,7 @@ class TestStudentFeeCalculation(TestCase):
             full_name='مدرس رسوم', phone='01055555555',
             specialization='عربي', hire_date=date(2024, 1, 1),
         )
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة رسوم',
             teacher=self.teacher, room=self.room,
             schedule_day='Wednesday', schedule_time=time(10, 0),

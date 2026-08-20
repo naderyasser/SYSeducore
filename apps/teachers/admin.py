@@ -2,7 +2,7 @@ from django import forms
 from django.contrib import admin, messages
 from django.db.models import Count, Q
 
-from .models import Teacher, Group, Room, Subject
+from .models import Teacher, Group, GroupSchedule, Room, Subject
 
 
 @admin.register(Subject)
@@ -14,7 +14,11 @@ class SubjectAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(
-            teachers_count=Count('teachers', distinct=True)
+            teachers_count=Count(
+                'teachers',
+                filter=Q(teachers__is_active=True, teachers__deleted_at__isnull=True),
+                distinct=True,
+            )
         )
 
     @admin.display(description='عدد المدرسين', ordering='teachers_count')
@@ -49,7 +53,9 @@ class RoomAdmin(admin.ModelAdmin):
         """Annotate the count so the changelist is not N+1 over rooms."""
         return super().get_queryset(request).annotate(
             active_groups_count=Count(
-                'groups', filter=Q(groups__is_active=True), distinct=True
+                'schedule_entries__group',
+                filter=Q(schedule_entries__group__is_active=True),
+                distinct=True,
             )
         )
 
@@ -60,13 +66,18 @@ class RoomAdmin(admin.ModelAdmin):
 
     def get_groups_list(self, obj):
         """قائمة المجموعات في القاعة"""
-        groups = obj.groups.filter(is_active=True).prefetch_related('schedules')
+        groups = (
+            Group.objects.filter(schedules__room=obj, is_active=True)
+            .distinct()
+            .prefetch_related('schedules__room')
+        )
         parts = []
         for group in groups:
             schedule = " ، ".join(
                 f"{entry.get_day_display()} {entry.start_time.strftime('%I:%M %p')}"
                 f" - {entry.get_end_time().strftime('%I:%M %p')}"
                 for entry in group.get_schedule_entries()
+                if entry.room and entry.room.pk == obj.pk
             )
             parts.append(f"{group.group_name} ({schedule or 'بدون مواعيد'})")
         return " | ".join(parts) if parts else "لا توجد مجموعات"
@@ -150,8 +161,21 @@ class GroupAdminForm(forms.ModelForm):
     ``skip_validation=True`` it then used also skipped the education
     stage/year check. Now the person saving has to tick a box, and only the
     overlap rule is relaxed.
+
+    ``room`` is not a ``Group`` field (rooms live on ``GroupSchedule``, one
+    per session) — it exists here purely so this quick admin screen's single
+    day/time pair (see the "الجدول والمدة" fieldset) still has a room to
+    conflict-check and persist against. ``GroupAdmin.save_model`` upserts the
+    matching ``GroupSchedule`` row for ``schedule_day`` only; it never
+    touches the group's other days.
     """
 
+    room = forms.ModelChoiceField(
+        queryset=Room.objects.filter(is_active=True),
+        required=False,
+        label='القاعة (اليوم الأول فقط)',
+        help_text='قاعة الموعد في حقل "يوم الحصة" أدناه فقط — بقية أيام المجموعة تُدار من شاشة المجموعات.',
+    )
     allow_schedule_conflict = forms.BooleanField(
         required=False,
         label='السماح بتداخل مواعيد القاعة',
@@ -165,35 +189,51 @@ class GroupAdminForm(forms.ModelForm):
         model = Group
         fields = '__all__'
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            entry = self.instance.get_schedule_for_day(self.instance.schedule_day)
+            if entry and entry.room:
+                self.fields['room'].initial = entry.room.pk
+
     def clean(self):
         cleaned_data = super().clean()
+        day = cleaned_data.get('schedule_day')
+        start_time = cleaned_data.get('schedule_time')
         # ``_post_clean`` runs right after this and calls ``instance.full_clean()``,
-        # so the flag has to be on the instance before then.
+        # so both flags have to be on the instance before then.
         self.instance._skip_conflict_check = bool(
             cleaned_data.get('allow_schedule_conflict')
         )
+        if day and start_time:
+            self.instance._pending_schedules = [{
+                'day': day,
+                'time': start_time,
+                'duration': cleaned_data.get('duration_minutes') or self.instance.duration_minutes,
+                'room': cleaned_data.get('room'),
+            }]
         return cleaned_data
 
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
     form = GroupAdminForm
-    list_display = ['group_name', 'teacher', 'room', 'get_schedule', 'get_duration',
+    list_display = ['group_name', 'teacher', 'get_rooms', 'get_schedule', 'get_duration',
                     'gender_type', 'get_education', 'standard_fee', 'is_active', 'created_at']
-    list_filter = ['schedule_day', 'is_active', 'teacher', 'room', 'gender_type',
+    list_filter = ['schedule_day', 'is_active', 'teacher', 'schedules__room', 'gender_type',
                    'education_stage', 'education_year', 'created_at']
     list_editable = ['is_active']  # تعديل سريع
-    search_fields = ['group_name', 'teacher__full_name', 'room__name']
+    search_fields = ['group_name', 'teacher__full_name', 'schedules__room__name']
     ordering = ['group_name']
-    autocomplete_fields = ['teacher', 'room']
+    autocomplete_fields = ['teacher']
     date_hierarchy = 'created_at'
 
     fieldsets = (
         ('معلومات المجموعة', {
-            'fields': ('group_name', 'teacher', 'room', 'is_active')
+            'fields': ('group_name', 'teacher', 'is_active')
         }),
         ('الجدول والمدة', {
-            'fields': ('schedule_day', 'schedule_time', 'duration_minutes', 'allow_schedule_conflict'),
+            'fields': ('schedule_day', 'schedule_time', 'duration_minutes', 'room', 'allow_schedule_conflict'),
             'description': (
                 '⚠️ النظام يمنع تداخل التوقيت تلقائياً (يسمح بنفس القاعة لمدرسين مختلفين بشرط عدم التداخل). '
                 'المواعيد الكاملة للمجموعة تُدار من شاشة المجموعات (كل يوم بوقته).'
@@ -213,13 +253,18 @@ class GroupAdmin(admin.ModelAdmin):
 
     readonly_fields = ['created_at']
 
-    actions = ['activate_groups', 'deactivate_groups', 'clear_rooms']
+    actions = ['activate_groups', 'deactivate_groups']
 
     def get_queryset(self, request):
         """select_related + prefetch so the changelist is not N+1 per row."""
         return super().get_queryset(request).select_related(
-            'teacher', 'room'
-        ).prefetch_related('schedules')
+            'teacher'
+        ).prefetch_related('schedules__room')
+
+    @admin.display(description='القاعة')
+    def get_rooms(self, obj):
+        """قاعة/قاعات المجموعة (تفصيل باليوم لو اختلفت القاعة بين الأيام)"""
+        return obj.get_rooms_display()
 
     def get_duration(self, obj):
         """عرض المدة"""
@@ -258,12 +303,26 @@ class GroupAdmin(admin.ModelAdmin):
 
         obj.save(skip_conflict_check=allow_conflict)
 
+        # Keep the real schedule truth (GroupSchedule) in sync with this
+        # screen's single day/time/room fields — upsert on (group, day) only,
+        # so a group's other days (managed from the Groups screen) are left
+        # untouched.
+        if obj.schedule_day and obj.schedule_time:
+            GroupSchedule.objects.update_or_create(
+                group=obj, day_of_week=obj.schedule_day,
+                defaults={
+                    'start_time': obj.schedule_time,
+                    'duration': obj.duration_minutes,
+                    'room': form.cleaned_data.get('room') if hasattr(form, 'cleaned_data') else None,
+                },
+            )
+
         if conflicts:
             other = conflicts[0]
             self.message_user(
                 request,
                 f'⚠️ تحذير: تم الحفظ مع تجاوز قاعدة منع التداخل الزمني. '
-                f'القاعة "{obj.room.name if obj.room else "غير محددة"}" '
+                f'القاعة "{other.room.name if other.room else "غير محددة"}" '
                 f'محجوزة لمجموعة "{other.group_name}" يوم {other.get_day_display()} '
                 f'الساعة {other.start_time.strftime("%I:%M %p")}!',
                 level=messages.WARNING,
@@ -280,9 +339,3 @@ class GroupAdmin(admin.ModelAdmin):
         count = queryset.update(is_active=False)
         self.message_user(request, f'تم إلغاء تفعيل {count} مجموعة')
     deactivate_groups.short_description = "❌ إلغاء تفعيل المجموعات"
-
-    def clear_rooms(self, request, queryset):
-        """إزالة القاعات من المجموعات المحددة"""
-        count = queryset.update(room=None)
-        self.message_user(request, f'تم إزالة القاعة من {count} مجموعة')
-    clear_rooms.short_description = "🏫 إزالة القاعات"

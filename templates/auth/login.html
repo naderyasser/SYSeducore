@@ -176,6 +176,7 @@
 
                 <form method="post" action="{% url 'accounts:login' %}">
                     {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.GET.next }}">
 
                     <div class="mb-3">
                         <label for="username" class="form-label">اسم المستخدم</label>

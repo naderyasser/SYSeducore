@@ -59,14 +59,23 @@ def get_client_ip(request):
     """
     Return the real client IP.
 
-    Behind nginx ``REMOTE_ADDR`` is always the proxy container address, so
-    the leftmost entry of ``X-Forwarded-For`` is used when present. Mirrors
-    the extraction already done in ``ActivityLog.log``.
+    Behind nginx ``REMOTE_ADDR`` is always the proxy container address.
+    ``X-Real-IP`` is set by nginx itself to ``$remote_addr`` on every
+    request (nginx.conf), which *overwrites* any value a client tries to
+    send — unlike ``X-Forwarded-For``, which nginx only *appends* to
+    (``$proxy_add_x_forwarded_for``), so a client-supplied leftmost entry
+    survives untouched and is trivially spoofable. Prefer ``X-Real-IP``
+    for that reason and only fall back to the (spoofable) leftmost
+    ``X-Forwarded-For`` entry when it is absent, e.g. in tests that talk
+    to the app directly without going through nginx.
     """
     if request is None:
         return 'unknown'
 
     meta = getattr(request, 'META', None) or {}
+    real_ip = meta.get('HTTP_X_REAL_IP')
+    if real_ip and real_ip.strip():
+        return real_ip.strip()
     forwarded_for = meta.get('HTTP_X_FORWARDED_FOR')
     if forwarded_for:
         client_ip = forwarded_for.split(',')[0].strip()

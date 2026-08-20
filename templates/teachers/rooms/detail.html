@@ -365,7 +365,7 @@
         <div class="icon purple">
             <i class="bi bi-clock"></i>
         </div>
-        <div class="value">{{ groups_with_students|length }}</div>
+        <div class="value">{{ sessions_per_week }}</div>
         <div class="label">حصص أسبوعياً</div>
     </div>
 </div>
@@ -464,7 +464,7 @@
 
 <!-- Action Buttons -->
 <div class="action-buttons">
-    <a href="{% url 'teachers:group_create' %}?room={{ room.room_id }}" class="btn btn-primary">
+    <a href="{% url 'teachers:group_create' %}" class="btn btn-primary">
         <i class="bi bi-plus me-1"></i>إضافة مجموعة
     </a>
     <a href="{% url 'teachers:room_update' room_id=room.room_id %}" class="btn btn-outline-secondary">

@@ -26,7 +26,7 @@ from .utils import (
 from apps.accounts.decorators import ajax_login_required, ajax_supervisor_required
 from apps.teachers.models import Group
 from apps.attendance.models import Attendance, ActivityLog
-from apps.notifications.services import WhatsAppService
+from apps.notifications.services import WhatsAppService, NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +112,7 @@ def send_barcode_whatsapp(request, student_id):
 _نظام بداية التعليمي_"""
 
     try:
-        wa_service = WhatsAppService()
-        result = wa_service.send_message(student.parent_phone, message)
+        result = NotificationService().send_text(student.parent_phone, message)
     except Exception:
         logger.exception('WhatsApp send failed for student %s', student.pk)
         return JsonResponse({
@@ -316,7 +315,7 @@ def student_groups(request, student_id):
             'teacher_name': group.teacher.full_name if group.teacher else '-',
             'schedule_day': group.get_schedule_day_display(),
             'schedule_time': group.schedule_time.strftime('%H:%M') if group.schedule_time else '--:--',
-            'room_name': group.room.name if group.room else '-',
+            'room_name': group.get_rooms_display(),
             'standard_fee': str(group.standard_fee),
             'financial_status': enrollment.financial_status,
             'financial_status_display': enrollment.get_financial_status_display(),
@@ -350,7 +349,7 @@ def available_groups(request, student_id):
         is_active=True
     ).exclude(
         group_id__in=enrolled_group_ids
-    ).select_related('teacher', 'room')
+    ).select_related('teacher')
 
     # Filter by gender compatibility
     if student.gender == 'male':
@@ -384,14 +383,14 @@ def available_groups(request, student_id):
             'schedule_time': group.schedule_time.strftime('%H:%M') if group.schedule_time else '--:--',
             'time_end': group.get_end_time().strftime('%H:%M'),
             'duration': group.get_duration_display(),
-            'room_name': group.room.name if group.room else '-',
+            'room_name': group.get_rooms_display(),
             'standard_fee': str(group.standard_fee),
             'gender_type': group.get_gender_type_display(),
             'education_stage': group.get_education_stage_display() if group.education_stage else '-',
             'education_year': group.get_education_year_display() if group.education_year else '-',
-            'capacity': group.room.capacity if group.room else 0,
+            'capacity': group.get_capacity(),
             'enrolled': enrolled_count,
-            'available': (group.room.capacity - enrolled_count) if group.room else 0
+            'available': max(group.get_capacity() - enrolled_count, 0)
         })
 
     return JsonResponse({
@@ -415,7 +414,7 @@ def student_id_card_data(request, student_id):
     enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
         is_active=True
-    ).select_related('group', 'group__teacher', 'group__room')[:3]  # Max 3 groups on card
+    ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')[:3]  # Max 3 groups on card
 
     groups_info = []
     teacher_photos = []  # For card back
@@ -425,7 +424,7 @@ def student_id_card_data(request, student_id):
             'name': group.group_name,
             'teacher': group.teacher.full_name if group.teacher else '-',
             'schedule': f"{group.get_schedule_day_display()} {group.schedule_time.strftime('%H:%M') if group.schedule_time else ''} - {group.get_end_time().strftime('%H:%M')}",
-            'room': group.room.name if group.room else '-',
+            'room': group.get_rooms_display(),
             'subjects': group.teacher.get_subjects_display() if group.teacher else '-',
         })
 
@@ -532,8 +531,11 @@ def students_list_api(request):
             Q(parent_phone__icontains=search)
         )
 
-    if group_filter:
-        students = students.filter(groups__group_id=group_filter)
+    if group_filter and str(group_filter).isdigit():
+        students = students.filter(
+            group_enrollments__group_id=group_filter,
+            group_enrollments__is_active=True,
+        ).distinct()
 
     if status_filter == 'with_groups':
         students = students.filter(groups_count__gt=0)
@@ -592,7 +594,7 @@ def student_statistics(request):
 
     students_with_groups = Student.objects.filter(
         is_active=True,
-        groups__is_active=True
+        group_enrollments__is_active=True
     ).distinct().count()
 
     students_without_groups = total_students - students_with_groups

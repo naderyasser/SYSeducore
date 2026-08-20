@@ -1,12 +1,11 @@
 from datetime import date
 
-from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Exists, OuterRef, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
-from apps.accounts.decorators import admin_required
+from apps.accounts.decorators import admin_required, supervisor_required
 from apps.teachers.models import Group, Teacher
 
 from .models import Payment
@@ -41,8 +40,14 @@ def _ensure_monthly_payments(month_date):
     missing = (
         StudentGroupEnrollment.objects
         .filter(is_active=True)
-        # Soft-deleted students/groups must not be billed.
-        .filter(student__deleted_at__isnull=True, group__deleted_at__isnull=True)
+        # Soft-deleted students/groups must not be billed, nor a group that
+        # was deactivated (closed) — its enrollments stay active but it no
+        # longer runs.
+        .filter(
+            student__deleted_at__isnull=True,
+            group__deleted_at__isnull=True,
+            group__is_active=True,
+        )
         .annotate(has_payment=Exists(already_billed))
         .filter(has_payment=False)
         .values_list(
@@ -88,7 +93,7 @@ def _ensure_monthly_payments(month_date):
     return len(to_create)
 
 
-@login_required
+@supervisor_required
 def payment_list(request):
     """
     List payments with filters. Defaults to current month unpaid/partial.
@@ -116,7 +121,7 @@ def payment_list(request):
 
     payments = Payment.objects.select_related(
         'student', 'group', 'group__teacher'
-    ).filter(month=month_date)
+    ).filter(month=month_date, student__deleted_at__isnull=True)
 
     if status_filter:
         payments = payments.filter(status=status_filter)
@@ -136,7 +141,9 @@ def payment_list(request):
     # them in, but they are *not* a collection: they are counted separately
     # and excluded from the collection rate.
     billable = Q(is_exempt=False)
-    stats = Payment.objects.filter(month=month_date).aggregate(
+    stats = Payment.objects.filter(
+        month=month_date, student__deleted_at__isnull=True,
+    ).aggregate(
         paid=Count('pk', filter=billable & Q(status='paid')),
         partial=Count('pk', filter=billable & Q(status='partial')),
         unpaid=Count('pk', filter=billable & Q(status='unpaid')),

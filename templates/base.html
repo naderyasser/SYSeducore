@@ -781,16 +781,20 @@
                     <i class="bi bi-clipboard-data-fill"></i>
                     <span>تقرير الحضور</span>
                 </a>
+                {% if request.user.role == 'admin' or request.user.role == 'supervisor' %}
                 <a href="{% url 'reports:payments' %}" class="menu-item {% if request.resolver_match.url_name == 'payments' %}active{% endif %}">
                     <i class="bi bi-receipt-cutoff"></i>
                     <span>تقرير المدفوعات</span>
                     <i class="bi bi-shield-lock ms-auto" style="font-size: 0.8rem; color: #f59e0b;"></i>
                 </a>
+                {% endif %}
+                {% if request.user.role == 'admin' %}
                 <a href="{% url 'reports:financial' %}" class="menu-item {% if request.resolver_match.url_name == 'financial' %}active{% endif %}">
                     <i class="bi bi-graph-up-arrow"></i>
                     <span>التقرير المالي</span>
                     <i class="bi bi-shield-lock ms-auto" style="font-size: 0.8rem; color: #f59e0b;"></i>
                 </a>
+                {% endif %}
                 {% if request.user.role == 'admin' %}
                 <a href="{% url 'reports:activity_log' %}" class="menu-item {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}">
                     <i class="bi bi-clock-history"></i>

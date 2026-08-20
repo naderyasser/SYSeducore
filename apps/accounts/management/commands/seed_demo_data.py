@@ -9,7 +9,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.accounts.models import User
-from apps.teachers.models import Teacher, Group, Room
+from apps.teachers.models import Teacher, Group, Room, GroupSchedule
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Session, Attendance
 from apps.payments.models import Payment
@@ -108,10 +108,15 @@ class Command(BaseCommand):
         self.stdout.write('Creating rooms...')
         rooms = []
         for room_name in self.ROOMS:
-            room, created = Room.objects.get_or_create(
+            # ``all_objects`` so a previously soft-deleted room (still
+            # occupying the unique ``name`` slot) is found and restored
+            # instead of tripping a duplicate-key IntegrityError.
+            room, created = Room.all_objects.get_or_create(
                 name=room_name,
                 defaults={'capacity': random.choice([20, 25, 30, 35, 40])}
             )
+            if room.is_deleted:
+                room.restore()
             rooms.append(room)
             if created:
                 self.stdout.write(f'  Created room: {room_name}')
@@ -128,7 +133,7 @@ class Command(BaseCommand):
             full_name = self.generate_full_name('male')
             specialization = specializations[i % len(specializations)]
             
-            teacher, created = Teacher.objects.get_or_create(
+            teacher, created = Teacher.all_objects.get_or_create(
                 email=f"teacher{i+1}@educore.com",
                 defaults={
                     'full_name': full_name,
@@ -137,6 +142,8 @@ class Command(BaseCommand):
                     'hire_date': date(2020 + random.randint(0, 4), random.randint(1, 12), 1)
                 }
             )
+            if teacher.is_deleted:
+                teacher.restore()
             teachers.append(teacher)
             if created:
                 self.stdout.write(f'  Created teacher: {full_name} ({specialization})')
@@ -177,13 +184,20 @@ class Command(BaseCommand):
                 group_name=group_name,
                 teacher=teacher,
                 defaults={
-                    'room': schedule['room'],
                     'schedule_day': schedule['day'],
                     'schedule_time': start_time,
                     'standard_fee': Decimal(random.choice([250, 300, 350, 400])),
                     'center_percentage': Decimal(random.choice([25, 30, 35]))
                 }
             )
+            if created:
+                GroupSchedule.objects.create(
+                    group=group,
+                    day_of_week=schedule['day'],
+                    start_time=start_time,
+                    duration=group.duration_minutes,
+                    room=schedule['room'],
+                )
             groups.append(group)
             if created:
                 self.stdout.write(f'  Created group: {group_name} ({schedule["day_name"]} {schedule["hour"]}:00)')
@@ -202,15 +216,22 @@ class Command(BaseCommand):
             # Generate unique student code
             student_code = f"{1001 + i}"
             
-            student, created = Student.objects.get_or_create(
+            student, created = Student.all_objects.get_or_create(
                 student_code=student_code,
                 defaults={
                     'full_name': full_name,
                     'parent_phone': self.generate_egyptian_phone()
                 }
             )
-            
+            if student.is_deleted:
+                student.restore()
+
             # Assign to 1-3 random groups with financial status
+            if not groups:
+                students.append(student)
+                if created:
+                    self.stdout.write(f'  Created student: {full_name} (Code: {student_code})')
+                continue
             num_groups = random.randint(1, min(3, len(groups)))
             assigned_groups = random.sample(groups, num_groups)
             
@@ -355,9 +376,10 @@ class Command(BaseCommand):
                 
                 # Create payments for past months
                 for i in range(months_back):
-                    month_date = current_date - timedelta(days=30*i)
-                    # First day of month
-                    month_date = month_date.replace(day=1)
+                    # Step by calendar month, not a fixed 30 days, so a
+                    # short month never gets skipped or double-counted.
+                    month_index = current_date.year * 12 + (current_date.month - 1) - i
+                    month_date = date(month_index // 12, month_index % 12 + 1, 1)
                     
                     # Determine payment status
                     if amount_due == 0:
@@ -394,6 +416,21 @@ class Command(BaseCommand):
         
         self.stdout.write(f'  Created {payment_count} payment records')
 
+    def create_admin_user(self):
+        """
+        Create the admin/admin123 account the summary advertises. Without
+        this, the printed credentials matched no real row and a fresh
+        operator following them could never log in.
+        """
+        user, created = User.objects.get_or_create(
+            username='admin',
+            defaults={'role': 'admin', 'is_staff': True, 'is_superuser': True}
+        )
+        if created:
+            user.set_password('admin123')
+            user.save()
+            self.stdout.write('  Created admin user: admin')
+
     def handle(self, *args, **options):
         self.stdout.write(self.style.SUCCESS('=' * 60))
         self.stdout.write(self.style.SUCCESS('Seeding Egyptian Demo Data'))
@@ -407,7 +444,8 @@ class Command(BaseCommand):
         sessions = self.create_sessions(groups)
         self.create_attendance(sessions)
         self.create_payments(students)
-        
+        self.create_admin_user()
+
         # Summary
         self.stdout.write(self.style.SUCCESS('=' * 60))
         self.stdout.write(self.style.SUCCESS('Demo Data Summary:'))

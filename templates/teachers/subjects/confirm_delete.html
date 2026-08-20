@@ -17,7 +17,7 @@
         <div class="card-body">
             <div class="alert alert-warning" role="alert">
                 <i class="bi bi-exclamation-circle"></i>
-                <strong>تحذير!</strong> عملية الحذف نهائية ولا يمكن التراجع عنها.
+                <strong>تنبيه!</strong> سيتم نقل المادة إلى سلة المهملات، ويمكن استعادتها لاحقاً.
             </div>
 
             <p>هل أنت متأكد من رغبتك في حذف المادة الدراسية التالية؟</p>
@@ -27,6 +27,12 @@
                     <p class="mb-0">
                         <strong>اسم المادة:</strong> <span class="text-danger">{{ subject.name }}</span>
                     </p>
+                    {% if linked_teachers_count %}
+                    <p class="mb-0 mt-2">
+                        <strong>مرتبطة بـ {{ linked_teachers_count }} مدرس:</strong>
+                        {% for t in linked_teachers %}{{ t.full_name }}{% if not forloop.last %}، {% endif %}{% endfor %}
+                    </p>
+                    {% endif %}
                 </div>
             </div>
 

@@ -120,24 +120,36 @@
 <div class="modal fade" id="editModal{{ template.template_id }}" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
-                <h6 class="modal-title">تعديل القالب: {{ template.name }}</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <p><strong>الاسم:</strong> {{ template.name }}</p>
-                <p><strong>الوصف:</strong> {{ template.description|default:"بدون وصف" }}</p>
-                <div class="alert alert-light">
-                    <strong>النص:</strong>
-                    <p style="white-space: pre-wrap;">{{ template.message_text }}</p>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="template_id" value="{{ template.template_id }}">
+                <div class="modal-header">
+                    <h6 class="modal-title">تعديل القالب: {{ template.name }}</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
-                <p class="text-muted mb-0 text-start flex-grow-1">
-                    <small>تم الإنشاء: {{ template.created_at|date:"d/m/Y H:i" }}</small>
-                </p>
-            </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="edit_name{{ template.template_id }}" class="form-label">اسم القالب</label>
+                        <input type="text" id="edit_name{{ template.template_id }}" name="name" class="form-control" value="{{ template.name }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_description{{ template.template_id }}" class="form-label">الوصف</label>
+                        <textarea id="edit_description{{ template.template_id }}" name="description" class="form-control" rows="2">{{ template.description }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="edit_message_text{{ template.template_id }}" class="form-label">نص الرسالة</label>
+                        <textarea id="edit_message_text{{ template.template_id }}" name="message_text" class="form-control" rows="5" required>{{ template.message_text }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إغلاق</button>
+                    <button type="submit" class="btn btn-warning">حفظ التعديلات</button>
+                    <p class="text-muted mb-0 text-start flex-grow-1">
+                        <small>تم الإنشاء: {{ template.created_at|date:"d/m/Y H:i" }}</small>
+                    </p>
+                </div>
+            </form>
         </div>
     </div>
 </div>

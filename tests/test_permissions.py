@@ -18,7 +18,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.backends.db import SessionStore
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
-from django.test import TestCase, Client, RequestFactory
+from django.test import TestCase, Client, RequestFactory, override_settings
 from django.urls import reverse
 
 from apps.accounts import decorators
@@ -152,13 +152,14 @@ class TestReportPasswordBypass(TestRBACBase):
         response = self.client.get(reverse('reports:payments'))
         self.assertEqual(response.status_code, 200)
 
-    def test_teacher_access_financial_report(self):
-        """Teacher should access financial report without password (200)."""
+    def test_teacher_blocked_from_financial_report(self):
+        """Teacher must NOT reach the financial report — real 403 (AUTH-09)."""
         self.client.force_login(self.teacher)
         response = self.client.get(reverse('reports:financial'))
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 403)
 
 
+@override_settings(NOTIFICATION_METHOD='none')
 class TestWhatsAppBlocking(TestRBACBase):
     """Test that WhatsApp views redirect when disabled."""
 
@@ -175,6 +176,7 @@ class TestWhatsAppBlocking(TestRBACBase):
         self.assertEqual(response.status_code, 302)
 
 
+@override_settings(RATELIMIT_ENABLE=False)
 class TestLoginLogout(TestRBACBase):
     """Test login/logout flow."""
 
@@ -462,6 +464,7 @@ class TestSelfServicePasswordChange(TestCase):
         self.assertTrue(self.user.check_password('TestPass123!'))
 
 
+@override_settings(RATELIMIT_ENABLE=False)
 class TestInactiveLoginMessage(TestCase):
     """AUTHN-06: an inactive account gets its own message."""
 

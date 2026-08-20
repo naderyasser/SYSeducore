@@ -8,7 +8,8 @@ class SoftDeleteQuerySet(models.QuerySet):
 
     def delete(self):
         """Soft delete all objects in queryset."""
-        return self.update(deleted_at=timezone.now())
+        count = self.update(deleted_at=timezone.now())
+        return count, {self.model._meta.label: count}
 
     def hard_delete(self):
         """Permanently delete all objects in queryset."""

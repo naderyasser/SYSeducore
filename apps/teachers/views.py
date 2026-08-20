@@ -79,11 +79,55 @@ def _report_validation_error(request, error):
             messages.error(request, err)
 
 
+def _raw_duration_minutes(post_data, fallback):
+    """
+    Best-effort ``duration_minutes`` straight out of POST.
+
+    Used as the default duration for :func:`_parse_schedule_data` when it has
+    to run *before* the form is validated (so ``form.cleaned_data`` is not
+    available yet) — falls back silently, since an unparsable value here is
+    already reported by the form's own field validation.
+    """
+    try:
+        return int(post_data.get('duration_minutes'))
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _resolve_room(room_id):
+    """
+    ``''``/``None`` -> no room (allowed — a session can be unassigned).
+    A non-blank value that does not resolve to an active room raises
+    ``ValueError`` with an Arabic message, same convention as the other
+    per-entry parse errors in this module.
+
+    Accepts either a POST string (``request.POST.get(...)``) or a value
+    already decoded from JSON, which may already be an ``int``.
+    """
+    if isinstance(room_id, str):
+        room_id = room_id.strip()
+    if not room_id:
+        return None
+    try:
+        room_pk = int(room_id)
+    except (TypeError, ValueError):
+        raise ValueError('القاعة المحددة غير صحيحة')
+    room = Room.objects.filter(pk=room_pk, is_active=True).first()
+    if room is None:
+        raise ValueError('القاعة المحددة غير موجودة')
+    return room
+
+
 def _parse_schedule_data(post_data, default_duration=120):
     """
     Parse schedule data from POST.
-    Expects: schedule_days[] with day names, and schedule_time_<DayName> for per-day times.
+    Expects: schedule_days[] with day names, schedule_time_<DayName> for
+    per-day times, and schedule_room_<DayName> for each day's own room
+    (optional — a blank room means the session has none assigned yet).
     Falls back to a single schedule_day + schedule_time if the per-day format is not used.
+
+    Raises ``ValueError`` with an Arabic message if a day's room id is set
+    but does not resolve to an active room.
     """
     from datetime import datetime as dt
 
@@ -107,10 +151,12 @@ def _parse_schedule_data(post_data, default_duration=120):
                     continue
 
                 duration = int(duration_str) if duration_str else default_duration
+                room = _resolve_room(post_data.get(f'schedule_room_{day}'))
                 schedule_data.append({
                     'day': day,
                     'time': parsed_time,
                     'duration': duration,
+                    'room': room,
                 })
     else:
         # Legacy single-day format
@@ -124,6 +170,7 @@ def _parse_schedule_data(post_data, default_duration=120):
                         'day': entry['day'],
                         'time': time_val,
                         'duration': int(entry.get('duration', default_duration)),
+                        'room': _resolve_room(entry.get('room')),
                     })
             except (json.JSONDecodeError, KeyError, ValueError):
                 pass
@@ -138,6 +185,7 @@ def _parse_schedule_data(post_data, default_duration=120):
                         'day': day,
                         'time': parsed_time,
                         'duration': default_duration,
+                        'room': _resolve_room(post_data.get('schedule_room')),
                     })
                 except ValueError:
                     pass
@@ -152,7 +200,11 @@ def teacher_list(request):
     teachers = (
         Teacher.objects.filter(is_active=True)
         .prefetch_related('subjects')
-        .annotate(groups_count=Count('groups', filter=Q(groups__is_active=True), distinct=True))
+        .annotate(groups_count=Count(
+            'groups',
+            filter=Q(groups__is_active=True, groups__deleted_at__isnull=True),
+            distinct=True,
+        ))
         .order_by('full_name')
     )
     return render(request, 'teachers/list.html', _page_context(_paginate(request, teachers), 'teachers'))
@@ -177,7 +229,7 @@ def teacher_detail(request, teacher_id):
         session_date__gte=today,
         session_date__lte=next_week,
         is_cancelled=False
-    ).select_related('group', 'group__room').order_by('session_date')[:5]
+    ).select_related('group').prefetch_related('group__schedules__room').order_by('session_date')[:5]
     
     return render(request, 'teachers/detail.html', {
         'teacher': teacher,
@@ -246,7 +298,14 @@ def teacher_delete(request, teacher_id):
 def room_list(request):
     rooms = (
         Room.objects.filter(is_active=True)
-        .annotate(active_groups_count=Count('groups', filter=Q(groups__is_active=True), distinct=True))
+        .annotate(active_groups_count=Count(
+            'schedule_entries__group',
+            filter=Q(
+                schedule_entries__group__is_active=True,
+                schedule_entries__group__deleted_at__isnull=True,
+            ),
+            distinct=True,
+        ))
         .order_by('name')
     )
     return render(request, 'teachers/rooms/list.html', _page_context(_paginate(request, rooms), 'rooms'))
@@ -281,10 +340,13 @@ def room_detail(request, room_id):
     """
     room = get_object_or_404(Room, pk=room_id)
     groups = list(
-        room.groups.filter(is_active=True)
-        .select_related('teacher', 'room')
-        .prefetch_related('schedules')
+        Group.objects.filter(
+            schedules__room=room, is_active=True, deleted_at__isnull=True,
+        )
+        .select_related('teacher')
+        .prefetch_related('schedules__room')
         .annotate(students_count=_enrollment_count_annotation())
+        .distinct()
         .order_by('group_name')
     )
 
@@ -293,10 +355,10 @@ def room_detail(request, room_id):
         for group in groups
     ]
 
-    # الجدول الأسبوعي — مبني على GroupSchedule (كل أيام المجموعة، وليس اليوم الأول فقط)
+    # الجدول الأسبوعي — مبني على GroupSchedule (كل يوم له قاعته الخاصة)
     weekly_schedule = {
         day: {'ar_name': WEEK_DAYS_AR.get(day, day), 'groups': entries}
-        for day, entries in room_week_entries(room, groups=groups).items()
+        for day, entries in room_week_entries(room).items()
     }
     sessions_per_week = sum(len(data['groups']) for data in weekly_schedule.values())
 
@@ -366,8 +428,8 @@ def room_delete(request, room_id):
 def group_list(request):
     groups = (
         Group.objects.filter(is_active=True)
-        .select_related('teacher', 'room')
-        .prefetch_related('schedules')
+        .select_related('teacher')
+        .prefetch_related('schedules__room')
         .annotate(students_count=_enrollment_count_annotation())
         .order_by('group_name')
     )
@@ -376,15 +438,23 @@ def group_list(request):
 
 @supervisor_required
 def group_create(request):
+    rooms = Room.objects.filter(is_active=True).order_by('name')
     if request.method == 'POST':
         form = GroupForm(request.POST)
+        try:
+            # Parsed ahead of validation and stashed on the instance so
+            # Group.clean()'s room-conflict check sees the schedule the user is
+            # actually submitting instead of the (nonexistent, for a new group)
+            # persisted one.
+            schedule_data = _parse_schedule_data(request.POST, _raw_duration_minutes(request.POST, 120))
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return render(request, 'teachers/groups/form.html', {'form': form, 'rooms': rooms})
+        form.instance._pending_schedules = schedule_data
         if form.is_valid():
-            # Parse schedule data from POST
-            schedule_data = _parse_schedule_data(request.POST, form.cleaned_data.get('duration_minutes', 120))
-
             if not schedule_data:
                 messages.error(request, 'يرجى اختيار يوم واحد على الأقل وتحديد الوقت')
-                return render(request, 'teachers/groups/form.html', {'form': form})
+                return render(request, 'teachers/groups/form.html', {'form': form, 'rooms': rooms})
 
             try:
                 group = form.save_with_schedules(schedule_data)
@@ -402,7 +472,7 @@ def group_create(request):
             messages.error(request, 'يرجى تصحيح الأخطاء في النموذج')
     else:
         form = GroupForm()
-    return render(request, 'teachers/groups/form.html', {'form': form})
+    return render(request, 'teachers/groups/form.html', {'form': form, 'rooms': rooms})
 
 
 @login_required
@@ -411,7 +481,7 @@ def group_detail(request, group_id):
     عرض تفاصيل المجموعة
     """
     group = get_object_or_404(
-        Group.objects.select_related('teacher', 'room').prefetch_related('schedules'),
+        Group.objects.select_related('teacher').prefetch_related('schedules__room'),
         pk=group_id,
     )
     enrolled_students = StudentGroupEnrollment.objects.filter(
@@ -423,7 +493,7 @@ def group_detail(request, group_id):
         'group': group,
         'enrolled_students': enrolled_students,
         'enrolled_count': enrolled_students.count(),
-        'capacity': group.room.capacity if group.room else 0,
+        'capacity': group.get_capacity(),
         'schedules': schedules,
         'schedule_entries': group.get_schedule_entries(),
     }
@@ -433,14 +503,23 @@ def group_detail(request, group_id):
 @supervisor_required
 def group_update(request, group_id):
     group = get_object_or_404(Group, pk=group_id)
+    rooms = Room.objects.filter(is_active=True).order_by('name')
     if request.method == 'POST':
         form = GroupForm(request.POST, instance=group)
+        try:
+            # Parsed ahead of validation and stashed on the instance so
+            # Group.clean()'s room-conflict check sees the schedule the user is
+            # actually submitting (e.g. a new room + new time together) instead
+            # of the schedule still persisted from before this edit.
+            schedule_data = _parse_schedule_data(request.POST, _raw_duration_minutes(request.POST, group.duration_minutes))
+        except ValueError as exc:
+            messages.error(request, str(exc))
+            return render(request, 'teachers/groups/form.html', {'form': form, 'group': group, 'rooms': rooms})
+        form.instance._pending_schedules = schedule_data
         if form.is_valid():
-            schedule_data = _parse_schedule_data(request.POST, form.cleaned_data.get('duration_minutes', group.duration_minutes))
-
             if not schedule_data:
                 messages.error(request, 'يرجى اختيار يوم واحد على الأقل وتحديد الوقت')
-                return render(request, 'teachers/groups/form.html', {'form': form, 'group': group})
+                return render(request, 'teachers/groups/form.html', {'form': form, 'group': group, 'rooms': rooms})
 
             try:
                 form.save_with_schedules(schedule_data)
@@ -466,6 +545,7 @@ def group_update(request, group_id):
             'day': entry.day_of_week,
             'time': entry.start_time.strftime('%H:%M'),
             'duration': entry.duration,
+            'room_id': entry.room.pk if entry.room else None,
         }
         for entry in group.get_schedule_entries()
     ], ensure_ascii=False)
@@ -473,6 +553,7 @@ def group_update(request, group_id):
     return render(request, 'teachers/groups/form.html', {
         'form': form,
         'group': group,
+        'rooms': rooms,
         'schedules_json': schedules_json,
     })
 
@@ -499,7 +580,11 @@ def subject_list(request):
     عرض قائمة المواد الدراسية
     """
     subjects = Subject.objects.annotate(
-        teachers_count_val=Count('teachers')
+        teachers_count_val=Count(
+            'teachers',
+            filter=Q(teachers__is_active=True, teachers__deleted_at__isnull=True),
+            distinct=True,
+        )
     ).order_by('name')
     subjects_with_counts = []
     for subject in subjects:
@@ -646,16 +731,29 @@ def booking_search(request):
             Q(specialization__icontains=query)
         )
 
-    if education_stage:
-        teachers = teachers.filter(groups__education_stage=education_stage)
-
-    if gender:
-        teachers = teachers.filter(groups__gender_type=gender)
+    if education_stage or gender:
+        # One ``Q`` over a single join: two separate ``.filter()`` calls would
+        # each open their own join, so a teacher could match "some group is
+        # this stage" and "some *other* group is this gender" independently —
+        # matching him even though no single group of his satisfies both.
+        group_filter = Q(groups__deleted_at__isnull=True)
+        if education_stage:
+            group_filter &= Q(groups__education_stage=education_stage)
+        if gender:
+            group_filter &= Q(groups__gender_type=gender)
+        teachers = teachers.filter(group_filter)
 
     if subject_id:
-        # ``Subject``'s primary key is ``id`` — ``subjects__subject_id`` was a
-        # FieldError, i.e. a 500 as soon as the subject filter was used.
-        teachers = teachers.filter(subjects__pk=subject_id)
+        try:
+            subject_pk = int(subject_id)
+        except (TypeError, ValueError):
+            # A non-numeric value (edited URL, stale link) — no subject can
+            # match it, so the filter is simply ignored instead of a 500.
+            subject_pk = None
+        if subject_pk is not None:
+            # ``Subject``'s primary key is ``id`` — ``subjects__subject_id`` was a
+            # FieldError, i.e. a 500 as soon as the subject filter was used.
+            teachers = teachers.filter(subjects__pk=subject_pk)
 
     teachers = teachers.distinct().prefetch_related('subjects')
 
@@ -670,7 +768,7 @@ def booking_search(request):
         session_date__lte=next_week,
         is_cancelled=False,
         group__is_active=True  # Filter inactive groups
-    ).select_related('group', 'group__teacher', 'group__room').order_by('session_date')
+    ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room').order_by('session_date')
 
     # Get recent attendance stats (last 7 days)
     last_week = today - timedelta(days=7)
@@ -745,8 +843,9 @@ def _parse_booking_schedules(data, default_duration):
     Normalise the booking form's schedule payload into the shape
     ``GroupForm.save_with_schedules`` expects.
 
-    Accepts the page's ``schedules`` JSON field (``[{"day": ..., "time": "HH:MM"}]``)
-    and falls back to a single ``schedule_day`` / ``schedule_time`` pair.
+    Accepts the page's ``schedules`` JSON field (``[{"day": ..., "time": "HH:MM",
+    "room": room_id}]`` — ``room`` optional) and falls back to a single
+    ``schedule_day`` / ``schedule_time`` / ``room`` triple.
     Raises ``ValueError`` with an Arabic message on malformed input.
     """
     from datetime import datetime as dt
@@ -758,7 +857,11 @@ def _parse_booking_schedules(data, default_duration):
         except json.JSONDecodeError:
             raise ValueError('صيغة المواعيد غير صحيحة')
     else:
-        entries = [{'day': data.get('schedule_day'), 'time': data.get('schedule_time')}]
+        entries = [{
+            'day': data.get('schedule_day'),
+            'time': data.get('schedule_time'),
+            'room': data.get('room'),
+        }]
 
     valid_days = {day for day, _ in Group.DAYS_CHOICES}
     schedule_data = []
@@ -783,6 +886,7 @@ def _parse_booking_schedules(data, default_duration):
             'day': day,
             'time': parsed_time,
             'duration': int(entry.get('duration') or default_duration),
+            'room': _resolve_room(entry.get('room')),
         })
 
     return schedule_data
@@ -825,7 +929,11 @@ def booking_create(request, teacher_id=None):
         posted_teacher = (data.get('teacher') or data.get('teacher_id') or '').strip()
         if not posted_teacher:
             return fail('يرجى اختيار المدرس')
-        teacher = Teacher.objects.filter(pk=posted_teacher, is_active=True).first()
+        try:
+            teacher_pk = int(posted_teacher)
+        except (TypeError, ValueError):
+            return fail('المدرس المحدد غير موجود')
+        teacher = Teacher.objects.filter(pk=teacher_pk, is_active=True).first()
         if teacher is None:
             return fail('المدرس المحدد غير موجود')
 
@@ -849,7 +957,10 @@ def booking_create(request, teacher_id=None):
     subject_name = (data.get('subject_name') or '').strip()
 
     if subject_pk:
-        subject = Subject.objects.filter(pk=subject_pk).first()
+        try:
+            subject = Subject.objects.filter(pk=int(subject_pk)).first()
+        except (TypeError, ValueError):
+            subject = None
         if subject is None:
             return fail('المادة الدراسية المحددة غير موجودة')
     elif subject_name:
@@ -870,7 +981,10 @@ def booking_create(request, teacher_id=None):
     student = None
     student_id = (data.get('student_id') or '').strip()
     if student_id:
-        student = Student.objects.filter(pk=student_id).first()
+        try:
+            student = Student.objects.filter(pk=int(student_id)).first()
+        except (TypeError, ValueError):
+            student = None
         if student is None:
             return fail('الطالب المحدد غير موجود')
 
@@ -882,7 +996,6 @@ def booking_create(request, teacher_id=None):
     form = GroupForm({
         'group_name': (data.get('group_name') or '').strip(),
         'teacher': teacher.pk,
-        'room': (data.get('room') or '').strip(),
         'duration_minutes': duration_minutes,
         'gender_type': data.get('gender_type') or 'mixed',
         'education_stage': education_stage,
@@ -932,7 +1045,7 @@ def booking_create(request, teacher_id=None):
         ActivityLog.log(
             user=request.user, action='enrollment_create',
             description=f'تسجيل الطالب {student.full_name} في المجموعة {group.group_name}',
-            target_model='StudentGroupEnrollment', target_id=group.pk, request=request,
+            target_model='StudentGroupEnrollment', target_id=enrollment.pk, request=request,
         )
 
     messages.success(
@@ -952,8 +1065,8 @@ def booking_calendar(request):
     """
     groups = (
         Group.objects.filter(is_active=True)
-        .select_related('teacher', 'room')
-        .prefetch_related('schedules', 'teacher__subjects')
+        .select_related('teacher')
+        .prefetch_related('schedules__room', 'teacher__subjects')
         .annotate(enrolled_count=_enrollment_count_annotation())
     )
 
@@ -972,12 +1085,12 @@ def booking_calendar(request):
                 'name': group.group_name,
                 'teacher': group.teacher.full_name if group.teacher else '-',
                 'subject': group.teacher.get_subjects_display() if group.teacher else '-',
-                'room': group.room.name if group.room else '-',
+                'room': entry.room.name if entry.room else '-',
                 'time': entry.start_time.strftime('%I:%M %p'),
                 'end_time': entry.get_end_time().strftime('%I:%M %p'),
                 'duration': entry.get_duration_display(),
                 'enrolled': group.enrolled_count,
-                'capacity': group.room.capacity if group.room else 0,
+                'capacity': entry.room.capacity if entry.room else 0,
                 'gender': group.get_gender_type_display(),
                 'education_stage': group.get_education_stage_display(),
                 'fee': group.standard_fee,
@@ -1028,11 +1141,17 @@ def booking_student_enroll(request):
     if financial_status not in dict(StudentGroupEnrollment.FINANCIAL_STATUS_CHOICES):
         return JsonResponse({'success': False, 'message': 'الحالة المالية غير صحيحة'}, status=400)
 
-    group = Group.objects.filter(pk=group_id).first()
+    try:
+        group = Group.objects.filter(pk=int(group_id)).first()
+    except (TypeError, ValueError):
+        group = None
     if group is None:
         return JsonResponse({'success': False, 'message': 'المجموعة غير موجودة'}, status=404)
 
-    student = Student.objects.filter(pk=student_id).first()
+    try:
+        student = Student.objects.filter(pk=int(student_id)).first()
+    except (TypeError, ValueError):
+        student = None
     if student is None:
         return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
 

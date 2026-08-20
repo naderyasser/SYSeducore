@@ -277,9 +277,13 @@
         </h2>
         <div style="display: flex; gap: 12px; align-items: center;">
             {% if total_count > 0 and is_admin %}
-            <form method="post" action="{% url 'reports:recycle_empty' %}" style="display: inline;"
+            <form method="post" action="{% url 'reports:recycle_empty' %}" style="display: inline-flex; gap: 8px; align-items: center;"
                 onsubmit="return confirm('⚠️ هل أنت متأكد من تفريغ سلة المهملات بالكامل؟\nسيتم حذف {{ total_count }} عنصر نهائياً ولا يمكن استعادتهم!')">
                 {% csrf_token %}
+                <input type="text" name="confirm" required pattern="{{ empty_confirm_word }}"
+                    placeholder="اكتب «{{ empty_confirm_word }}» للتأكيد"
+                    title="اكتب كلمة «{{ empty_confirm_word }}» بالضبط للتأكيد"
+                    style="border-radius: 8px; border: 1px solid #e5e7eb; padding: 6px 10px; font-size: 0.85rem;">
                 <button type="submit" class="btn-empty-all">
                     <i class="bi bi-trash3-fill"></i> تفريغ الكل
                 </button>

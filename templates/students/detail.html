@@ -395,7 +395,7 @@
                     <i class="bi bi-collection"></i>
                     المجموعات المسجل فيها
                 </h5>
-                <button class="btn btn-sm btn-primary" onclick="showAddToGroup({{ student.student_id }}, '{{ student.full_name }}')">
+                <button class="btn btn-sm btn-primary" onclick="showAddToGroup({{ student.student_id }}, '{{ student.full_name|escapejs }}')">
                     <i class="bi bi-plus-lg me-1"></i>إضافة لمجموعة
                 </button>
             </div>
@@ -412,7 +412,7 @@
                                 <span class="mx-2">|</span>
                                 <i class="bi bi-clock me-1"></i>{{ enrollment.group.schedule_time|date:"H:i" }}
                                 <span class="mx-2">|</span>
-                                <i class="bi bi-door-open me-1"></i>{{ enrollment.group.room.name|default:"-" }}
+                                <i class="bi bi-door-open me-1"></i>{{ enrollment.group.get_rooms_display }}
                             </div>
                         </div>
                         <div class="text-start">
@@ -533,6 +533,14 @@
 <script>
 let currentStudentId = null;
 
+// HTML escaping helper
+function escHtml(str) {
+    if (str == null) return '';
+    const d = document.createElement('div');
+    d.textContent = String(str);
+    return d.innerHTML;
+}
+
 // Show Add to Group Modal
 function showAddToGroup(studentId, studentName) {
     currentStudentId = studentId;
@@ -555,15 +563,15 @@ function showAddToGroup(studentId, studentName) {
         .then(data => {
             if (data.success && data.groups.length > 0) {
                 const html = data.groups.map(group => `
-                    <div class="card mb-2 cursor-pointer" onclick="addToGroup(${group.group_id}, '${group.group_name.replace(/'/g, "\\'")}')" style="cursor: pointer;">
+                    <div class="card mb-2 cursor-pointer" onclick="addToGroup(${Number(group.group_id)}, '${escHtml(group.group_name).replace(/'/g, "\\'")}')" style="cursor: pointer;">
                         <div class="card-body p-3">
-                            <h6 class="mb-1">${group.group_name}</h6>
+                            <h6 class="mb-1">${escHtml(group.group_name)}</h6>
                             <small class="text-muted">
-                                <i class="bi bi-person me-1"></i>${group.teacher_name}
+                                <i class="bi bi-person me-1"></i>${escHtml(group.teacher_name)}
                                 <span class="mx-2">|</span>
-                                <i class="bi bi-calendar3 me-1"></i>${group.schedule_day}
+                                <i class="bi bi-calendar3 me-1"></i>${escHtml(group.schedule_day)}
                                 <span class="mx-2">|</span>
-                                <i class="bi bi-clock me-1"></i>${group.schedule_time}
+                                <i class="bi bi-clock me-1"></i>${escHtml(group.schedule_time)}
                             </small>
                         </div>
                     </div>

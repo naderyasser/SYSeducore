@@ -13,7 +13,7 @@ from django.db import transaction
 
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room, Subject
-from apps.attendance.models import Session, Attendance, ActivityLog
+from apps.attendance.models import Session, Attendance, ActivityLog, ExceptionRecord
 from apps.payments.models import Payment
 from apps.notifications.models import WhatsAppMessage, WhatsAppTemplate
 
@@ -39,6 +39,7 @@ class Command(BaseCommand):
                 '  - All Teachers\n'
                 '  - All Groups\n'
                 '  - All Attendance records\n'
+                '  - All Exception records\n'
                 '  - All Payment records\n'
                 '  - All Sessions\n'
                 '  - All WhatsApp messages\n'
@@ -63,6 +64,7 @@ class Command(BaseCommand):
                     'enrollments': StudentGroupEnrollment.objects.count(),
                     'sessions': Session.objects.count(),
                     'attendance': Attendance.objects.count(),
+                    'exception_records': ExceptionRecord.objects.count(),
                     'payments': Payment.objects.count(),
                     'rooms': Room.all_objects.count(),
                     'subjects': Subject.all_objects.count(),
@@ -78,7 +80,13 @@ class Command(BaseCommand):
                 # Delete in correct order (respecting foreign keys)
                 self.stdout.write('\n🗑️  Deleting data...\n')
 
-                # 1. Delete attendance and activity logs
+                # 1. Delete exception records first: ExceptionRecord.student
+                # and ExceptionRecord.group are on_delete=PROTECT, so they
+                # must go before students/groups are deleted below.
+                deleted = ExceptionRecord.objects.all().delete()[0]
+                self.stdout.write(f'  ✓ Deleted {deleted} exception records')
+
+                # 2. Delete attendance and activity logs
                 deleted = ActivityLog.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} activity logs')
 
@@ -88,40 +96,48 @@ class Command(BaseCommand):
                 deleted = Session.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} sessions')
 
-                # 2. Delete payments
+                # 3. Delete payments
                 deleted = Payment.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} payments')
 
-                # 3. Delete notifications
+                # 4. Delete notifications
                 deleted = WhatsAppMessage.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} WhatsApp messages')
 
                 deleted = WhatsAppTemplate.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} message templates')
 
-                # 4. Delete enrollments
+                # 5. Delete enrollments
                 deleted = StudentGroupEnrollment.objects.all().delete()[0]
                 self.stdout.write(f'  ✓ Deleted {deleted} student enrollments')
 
-                # 5. Delete groups
+                # 6. Delete groups
                 # These models are SoftDeleteModel: .objects.delete() only sets
                 # deleted_at. Use all_objects.hard_delete() so a reset really
-                # removes the rows instead of hiding them.
-                deleted = Group.all_objects.all().hard_delete()[0]
+                # removes the rows instead of hiding them. hard_delete()[0] is
+                # Django's cascade grand total (it can include related rows
+                # deleted along the way), so pull this model's own count from
+                # the per-model breakdown in result[1] instead.
+                result = Group.all_objects.all().hard_delete()
+                deleted = result[1].get(Group._meta.label, 0)
                 self.stdout.write(f'  ✓ Deleted {deleted} groups')
 
-                # 6. Delete students and teachers
-                deleted = Student.all_objects.all().hard_delete()[0]
+                # 7. Delete students and teachers
+                result = Student.all_objects.all().hard_delete()
+                deleted = result[1].get(Student._meta.label, 0)
                 self.stdout.write(f'  ✓ Deleted {deleted} students')
 
-                deleted = Teacher.all_objects.all().hard_delete()[0]
+                result = Teacher.all_objects.all().hard_delete()
+                deleted = result[1].get(Teacher._meta.label, 0)
                 self.stdout.write(f'  ✓ Deleted {deleted} teachers')
 
-                # 7. Delete rooms and subjects
-                deleted = Room.all_objects.all().hard_delete()[0]
+                # 8. Delete rooms and subjects
+                result = Room.all_objects.all().hard_delete()
+                deleted = result[1].get(Room._meta.label, 0)
                 self.stdout.write(f'  ✓ Deleted {deleted} rooms')
 
-                deleted = Subject.all_objects.all().hard_delete()[0]
+                result = Subject.all_objects.all().hard_delete()
+                deleted = result[1].get(Subject._meta.label, 0)
                 self.stdout.write(f'  ✓ Deleted {deleted} subjects')
 
                 # Verify admin accounts are preserved

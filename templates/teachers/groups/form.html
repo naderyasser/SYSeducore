@@ -107,7 +107,7 @@
                 </div>
                 {% endif %}
 
-                <form method="post">
+                <form method="post" id="groupForm">
                     {% csrf_token %}
 
                     <div class="row g-3">
@@ -124,15 +124,6 @@
                             {{ form.teacher }}
                             {% if form.teacher.errors %}
                             <div class="text-danger small mt-1">{{ form.teacher.errors.0 }}</div>
-                            {% endif %}
-                        </div>
-
-                        <div class="col-md-6">
-                            <label class="form-label">القاعة</label>
-                            {{ form.room }}
-                            <small class="text-muted">اختياري - النظام يمنع تعارض الأوقات تلقائياً (حسب المدة)</small>
-                            {% if form.room.errors %}
-                            <div class="text-danger small mt-1">{{ form.room.errors.0 }}</div>
                             {% endif %}
                         </div>
 
@@ -176,7 +167,8 @@
 
                         <!-- Per-day time inputs (shown when day is selected) -->
                         <div class="col-md-12" id="perDayTimesContainer" style="display:none;">
-                            <label class="form-label">وقت البداية لكل يوم <span class="text-danger">*</span></label>
+                            <label class="form-label">وقت البداية والقاعة لكل يوم <span class="text-danger">*</span></label>
+                            <small class="text-muted d-block mb-2">القاعة اختيارية لكل يوم — النظام يمنع تعارض الأوقات تلقائياً لنفس القاعة</small>
                             <div id="perDayTimeInputs" class="row g-2"></div>
                         </div>
 
@@ -271,7 +263,7 @@ const selectedDaysInfo = document.getElementById('selectedDaysInfo');
 const selectedDaysText = document.getElementById('selectedDaysText');
 const perDayTimesContainer = document.getElementById('perDayTimesContainer');
 const perDayTimeInputs = document.getElementById('perDayTimeInputs');
-const form = document.querySelector('form');
+const form = document.getElementById('groupForm');
 
 const dayNamesAr = {
     'Saturday': 'السبت',
@@ -283,12 +275,17 @@ const dayNamesAr = {
     'Friday': 'الجمعة'
 };
 
-// Pre-loaded schedule data (when editing)
+// Rooms available for the per-day select
+const ROOMS = [
+    {% for r in rooms %}{ id: {{ r.pk }}, name: '{{ r.name|escapejs }}' }{% if not forloop.last %},{% endif %}{% endfor %}
+];
+
+// Pre-loaded schedule data (when editing): { day: { time, room_id } }
 let preloadedSchedules = {};
 {% if schedules_json %}
 try {
     const parsed = JSON.parse('{{ schedules_json|escapejs }}');
-    parsed.forEach(s => { preloadedSchedules[s.day] = s.time; });
+    parsed.forEach(s => { preloadedSchedules[s.day] = { time: s.time, room_id: s.room_id }; });
 } catch(e) {}
 {% endif %}
 
@@ -309,16 +306,27 @@ function updateDayUI() {
         perDayTimesContainer.style.display = 'none';
     }
 
-    // Build per-day time inputs
+    // Build per-day time + room inputs
     perDayTimeInputs.innerHTML = '';
     selectedDays.forEach(day => {
-        const preTime = preloadedSchedules[day] || '';
+        const preloaded = preloadedSchedules[day] || {};
+        const preTime = preloaded.time || '';
+        const preRoomId = preloaded.room_id || null;
+
+        const roomOptions = ROOMS.map(r =>
+            '<option value="' + r.id + '"' + (r.id === preRoomId ? ' selected' : '') + '>' + r.name + '</option>'
+        ).join('');
+
         const col = document.createElement('div');
-        col.className = 'col-md-4 col-sm-6';
+        col.className = 'col-md-6';
         col.innerHTML =
             '<div class="input-group">' +
             '<span class="input-group-text">' + dayNamesAr[day] + '</span>' +
             '<input type="time" class="form-control" name="schedule_time_' + day + '" value="' + preTime + '" required>' +
+            '<select class="form-select" name="schedule_room_' + day + '">' +
+            '<option value="">بدون قاعة</option>' +
+            roomOptions +
+            '</select>' +
             '</div>';
         perDayTimeInputs.appendChild(col);
     });
@@ -360,7 +368,7 @@ form.addEventListener('submit', function(e) {
     const cb = document.querySelector('input[value="{{ group.schedule_day }}"]');
     if (cb) {
         cb.checked = true;
-        preloadedSchedules['{{ group.schedule_day }}'] = '{{ group.schedule_time|time:"H:i" }}';
+        preloadedSchedules['{{ group.schedule_day }}'] = { time: '{{ group.schedule_time|time:"H:i" }}', room_id: null };
         updateDayUI();
     }
 })();

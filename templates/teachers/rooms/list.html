@@ -340,7 +340,7 @@
 
             <div class="info-row">
                 <span class="info-label"><i class="bi bi-collection me-1"></i>المجموعات</span>
-                <span class="info-value">{{ room.groups.count }} مجموعة</span>
+                <span class="info-value">{{ room.active_groups_count }} مجموعة</span>
             </div>
 
             <div class="info-row">
@@ -380,6 +380,36 @@
     </a>
 </div>
 {% endif %}
+
+{% if is_paginated %}
+<nav class="mt-3" aria-label="ترقيم صفحات القاعات">
+    <ul class="pagination justify-content-center mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">السابق</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">السابق</span></li>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+        {% if page_obj.number == num %}
+        <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+        {% else %}
+        <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+        {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}">التالي</a>
+        </li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link">التالي</span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -392,7 +422,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     {% for room in rooms %}
     totalCapacity += {{ room.capacity }};
-    totalGroups += {{ room.groups.count }};
+    totalGroups += {{ room.active_groups_count }};
 
     // Fetch room details
     fetch('{% url "teachers:api_room_detail" room_id=room.room_id %}')

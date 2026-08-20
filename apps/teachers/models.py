@@ -156,16 +156,20 @@ class ScheduleEntry:
     ``schedule_time``, ``get_end_time()``, ``get_duration_display()``) so
     templates and APIs can iterate sessions instead of groups without any
     other change.
+
+    ``room`` belongs to the session itself, not the group — two days of the
+    same group may meet in two different rooms.
     """
 
-    __slots__ = ('group', 'day_of_week', 'start_time', 'duration', 'schedule_id')
+    __slots__ = ('group', 'day_of_week', 'start_time', 'duration', 'schedule_id', 'room')
 
-    def __init__(self, group, day_of_week, start_time, duration, schedule_id=None):
+    def __init__(self, group, day_of_week, start_time, duration, schedule_id=None, room=None):
         self.group = group
         self.day_of_week = day_of_week
         self.start_time = start_time
         self.duration = int(duration or 0)
         self.schedule_id = schedule_id
+        self.room = room
 
     # -- identity ---------------------------------------------------------
     def __repr__(self):  # pragma: no cover - debugging aid
@@ -198,10 +202,6 @@ class ScheduleEntry:
     @property
     def teacher(self):
         return self.group.teacher
-
-    @property
-    def room(self):
-        return self.group.room
 
     @property
     def standard_fee(self):
@@ -298,15 +298,6 @@ class Group(SoftDeleteModel):
         related_name='groups',
         verbose_name="المدرس"
     )
-    room = models.ForeignKey(
-        Room,
-        on_delete=models.PROTECT,
-        related_name='groups',
-        verbose_name="القاعة",
-        null=True,
-        blank=True
-    )
-
     schedule_day = models.CharField(
         max_length=10,
         choices=DAYS_CHOICES,
@@ -417,24 +408,25 @@ class Group(SoftDeleteModel):
 
         conflicts = self.get_room_conflicts()
         if conflicts:
-            raise ValidationError({NON_FIELD_ERRORS: [build_conflict_message(self.room, conflicts[0])]})
+            raise ValidationError({NON_FIELD_ERRORS: [build_conflict_message(conflicts[0].room, conflicts[0])]})
 
     def get_room_conflicts(self):
         """
         Room bookings that clash with this group's own sessions.
 
-        Returns a list of :class:`ScheduleEntry`. Empty means the group can be
-        saved. Callers (the admin) can test this explicitly instead of
-        pattern-matching Arabic text out of an exception message.
+        Each session checks the availability of *its own* room — two days of
+        the same group may use two different rooms. Returns a list of
+        :class:`ScheduleEntry`. Empty means the group can be saved. Callers
+        (the admin) can test this explicitly instead of pattern-matching
+        Arabic text out of an exception message.
         """
-        if not self.room:
-            return []
-
         conflicts = []
         for entry in self.get_schedule_entries():
+            if not entry.room:
+                continue
             conflicts.extend(
                 find_room_conflicts(
-                    self.room,
+                    entry.room,
                     entry.day_of_week,
                     entry.start_time,
                     entry.duration,
@@ -443,12 +435,38 @@ class Group(SoftDeleteModel):
             )
         return conflicts
 
+    def get_capacity(self):
+        """
+        أصغر سعة بين قاعات مواعيد المجموعة النشطة — الرقم الآمن لحد التسجيل.
+
+        قاعات مختلفة لأيام مختلفة قد تحمل سعات مختلفة؛ نفس مجموعة الطلاب
+        تحضر كل الأيام، فالقيد الفعلي هو أضيق قاعة، وليس أي قاعة بعينها.
+        """
+        capacities = [entry.room.capacity for entry in self.get_schedule_entries() if entry.room]
+        return min(capacities) if capacities else 0
+
+    def get_rooms_display(self):
+        """
+        اسم القاعة إن كانت واحدة لكل الأيام (الحالة الشائعة)، وإلا تفصيل
+        "اليوم: القاعة" لكل ميعاد.
+        """
+        entries = self.get_schedule_entries()
+        room_names = {entry.room.name for entry in entries if entry.room}
+        if not room_names:
+            return '-'
+        if len(room_names) == 1:
+            return room_names.pop()
+        return '، '.join(
+            f"{entry.get_day_display()}: {entry.room.name if entry.room else '—'}"
+            for entry in entries
+        )
+
     #: Saving any of these requires the model-level validation to run again.
     #: A partial ``save(update_fields=...)`` that touches nothing else (the
     #: soft-delete write, an ``is_active`` toggle…) can safely skip it — the
     #: stored values were validated when they were written.
     VALIDATED_FIELDS = frozenset({
-        'room', 'room_id', 'schedule_day', 'schedule_time', 'duration_minutes',
+        'schedule_day', 'schedule_time', 'duration_minutes',
         'education_stage', 'education_year', 'is_active', 'group_name',
         'teacher', 'teacher_id', 'standard_fee', 'center_percentage',
         'sessions_per_month', 'gender_type',
@@ -501,9 +519,7 @@ class Group(SoftDeleteModel):
         كل مواعيد المجموعة في الأسبوع — المصدر الوحيد للحقيقة.
 
         Returns a list of :class:`ScheduleEntry`, one per day the group meets,
-        ordered by day then time. Falls back to the legacy
-        ``schedule_day``/``schedule_time``/``duration_minutes`` fields when the
-        group has no ``GroupSchedule`` rows yet, so old data keeps working.
+        ordered by day then time, each carrying its own room.
         """
         return group_schedule_entries(self)
 
@@ -512,9 +528,8 @@ class Group(SoftDeleteModel):
         موعد المجموعة في يوم معيّن (أو ``None``).
 
         Returns a :class:`ScheduleEntry` — it exposes ``start_time``,
-        ``duration`` and ``get_end_time()`` exactly like ``GroupSchedule`` does,
-        and additionally covers legacy groups that have no ``GroupSchedule``
-        rows.
+        ``duration``, ``room`` and ``get_end_time()`` exactly like
+        ``GroupSchedule`` does.
         """
         for entry in self.get_schedule_entries():
             if entry.day_of_week == day_name:
@@ -584,6 +599,14 @@ class GroupSchedule(models.Model):
         verbose_name="مدة الحصة (بالدقائق)",
         help_text="مدة الحصة بالدقائق"
     )
+    room = models.ForeignKey(
+        Room,
+        on_delete=models.PROTECT,
+        related_name='schedule_entries',
+        verbose_name="القاعة",
+        null=True,
+        blank=True,
+    )
 
     class Meta:
         db_table = 'group_schedules'
@@ -606,11 +629,11 @@ class GroupSchedule(models.Model):
         super().clean()
 
         group = self.group if self.group_id else None
-        if not (group and group.room and self.day_of_week and self.start_time):
+        if not (group and self.room and self.day_of_week and self.start_time):
             return
 
         conflicts = find_room_conflicts(
-            group.room,
+            self.room,
             self.day_of_week,
             self.start_time,
             self.duration,
@@ -619,7 +642,7 @@ class GroupSchedule(models.Model):
         )
         if conflicts:
             raise ValidationError({
-                'start_time': build_conflict_message(group.room, conflicts[0])
+                'start_time': build_conflict_message(self.room, conflicts[0])
             })
 
 
@@ -640,30 +663,41 @@ def build_conflict_message(room, entry):
 
 def group_schedule_entries(group):
     """
-    All weekly sessions of one group as :class:`ScheduleEntry` objects.
+    All weekly sessions of one group as :class:`ScheduleEntry` objects, each
+    carrying its own room. ``GroupSchedule`` is the single source of truth —
+    every group is guaranteed at least one row by ``save_with_schedules``.
+    Uses ``group.schedules`` so a ``prefetch_related('schedules__room')`` on
+    the caller's queryset costs no extra query.
 
-    ``GroupSchedule`` rows win; a group with no rows at all falls back to its
-    legacy ``schedule_day``/``schedule_time``/``duration_minutes`` fields.
-    Uses ``group.schedules`` so a ``prefetch_related('schedules')`` on the
-    caller's queryset costs no extra query.
+    A caller that is about to *replace* the persisted schedules (a form
+    re-validating a group being moved to a new room/time) can stash the
+    not-yet-saved list on ``group._pending_schedules`` — the shape produced
+    by ``_parse_schedule_data`` (each entry optionally carrying a ``'room'``
+    ``Room`` instance) — and it wins over the stored rows here, so conflict
+    checks run against what the user actually submitted instead of the
+    schedule still sitting in the database.
     """
+    pending = getattr(group, '_pending_schedules', None)
+    if pending is not None:
+        return sorted(
+            (
+                ScheduleEntry(
+                    group, e['day'], e['time'], e.get('duration') or group.duration_minutes,
+                    room=e.get('room'),
+                )
+                for e in pending
+            ),
+            key=lambda e: (_day_order(e.day_of_week), e.start_time),
+        )
+
     entries = []
     if group.pk is not None:
         # ``group.schedules`` needs a primary key; an unsaved group being
-        # validated has only its legacy fields.
+        # validated has no rows yet (and must go through ``_pending_schedules``).
         entries = [
-            ScheduleEntry(group, s.day_of_week, s.start_time, s.duration, s.pk)
+            ScheduleEntry(group, s.day_of_week, s.start_time, s.duration, s.pk, room=s.room)
             for s in group.schedules.all()
         ]
-    if not entries and group.schedule_day and group.schedule_time:
-        entries.append(
-            ScheduleEntry(
-                group,
-                group.schedule_day,
-                group.schedule_time,
-                group.duration_minutes or 120,
-            )
-        )
     entries.sort(key=lambda e: (_day_order(e.day_of_week), e.start_time))
     return entries
 
@@ -676,17 +710,13 @@ def _day_order(day_name):
 
 
 def room_schedule_entries(room, day_of_week=None, exclude_group_pk=None,
-                          groups=None, start_before=None):
+                          start_before=None):
     """
     Every session held in ``room`` — optionally restricted to one day.
 
-    Two queries regardless of how many groups use the room: one over
-    ``GroupSchedule`` and one over the legacy groups that have no
-    ``GroupSchedule`` rows at all.
-
-    ``groups`` may be a pre-fetched iterable of the room's active groups; when
-    given it is used verbatim (already annotated/`select_related`) instead of
-    re-querying, which is what the room views do.
+    One direct query over ``GroupSchedule.room`` — rooms live on the session
+    now, not on the group, so a group with different rooms on different days
+    only contributes the rows that actually belong to ``room``.
 
     ``start_before`` narrows the query to sessions starting before that time —
     used by the overlap check so a busy room does not have to be walked in
@@ -695,63 +725,34 @@ def room_schedule_entries(room, day_of_week=None, exclude_group_pk=None,
     if room is None:
         return []
 
-    if groups is not None:
-        entries = []
-        for group in groups:
-            if exclude_group_pk is not None and group.pk == exclude_group_pk:
-                continue
-            for entry in group_schedule_entries(group):
-                if day_of_week is not None and entry.day_of_week != day_of_week:
-                    continue
-                if start_before is not None and entry.start_time >= start_before:
-                    continue
-                entries.append(entry)
-        entries.sort(key=lambda e: (_day_order(e.day_of_week), e.start_time))
-        return entries
-
     schedules = GroupSchedule.objects.filter(
-        group__room=room,
+        room=room,
         group__is_active=True,
         group__deleted_at__isnull=True,
-    ).select_related('group', 'group__teacher', 'group__room')
-    legacy = Group.objects.filter(
-        room=room,
-        is_active=True,
-        schedules__isnull=True,
-    ).select_related('teacher', 'room')
+    ).select_related('group', 'group__teacher', 'room')
 
     if day_of_week is not None:
         schedules = schedules.filter(day_of_week=day_of_week)
-        legacy = legacy.filter(schedule_day=day_of_week)
     if exclude_group_pk is not None:
         schedules = schedules.exclude(group_id=exclude_group_pk)
-        legacy = legacy.exclude(pk=exclude_group_pk)
     if start_before is not None:
         schedules = schedules.filter(start_time__lt=start_before)
-        legacy = legacy.filter(schedule_time__lt=start_before)
 
     entries = [
-        ScheduleEntry(s.group, s.day_of_week, s.start_time, s.duration, s.pk)
+        ScheduleEntry(s.group, s.day_of_week, s.start_time, s.duration, s.pk, room=s.room)
         for s in schedules
     ]
-    entries.extend(
-        ScheduleEntry(g, g.schedule_day, g.schedule_time, g.duration_minutes or 120)
-        for g in legacy
-        if g.schedule_day and g.schedule_time
-    )
     entries.sort(key=lambda e: (_day_order(e.day_of_week), e.start_time))
     return entries
 
 
-def room_week_entries(room, groups=None, exclude_group_pk=None):
+def room_week_entries(room, exclude_group_pk=None):
     """
     ``{day_name: [ScheduleEntry, ...]}`` for every day ``room`` is in use.
     Days with no sessions are omitted; each day's list is ordered by time.
     """
     week = {}
-    for entry in room_schedule_entries(
-        room, exclude_group_pk=exclude_group_pk, groups=groups
-    ):
+    for entry in room_schedule_entries(room, exclude_group_pk=exclude_group_pk):
         week.setdefault(entry.day_of_week, []).append(entry)
     return {day: week[day] for day in WEEK_DAYS if day in week}
 

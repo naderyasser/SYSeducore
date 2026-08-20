@@ -14,6 +14,25 @@ from django.test import TestCase
 
 from apps.students.models import Student
 from apps.teachers.models import Teacher, Group, Room, Subject
+from tests.factories import create_group_with_schedule
+
+
+def _pending_group(group_name, teacher, day, start_time, duration, room, standard_fee):
+    """
+    An unsaved ``Group`` with a single stashed pending schedule entry — the
+    shape ``Group.clean()``'s room-conflict check reads via
+    ``_pending_schedules`` (same mechanism the real create/update views use),
+    since a room now belongs to the session, not the group.
+    """
+    group = Group(
+        group_name=group_name, teacher=teacher,
+        schedule_day=day, schedule_time=start_time,
+        duration_minutes=duration, standard_fee=standard_fee,
+    )
+    group._pending_schedules = [
+        {'day': day, 'time': start_time, 'duration': duration, 'room': room},
+    ]
+    return group
 
 
 class RoomConflictTestMixin:
@@ -31,7 +50,7 @@ class RoomConflictTestMixin:
         )
 
         # Existing group: Saturday 14:00-16:00 (120 min)
-        self.existing_group = Group.objects.create(
+        self.existing_group = create_group_with_schedule(
             group_name='المجموعة الأصلية',
             teacher=self.teacher1, room=self.room,
             schedule_day='Saturday', schedule_time=time(14, 0),
@@ -45,11 +64,9 @@ class TestRoomOverlapDetection(RoomConflictTestMixin, TestCase):
     def test_overlap_same_room_same_day_blocked(self):
         """Overlapping time in same room, same day — must raise ValidationError."""
         # Try: Saturday 15:00-17:00 (overlaps with 14:00-16:00)
-        conflicting = Group(
-            group_name='متعارض',
-            teacher=self.teacher2, room=self.room,
-            schedule_day='Saturday', schedule_time=time(15, 0),
-            duration_minutes=120, standard_fee=Decimal('150.00'),
+        conflicting = _pending_group(
+            'متعارض', self.teacher2, 'Saturday', time(15, 0), 120,
+            self.room, Decimal('150.00'),
         )
         with self.assertRaises(ValidationError):
             conflicting.full_clean()
@@ -57,11 +74,9 @@ class TestRoomOverlapDetection(RoomConflictTestMixin, TestCase):
     def test_overlap_start_during_existing_blocked(self):
         """New group starts during existing — must be blocked."""
         # Try: Saturday 14:30 (starts during 14:00-16:00)
-        conflicting = Group(
-            group_name='يبدأ أثناء',
-            teacher=self.teacher2, room=self.room,
-            schedule_day='Saturday', schedule_time=time(14, 30),
-            duration_minutes=60, standard_fee=Decimal('150.00'),
+        conflicting = _pending_group(
+            'يبدأ أثناء', self.teacher2, 'Saturday', time(14, 30), 60,
+            self.room, Decimal('150.00'),
         )
         with self.assertRaises(ValidationError):
             conflicting.full_clean()
@@ -69,11 +84,9 @@ class TestRoomOverlapDetection(RoomConflictTestMixin, TestCase):
     def test_exact_boundary_allowed(self):
         """New group starts exactly when existing ends — should be ALLOWED."""
         # Existing: 14:00-16:00, New: 16:00-18:00 (exact boundary)
-        non_conflicting = Group(
-            group_name='بعد مباشرة',
-            teacher=self.teacher2, room=self.room,
-            schedule_day='Saturday', schedule_time=time(16, 0),
-            duration_minutes=120, standard_fee=Decimal('150.00'),
+        non_conflicting = _pending_group(
+            'بعد مباشرة', self.teacher2, 'Saturday', time(16, 0), 120,
+            self.room, Decimal('150.00'),
         )
         # Should NOT raise
         non_conflicting.full_clean()
@@ -81,54 +94,44 @@ class TestRoomOverlapDetection(RoomConflictTestMixin, TestCase):
     def test_before_existing_allowed(self):
         """New group ends before existing starts — should be ALLOWED."""
         # New: 11:00-13:00, Existing: 14:00-16:00
-        non_conflicting = Group(
-            group_name='قبل الأصلية',
-            teacher=self.teacher2, room=self.room,
-            schedule_day='Saturday', schedule_time=time(11, 0),
-            duration_minutes=120, standard_fee=Decimal('150.00'),
+        non_conflicting = _pending_group(
+            'قبل الأصلية', self.teacher2, 'Saturday', time(11, 0), 120,
+            self.room, Decimal('150.00'),
         )
         non_conflicting.full_clean()
 
     def test_different_day_allowed(self):
         """Same room, same time, different day — should be ALLOWED."""
-        non_conflicting = Group(
-            group_name='يوم مختلف',
-            teacher=self.teacher2, room=self.room,
-            schedule_day='Sunday', schedule_time=time(14, 0),
-            duration_minutes=120, standard_fee=Decimal('150.00'),
+        non_conflicting = _pending_group(
+            'يوم مختلف', self.teacher2, 'Sunday', time(14, 0), 120,
+            self.room, Decimal('150.00'),
         )
         non_conflicting.full_clean()
 
     def test_different_room_allowed(self):
         """Different room, same day, overlapping time — should be ALLOWED."""
         room2 = Room.objects.create(name='قاعة أخرى', capacity=20)
-        non_conflicting = Group(
-            group_name='قاعة مختلفة',
-            teacher=self.teacher2, room=room2,
-            schedule_day='Saturday', schedule_time=time(14, 0),
-            duration_minutes=120, standard_fee=Decimal('150.00'),
+        non_conflicting = _pending_group(
+            'قاعة مختلفة', self.teacher2, 'Saturday', time(14, 0), 120,
+            room2, Decimal('150.00'),
         )
         non_conflicting.full_clean()
 
     def test_complete_enclosure_blocked(self):
         """New group completely inside existing time slot — must be blocked."""
         # Existing: 14:00-16:00, New: 14:30-15:30
-        conflicting = Group(
-            group_name='داخل الوقت',
-            teacher=self.teacher2, room=self.room,
-            schedule_day='Saturday', schedule_time=time(14, 30),
-            duration_minutes=60, standard_fee=Decimal('150.00'),
+        conflicting = _pending_group(
+            'داخل الوقت', self.teacher2, 'Saturday', time(14, 30), 60,
+            self.room, Decimal('150.00'),
         )
         with self.assertRaises(ValidationError):
             conflicting.full_clean()
 
     def test_no_room_skips_validation(self):
         """Group with no room assigned — should skip room overlap check."""
-        group = Group(
-            group_name='بدون قاعة',
-            teacher=self.teacher2, room=None,
-            schedule_day='Saturday', schedule_time=time(14, 0),
-            duration_minutes=120, standard_fee=Decimal('150.00'),
+        group = _pending_group(
+            'بدون قاعة', self.teacher2, 'Saturday', time(14, 0), 120,
+            None, Decimal('150.00'),
         )
         # Should NOT raise
         group.full_clean()
@@ -150,7 +153,7 @@ class TestEducationStageValidation(TestCase):
         """Primary stage, year 6 — valid combo."""
         group = Group(
             group_name='ابتدائي سادس',
-            teacher=self.teacher, room=self.room,
+            teacher=self.teacher,
             schedule_day='Monday', schedule_time=time(10, 0),
             duration_minutes=90, standard_fee=Decimal('150.00'),
             education_stage='primary', education_year='6',
@@ -165,7 +168,7 @@ class TestEducationStageValidation(TestCase):
         """Preparatory stage, year 4 — invalid, must raise ValidationError."""
         group = Group(
             group_name='إعدادي رابع',
-            teacher=self.teacher, room=self.room,
+            teacher=self.teacher,
             schedule_day='Monday', schedule_time=time(10, 0),
             duration_minutes=90, standard_fee=Decimal('150.00'),
             education_stage='preparatory', education_year='4',
@@ -178,7 +181,7 @@ class TestEducationStageValidation(TestCase):
         """Secondary stage, year 3 — valid combo."""
         group = Group(
             group_name='ثانوي ثالث',
-            teacher=self.teacher, room=self.room,
+            teacher=self.teacher,
             schedule_day='Monday', schedule_time=time(12, 0),
             duration_minutes=90, standard_fee=Decimal('150.00'),
             education_stage='secondary', education_year='3',
@@ -189,7 +192,7 @@ class TestEducationStageValidation(TestCase):
         """Secondary stage, year 5 — invalid, must raise ValidationError."""
         group = Group(
             group_name='ثانوي خامس',
-            teacher=self.teacher, room=self.room,
+            teacher=self.teacher,
             schedule_day='Monday', schedule_time=time(14, 0),
             duration_minutes=90, standard_fee=Decimal('150.00'),
             education_stage='secondary', education_year='5',
@@ -201,7 +204,7 @@ class TestEducationStageValidation(TestCase):
         """No stage set — any year should be valid (optional fields)."""
         group = Group(
             group_name='بدون مرحلة',
-            teacher=self.teacher, room=self.room,
+            teacher=self.teacher,
             schedule_day='Tuesday', schedule_time=time(10, 0),
             duration_minutes=90, standard_fee=Decimal('150.00'),
             education_stage='', education_year='5',

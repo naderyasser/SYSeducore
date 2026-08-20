@@ -31,6 +31,14 @@ class Session(models.Model):
     def __str__(self):
         return f"{self.group.group_name} - {self.session_date}"
 
+    def get_room(self):
+        """
+        قاعة هذه الحصة تحديدًا — كل يوم في المجموعة له قاعته الخاصة، فتُشتق من
+        الموعد المطابق ليوم أسبوع ``session_date`` وليس من المجموعة ككل.
+        """
+        entry = self.group.get_schedule_for_day(self.session_date.strftime('%A'))
+        return entry.room if entry else None
+
 
 class Attendance(models.Model):
     """

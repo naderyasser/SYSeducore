@@ -10,6 +10,7 @@ from datetime import date, time, timedelta
 from django.utils import timezone
 
 from apps.teachers.models import Teacher, Room, Group
+from tests.factories import create_group_with_schedule
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Attendance, Session
 from apps.payments.models import Payment
@@ -52,7 +53,7 @@ class BaseTestCase(TestCase):
         )
 
         # Create test group
-        cls.group = Group.objects.create(
+        cls.group = create_group_with_schedule(
             group_name='مجموعة اختبار',
             teacher=cls.teacher,
             room=cls.room,
@@ -177,7 +178,7 @@ class GroupModelTests(BaseTestCase):
 
     def test_group_room_relation(self):
         """Test group has correct room"""
-        self.assertEqual(self.group.room, self.room)
+        self.assertEqual(self.group.get_schedule_for_day('Saturday').room, self.room)
 
 
 class GroupViewTests(BaseTestCase):

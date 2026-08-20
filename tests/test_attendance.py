@@ -21,6 +21,7 @@ from apps.attendance.services import AttendanceService
 from apps.payments.models import Payment
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.teachers.models import Teacher, Group, Room, Subject
+from tests.factories import create_group_with_schedule
 
 User = get_user_model()
 
@@ -41,7 +42,7 @@ class AttendanceTestMixin:
         # Schedule group for current day so scan matching works
         current_day = AttendanceService.get_current_day_name()
 
-        self.group = Group.objects.create(
+        self.group = create_group_with_schedule(
             group_name='مجموعة حضور',
             teacher=self.teacher,
             room=self.room,
