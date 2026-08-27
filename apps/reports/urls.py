@@ -15,6 +15,9 @@ urlpatterns = [
     path('financial/', views.financial_report, name='financial'),
     path('tsfya/', views.monthly_financial_summary, name='tsfya'),
 
+    # التقرير الشامل التراكمي (مدى تاريخ حر + فلترة مجموعة/مدرس + تصدير CSV)
+    path('comprehensive/', views.comprehensive_report, name='comprehensive'),
+
     # Activity Log - سجل النشاط
     path('activity-log/', views.activity_log, name='activity_log'),
 

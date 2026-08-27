@@ -1184,3 +1184,204 @@ def monthly_financial_summary(request):
     }
 
     return render(request, 'reports/tsfya.html', context)
+
+
+# ==================== Comprehensive (cumulative) report ====================
+
+@admin_required
+def comprehensive_report(request):
+    """
+    التقرير الشامل التراكمي — من أول طالب مسجَّل حتى اليوم افتراضيًا، مع
+    إمكانية تضييق المدى لأي فترة، وفلترة بالمجموعة أو المدرس.
+
+    يغطي طلب العميل: «سجل تراكمي ومنظم من أول يوم عمل أو أول طالب تم تسجيله
+    وحتى تاريخ اليوم، مع إمكانية استخراج تقارير شاملة لأي مجموعة أو فترة».
+    التقارير الأخرى كلها مُقيَّدة بشهر واحد (``payments``/``tsfya``) أو
+    بآخر 12 شهرًا (``financial``)؛ هذه هي الوحيدة بمدى حر.
+
+    ``?export=csv`` يُرجع نفس البيانات كملف CSV بترميز UTF-8 مع BOM حتى
+    يفتحه إكسل بالعربي بشكل صحيح (نفس علاج FE-06 في تصدير الحضور).
+
+    مالية تراكمية على مستوى السنتر ⇒ للأدمن فقط.
+    """
+    import csv
+
+    from django.http import HttpResponse
+
+    today = timezone.localdate()
+
+    # ── المدى الافتراضي: من أول طالب مسجَّل (أو أول دفعة) حتى اليوم ──
+    earliest_student = Student.all_objects.order_by('created_at').values_list(
+        'created_at', flat=True
+    ).first()
+    earliest_payment = Payment.objects.order_by('month').values_list('month', flat=True).first()
+
+    candidates = []
+    if earliest_student:
+        candidates.append(timezone.localtime(earliest_student).date())
+    if earliest_payment:
+        candidates.append(earliest_payment)
+    default_from = min(candidates) if candidates else today.replace(day=1)
+
+    date_from = _parse_date_param(request.GET.get('date_from')) or default_from
+    date_to = _parse_date_param(request.GET.get('date_to')) or today
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+
+    group_id = _parse_int_param(request.GET.get('group'))
+    teacher_id = _parse_int_param(request.GET.get('teacher'))
+
+    # ── المدفوعات في المدى ──
+    # ``month`` هو أول يوم في شهر الفوترة، فالمدى يُقارن على مستوى الشهر
+    # حتى لا يسقط شهر بدأ قبل ``date_from`` بأيام.
+    payments = Payment.objects.filter(
+        month__gte=date_from.replace(day=1), month__lte=date_to,
+    ).select_related('student', 'group', 'group__teacher')
+    if group_id is not None:
+        payments = payments.filter(group__group_id=group_id)
+    if teacher_id is not None:
+        payments = payments.filter(group__teacher__teacher_id=teacher_id)
+
+    totals = payments.aggregate(
+        total_due=Sum('amount_due'),
+        total_paid=Sum('amount_paid'),
+        rows=Count('payment_id'),
+        students=Count('student_id', distinct=True),
+    )
+    total_due = totals['total_due'] or 0
+    total_paid = totals['total_paid'] or 0
+
+    # ── الحضور في المدى ──
+    attendances = Attendance.objects.filter(
+        session__session_date__gte=date_from, session__session_date__lte=date_to,
+        session__is_cancelled=False,
+    )
+    if group_id is not None:
+        attendances = attendances.filter(session__group__group_id=group_id)
+    if teacher_id is not None:
+        attendances = attendances.filter(session__group__teacher__teacher_id=teacher_id)
+
+    att_totals = attendances.aggregate(
+        present=Count('attendance_id', filter=Q(status='present')),
+        late=Count('attendance_id', filter=Q(status='late')),
+        absent=Count('attendance_id', filter=Q(status='absent')),
+        exception=Count('attendance_id', filter=Q(status='exception')),
+    )
+    attended = (att_totals['present'] or 0) + (att_totals['late'] or 0)
+    att_total = attended + (att_totals['absent'] or 0) + (att_totals['exception'] or 0)
+
+    sessions_qs = Session.objects.filter(
+        session_date__gte=date_from, session_date__lte=date_to, is_cancelled=False,
+    )
+    if group_id is not None:
+        sessions_qs = sessions_qs.filter(group__group_id=group_id)
+    if teacher_id is not None:
+        sessions_qs = sessions_qs.filter(group__teacher__teacher_id=teacher_id)
+    sessions_count = sessions_qs.count()
+
+    # ── التفصيل لكل مجموعة: استعلام GROUP BY واحد لكل بُعد، لا حلقة فيها استعلامات ──
+    # ``.order_by()`` إلزامي: ترتيب Meta الافتراضي كان سينضم إلى GROUP BY
+    # ويُرجع صفًا لكل دفعة بدل صف لكل مجموعة (نفس فخ PERF-06).
+    money_rows = {
+        row['group_id']: row
+        for row in payments.values('group_id').annotate(
+            due=Sum('amount_due'), paid=Sum('amount_paid'),
+            students=Count('student_id', distinct=True),
+        ).order_by()
+    }
+    att_rows = {
+        row['session__group_id']: row
+        for row in attendances.values('session__group_id').annotate(
+            present=Count('attendance_id', filter=Q(status='present')),
+            late=Count('attendance_id', filter=Q(status='late')),
+            absent=Count('attendance_id', filter=Q(status='absent')),
+        ).order_by()
+    }
+
+    # ``all_objects`` يشمل المجموعات المحذوفة/المعطّلة — مجموعة أُغلقت في
+    # منتصف المدى ما زالت حقّقت إيرادًا فيه، واستبعادها يجعل مجموع الصفوف
+    # أقل من الإجمالي في الأعلى (نفس علة tsfya-breakdown-drops-inactive-groups).
+    breakdown_ids = set(money_rows) | set(att_rows)
+    groups_by_id = {
+        g.group_id: g
+        for g in Group.all_objects.filter(group_id__in=breakdown_ids).select_related('teacher')
+    }
+
+    breakdown = []
+    for gid in breakdown_ids:
+        group = groups_by_id.get(gid)
+        m = money_rows.get(gid, {})
+        a = att_rows.get(gid, {})
+        g_due = m.get('due') or 0
+        g_paid = m.get('paid') or 0
+        g_present = (a.get('present') or 0) + (a.get('late') or 0)
+        g_absent = a.get('absent') or 0
+        breakdown.append({
+            'group_id': gid,
+            'group_name': group.group_name if group else f'#{gid}',
+            'teacher_name': group.teacher.full_name if (group and group.teacher) else '—',
+            'is_active': bool(group and group.is_active and group.deleted_at is None),
+            'students': m.get('students') or 0,
+            'due': g_due,
+            'paid': g_paid,
+            'remaining': g_due - g_paid,
+            'collection_rate': round(_rate(g_paid, g_due), 1),
+            'present': g_present,
+            'absent': g_absent,
+            'attendance_rate': round(_rate(g_present, g_present + g_absent), 1),
+        })
+    breakdown.sort(key=lambda r: r['group_name'])
+
+    if request.GET.get('export') == 'csv':
+        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+        response['Content-Disposition'] = (
+            f'attachment; filename="comprehensive_{date_from}_{date_to}.csv"'
+        )
+        response.write('﻿')  # BOM — بدونه إكسل يعرض العربي مشفّرًا
+        writer = csv.writer(response)
+        writer.writerow(['التقرير الشامل', f'من {date_from}', f'إلى {date_to}'])
+        writer.writerow([])
+        writer.writerow([
+            'المجموعة', 'المدرس', 'الحالة', 'عدد الطلاب', 'المستحق', 'المحصل',
+            'المتبقي', 'نسبة التحصيل %', 'حضور', 'غياب', 'نسبة الحضور %',
+        ])
+        for row in breakdown:
+            writer.writerow([
+                row['group_name'], row['teacher_name'],
+                'نشطة' if row['is_active'] else 'مغلقة',
+                row['students'], row['due'], row['paid'], row['remaining'],
+                row['collection_rate'], row['present'], row['absent'],
+                row['attendance_rate'],
+            ])
+        writer.writerow([])
+        writer.writerow([
+            'الإجمالي', '', '', totals['students'] or 0, total_due, total_paid,
+            total_due - total_paid, round(_rate(total_paid, total_due), 1),
+            attended, att_totals['absent'] or 0,
+            round(_rate(attended, att_total), 1),
+        ])
+        return response
+
+    context = {
+        'page_title': 'التقرير الشامل',
+        'date_from': date_from,
+        'date_to': date_to,
+        'default_from': default_from,
+        'selected_group': group_id,
+        'selected_teacher': teacher_id,
+        'groups': Group.objects.filter(is_active=True).select_related('teacher').order_by('group_name'),
+        'teachers': Teacher.objects.filter(is_active=True).order_by('full_name'),
+        'total_due': total_due,
+        'total_paid': total_paid,
+        'total_remaining': total_due - total_paid,
+        'collection_rate': round(_rate(total_paid, total_due), 1),
+        'total_students': totals['students'] or 0,
+        'payment_rows': totals['rows'] or 0,
+        'sessions_count': sessions_count,
+        'att_present': att_totals['present'] or 0,
+        'att_late': att_totals['late'] or 0,
+        'att_absent': att_totals['absent'] or 0,
+        'attendance_rate': round(_rate(attended, att_total), 1),
+        'breakdown': breakdown,
+    }
+    return render(request, 'reports/comprehensive.html', context)

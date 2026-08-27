@@ -1,0 +1,191 @@
+{% extends 'base.html' %}
+
+{% block title %}التقرير الشامل{% endblock %}
+{% block page_title %}التقرير الشامل{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filters-card {
+        background: #fff; border-radius: 14px; padding: 18px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 20px;
+    }
+    .kpi-grid {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        gap: 12px; margin-bottom: 22px;
+    }
+    .kpi {
+        background: #fff; border-radius: 14px; padding: 16px; text-align: center;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    }
+    .kpi .label { color: #6b7280; font-size: 0.82rem; margin-bottom: 6px; }
+    .kpi .value { font-size: 1.5rem; font-weight: 700; }
+    .kpi .unit { font-size: 0.75rem; color: #9ca3af; }
+    .kpi.due .value { color: #b91c1c; }
+    .kpi.paid .value { color: #15803d; }
+    .kpi.remaining .value { color: #b45309; }
+    .kpi.rate .value { color: #1d4ed8; }
+
+    .table-card {
+        background: #fff; border-radius: 14px; padding: 4px 0 0;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden;
+    }
+    table.comp { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    table.comp th, table.comp td {
+        padding: 10px 12px; border-bottom: 1px solid #eef0f3; text-align: center;
+        white-space: nowrap;
+    }
+    table.comp th { background: #f8fafc; font-weight: 600; color: #475569; font-size: 0.8rem; }
+    table.comp td.name, table.comp th.name { text-align: right; }
+    table.comp tfoot td { font-weight: 700; background: #f8fafc; border-top: 2px solid #cbd5e1; }
+    .closed-badge { font-size: 0.72rem; color: #9ca3af; }
+    .range-note { color: #6b7280; font-size: 0.85rem; margin-bottom: 14px; }
+
+    @media print {
+        .filters-card, .no-print { display: none !important; }
+        .kpi, .table-card { box-shadow: none !important; border: 1px solid #ddd; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="filters-card no-print">
+    <form method="get" class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label">من تاريخ</label>
+            <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" class="form-control">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">إلى تاريخ</label>
+            <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" class="form-control">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">المجموعة</label>
+            <select name="group" class="form-select">
+                <option value="">كل المجموعات</option>
+                {% for g in groups %}
+                <option value="{{ g.group_id }}" {% if selected_group == g.group_id %}selected{% endif %}>{{ g.group_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">المدرس</label>
+            <select name="teacher" class="form-select">
+                <option value="">كل المدرسين</option>
+                {% for t in teachers %}
+                <option value="{{ t.teacher_id }}" {% if selected_teacher == t.teacher_id %}selected{% endif %}>{{ t.full_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2 d-flex gap-2">
+            <button type="submit" class="btn btn-primary flex-grow-1">
+                <i class="bi bi-funnel me-1"></i>عرض
+            </button>
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <a href="{% url 'reports:comprehensive' %}" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>كل الفترة (من {{ default_from|date:"Y-m-d" }})
+            </a>
+            <a href="?date_from={{ date_from|date:'Y-m-d' }}&date_to={{ date_to|date:'Y-m-d' }}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_teacher %}&teacher={{ selected_teacher }}{% endif %}&export=csv"
+               class="btn btn-sm btn-outline-success">
+                <i class="bi bi-file-earmark-spreadsheet me-1"></i>تصدير CSV
+            </a>
+            <button type="button" onclick="window.print()" class="btn btn-sm btn-outline-dark">
+                <i class="bi bi-printer me-1"></i>طباعة
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="range-note">
+    <i class="bi bi-calendar-range me-1"></i>
+    الفترة: <strong>{{ date_from|date:"Y-m-d" }}</strong> إلى <strong>{{ date_to|date:"Y-m-d" }}</strong>
+    — {{ payment_rows }} سجل دفع، {{ sessions_count }} حصة
+</div>
+
+<div class="kpi-grid">
+    <div class="kpi due">
+        <div class="label">إجمالي المستحق</div>
+        <div class="value">{{ total_due|floatformat:0 }}</div>
+        <div class="unit">ج.م</div>
+    </div>
+    <div class="kpi paid">
+        <div class="label">إجمالي المحصل</div>
+        <div class="value">{{ total_paid|floatformat:0 }}</div>
+        <div class="unit">ج.م</div>
+    </div>
+    <div class="kpi remaining">
+        <div class="label">المتبقي</div>
+        <div class="value">{{ total_remaining|floatformat:0 }}</div>
+        <div class="unit">ج.م</div>
+    </div>
+    <div class="kpi rate">
+        <div class="label">نسبة التحصيل</div>
+        <div class="value">{{ collection_rate }}%</div>
+    </div>
+    <div class="kpi">
+        <div class="label">عدد الطلاب</div>
+        <div class="value">{{ total_students }}</div>
+    </div>
+    <div class="kpi">
+        <div class="label">نسبة الحضور</div>
+        <div class="value">{{ attendance_rate }}%</div>
+        <div class="unit">{{ att_present }} حاضر / {{ att_late }} متأخر / {{ att_absent }} غائب</div>
+    </div>
+</div>
+
+<div class="table-card">
+    <table class="comp">
+        <thead>
+            <tr>
+                <th class="name">المجموعة</th>
+                <th class="name">المدرس</th>
+                <th>الطلاب</th>
+                <th>المستحق</th>
+                <th>المحصل</th>
+                <th>المتبقي</th>
+                <th>التحصيل %</th>
+                <th>حضور</th>
+                <th>غياب</th>
+                <th>الحضور %</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in breakdown %}
+            <tr>
+                <td class="name">
+                    {{ row.group_name }}
+                    {% if not row.is_active %}<span class="closed-badge">(مغلقة)</span>{% endif %}
+                </td>
+                <td class="name">{{ row.teacher_name }}</td>
+                <td>{{ row.students }}</td>
+                <td>{{ row.due|floatformat:0 }}</td>
+                <td>{{ row.paid|floatformat:0 }}</td>
+                <td>{{ row.remaining|floatformat:0 }}</td>
+                <td>{{ row.collection_rate }}%</td>
+                <td>{{ row.present }}</td>
+                <td>{{ row.absent }}</td>
+                <td>{{ row.attendance_rate }}%</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="10" class="text-center text-muted py-5">لا توجد بيانات في هذه الفترة</td></tr>
+            {% endfor %}
+        </tbody>
+        {% if breakdown %}
+        <tfoot>
+            <tr>
+                <td class="name">الإجمالي</td>
+                <td></td>
+                <td>{{ total_students }}</td>
+                <td>{{ total_due|floatformat:0 }}</td>
+                <td>{{ total_paid|floatformat:0 }}</td>
+                <td>{{ total_remaining|floatformat:0 }}</td>
+                <td>{{ collection_rate }}%</td>
+                <td>{{ att_present }}</td>
+                <td>{{ att_absent }}</td>
+                <td>{{ attendance_rate }}%</td>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+</div>
+{% endblock %}

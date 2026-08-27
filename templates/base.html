@@ -829,6 +829,11 @@
                     <span>تسويات المدرسين</span>
                     <i class="bi bi-shield-lock ms-auto" style="font-size: 0.8rem; color: #f59e0b;"></i>
                 </a>
+                <a href="{% url 'reports:comprehensive' %}" class="menu-item {% if request.resolver_match.url_name == 'comprehensive' %}active{% endif %}">
+                    <i class="bi bi-clipboard-data"></i>
+                    <span>التقرير الشامل</span>
+                    <i class="bi bi-shield-lock ms-auto" style="font-size: 0.8rem; color: #f59e0b;"></i>
+                </a>
                 {% endif %}
                 {% if user.can_see_financials %}
                 <a href="{% url 'reports:activity_log' %}" class="menu-item {% if request.resolver_match.url_name == 'activity_log' %}active{% endif %}">

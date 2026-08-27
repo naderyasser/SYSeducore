@@ -624,3 +624,100 @@ class TestFinancialAggregateVisibility(TestRBACBase):
         self.assertTrue(response.context['show_financials'])
         response = self.client.get(reverse('reports:tsfya'))
         self.assertEqual(response.status_code, 200)
+
+
+class TestComprehensiveReport(TestRBACBase):
+    """
+    reports:comprehensive — the cumulative, free-date-range report.
+    Centre-wide money ⇒ admin only. Every other report is locked to one
+    month or a fixed 12-month window; this is the only arbitrary range.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from datetime import date, time
+        from decimal import Decimal
+
+        from apps.attendance.models import Attendance, Session
+        from apps.payments.models import Payment
+        from apps.students.models import Student, StudentGroupEnrollment
+        from apps.teachers.models import Room, Teacher
+        from tests.factories import create_group_with_schedule
+
+        self.url = reverse('reports:comprehensive')
+        self.room = Room.objects.create(name='قاعة الشامل', capacity=20)
+        self.teacher_obj = Teacher.objects.create(
+            full_name='مدرس الشامل', phone='01055554444',
+            specialization='عربي', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الشامل', teacher=self.teacher_obj, room=self.room,
+            schedule_day='Saturday', schedule_time=time(9, 0),
+            standard_fee=Decimal('200.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='CMP001', full_name='طالب الشامل', gender='male',
+            parent_phone='01055553333',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, financial_status='normal', is_active=True,
+        )
+        from django.utils import timezone as tz
+        self.today = tz.localdate()
+        Payment.objects.create(
+            student=self.student, group=self.group,
+            month=self.today.replace(day=1),
+            amount_due=Decimal('200.00'), amount_paid=Decimal('150.00'), status='partial',
+        )
+        session = Session.objects.create(group=self.group, session_date=self.today)
+        Attendance.objects.create(student=self.student, session=session, status='present')
+
+    def test_supervisor_forbidden(self):
+        self.client.login(username='rbac_supervisor', password='TestPass123!')
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_teacher_forbidden(self):
+        self.client.login(username='rbac_teacher', password='TestPass123!')
+        self.assertEqual(self.client.get(self.url).status_code, 403)
+
+    def test_admin_sees_cumulative_totals(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['total_due'], 200)
+        self.assertEqual(response.context['total_paid'], 150)
+        self.assertEqual(response.context['total_remaining'], 50)
+        self.assertEqual(response.context['total_students'], 1)
+        self.assertEqual(len(response.context['breakdown']), 1)
+
+    def test_default_range_starts_at_first_record(self):
+        """With no ?date_from, the range opens at the earliest student/payment."""
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertLessEqual(response.context['date_from'], self.today)
+        self.assertEqual(response.context['date_to'], self.today)
+
+    def test_group_filter_narrows_results(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(self.url, {'group': 99999})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['total_due'], 0)
+        self.assertEqual(len(response.context['breakdown']), 0)
+
+    def test_reversed_dates_are_swapped_not_empty(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(self.url, {
+            'date_from': self.today.isoformat(),
+            'date_to': (self.today.replace(day=1)).isoformat(),
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertLessEqual(response.context['date_from'], response.context['date_to'])
+
+    def test_csv_export_has_bom_and_arabic(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(self.url, {'export': 'csv'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertTrue(response.content.startswith('﻿'.encode('utf-8')))
+        self.assertIn('مجموعة الشامل'.encode('utf-8'), response.content)
