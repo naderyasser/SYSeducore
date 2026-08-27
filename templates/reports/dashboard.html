@@ -500,6 +500,9 @@
 
 <!-- Quick Actions -->
 <div class="row g-3 mb-4">
+    {# Desk-only actions: a teacher account hits 403 on all three, so the
+       dashboard must not offer them a dead-end button. #}
+    {% if user.is_supervisor %}
     <div class="col-6 col-md-3">
         <a href="{% url 'attendance:scanner' %}" class="quick-action">
             <div class="quick-action-icon text-success">
@@ -527,6 +530,7 @@
             <div class="quick-action-desc">سداد مصروفات</div>
         </a>
     </div>
+    {% endif %}
     <div class="col-6 col-md-3">
         <a href="{% url 'reports:attendance' %}" class="quick-action">
             <div class="quick-action-icon" style="color: #8b5cf6;">
@@ -757,7 +761,8 @@
         </div>
     </div>
 
-    <!-- Pending Payments Alert -->
+    <!-- Pending Payments Alert — desk data, not for teachers -->
+    {% if user.can_collect_payments %}
     <div class="col-lg-4">
         <div class="content-card h-100">
             <div class="content-card-header">
@@ -797,6 +802,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <!-- Week Trend & Activity Row -->

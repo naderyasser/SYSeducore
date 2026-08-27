@@ -79,7 +79,7 @@ def student_barcode(request, student_id):
         }, status=500)
 
 
-@ajax_login_required
+@ajax_supervisor_required
 @require_http_methods(["POST"])
 def send_barcode_whatsapp(request, student_id):
     """

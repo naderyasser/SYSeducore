@@ -589,9 +589,11 @@
 <div class="page-header mb-4">
     <h1><i class="bi bi-people me-2" style="color: #3b82f6;"></i>إدارة الطلاب</h1>
     <div class="d-flex gap-2">
+        {% if user.is_supervisor %}
         <a href="{% url 'students:create' %}" class="btn btn-primary">
             <i class="bi bi-person-plus me-1"></i>إضافة طالب
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -808,9 +810,11 @@
         <i class="bi bi-inbox"></i>
         <h3>لا يوجد طلاب</h3>
         <p>ابدأ بإضافة طلاب جدد للمركز</p>
+        {% if user.is_supervisor %}
         <a href="{% url 'students:create' %}" class="btn btn-primary">
             <i class="bi bi-person-plus me-1"></i>إضافة طالب
         </a>
+        {% endif %}
     </div>
     {% endif %}
 

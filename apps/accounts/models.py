@@ -36,29 +36,29 @@ class User(AbstractUser):
     def __str__(self):
         return f"{self.get_full_name() or self.username} ({self.get_role_display()})"
     
+    # ── Role predicates ──────────────────────────────────────────────
+    # A superuser counts as admin regardless of ``role``: they already pass
+    # every ``@admin_required`` view (``decorators._has_role`` short-circuits
+    # on ``is_superuser``), so a predicate that read ``role`` alone made the
+    # templates disagree with what the views actually allow — a superuser
+    # left on the default ``'supervisor'`` role got the admin's access but
+    # the supervisor's menu. Views and templates must both gate on these
+    # methods, never on ``role == '...'`` directly.
+
     def is_admin(self):
-        return self.role == 'admin'
+        return bool(self.is_superuser or self.role == 'admin')
 
     def is_supervisor(self):
-        return self.role in ['admin', 'supervisor']
+        """Desk staff — reception/attendance supervisor, or an admin above them."""
+        return bool(self.is_superuser or self.role in ('admin', 'supervisor'))
 
     def is_teacher(self):
         return self.role == 'teacher'
 
     def can_see_financials(self):
-        """
-        Cumulative money — total revenue, centre dues, collection rate.
-        Admin only.
-
-        ``is_admin()`` misses a superuser whose ``role`` is still the
-        default ``'supervisor'``: they pass every ``@admin_required`` view
-        but ``is_admin()`` says False, so templates gated on it disagree
-        with what the view actually allows. Views and templates must both
-        gate on this method (not ``role == 'admin'`` directly) so the two
-        can never diverge.
-        """
-        return bool(self.is_superuser or self.role == 'admin')
+        """Cumulative money — total revenue, centre dues, collection rate."""
+        return self.is_admin()
 
     def can_collect_payments(self):
-        """Day-to-day desk collection (per-payment, not aggregates) — admin or supervisor."""
-        return bool(self.is_superuser or self.role in ('admin', 'supervisor'))
+        """Day-to-day desk collection (per-payment, never aggregates)."""
+        return self.is_supervisor()

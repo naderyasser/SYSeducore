@@ -8,9 +8,11 @@
         <i class="bi bi-book"></i> المواد الدراسية
     </h1>
     <div class="user-info">
+        {% if user.is_supervisor %}
         <a href="{% url 'teachers:subject_create' %}" class="btn btn-primary btn-sm">
             <i class="bi bi-plus-lg"></i> إضافة مادة جديدة
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -93,7 +95,7 @@
             {% else %}
             <div class="alert alert-info" role="alert">
                 <i class="bi bi-info-circle"></i> لا توجد مواد دراسية حالياً
-                <a href="{% url 'teachers:subject_create' %}" class="alert-link">أضف مادة جديدة</a>
+                {% if user.is_supervisor %}<a href="{% url 'teachers:subject_create' %}" class="alert-link">أضف مادة جديدة</a>{% endif %}
             </div>
             {% endif %}
         </div>

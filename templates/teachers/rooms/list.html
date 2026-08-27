@@ -276,9 +276,11 @@
 <!-- Page Header -->
 <div class="page-header">
     <h1><i class="bi bi-door-open me-2" style="color: #3b82f6;"></i>إدارة القاعات</h1>
+    {% if user.is_supervisor %}
     <a href="{% url 'teachers:room_create' %}" class="btn btn-primary">
         <i class="bi bi-plus me-1"></i>إضافة قاعة
     </a>
+    {% endif %}
 </div>
 
 <!-- Stats Overview -->
@@ -375,9 +377,11 @@
     <i class="bi bi-inbox"></i>
     <h3>لا توجد قاعات</h3>
     <p>ابدأ بإضافة قاعات جديدة للمركز</p>
+    {% if user.is_supervisor %}
     <a href="{% url 'teachers:room_create' %}" class="btn btn-primary">
         <i class="bi bi-plus me-1"></i>إضافة قاعة
     </a>
+    {% endif %}
 </div>
 {% endif %}
 

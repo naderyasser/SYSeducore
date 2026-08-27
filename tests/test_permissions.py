@@ -721,3 +721,138 @@ class TestComprehensiveReport(TestRBACBase):
         self.assertIn('attachment', response['Content-Disposition'])
         self.assertTrue(response.content.startswith('﻿'.encode('utf-8')))
         self.assertIn('مجموعة الشامل'.encode('utf-8'), response.content)
+
+
+class TestScannerAndOutboundAreDeskOnly(TestRBACBase):
+    """
+    The scanner is a desk tool and outbound WhatsApp spends the centre's
+    account — both must be supervisor+. These four were the only endpoints in
+    their modules still on ``ajax_login_required``, so a teacher account could
+    register attendance and message parents while every button beside them
+    (pay-now, grace, exception, cancel) already refused.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from datetime import date
+        from apps.students.models import Student
+
+        self.student = Student.objects.create(
+            student_code='SC001', full_name='طالب السكانر', gender='male',
+            parent_phone='01012340000',
+        )
+
+    def test_teacher_cannot_open_scanner_page(self):
+        self.client.login(username='rbac_teacher', password='TestPass123!')
+        self.assertEqual(self.client.get(reverse('attendance:scanner')).status_code, 403)
+
+    def test_teacher_cannot_register_attendance(self):
+        self.client.login(username='rbac_teacher', password='TestPass123!')
+        response = self.client.post(
+            reverse('attendance:process_student_code'),
+            data=json.dumps({'student_code': self.student.student_code}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_teacher_cannot_send_whatsapp(self):
+        self.client.login(username='rbac_teacher', password='TestPass123!')
+        response = self.client.post(
+            reverse('students:api_send_barcode', kwargs={'student_id': self.student.pk})
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_teacher_cannot_list_exception_reasons(self):
+        self.client.login(username='rbac_teacher', password='TestPass123!')
+        self.assertEqual(
+            self.client.get(reverse('attendance:exception_reasons_list')).status_code, 403
+        )
+
+    def test_supervisor_still_can_do_all_four(self):
+        """Tightening must not break the desk's own workflow."""
+        self.client.login(username='rbac_supervisor', password='TestPass123!')
+        self.assertEqual(self.client.get(reverse('attendance:scanner')).status_code, 200)
+        self.assertEqual(
+            self.client.get(reverse('attendance:exception_reasons_list')).status_code, 200
+        )
+        response = self.client.post(
+            reverse('attendance:process_student_code'),
+            data=json.dumps({'student_code': self.student.student_code}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        # Outbound send is reachable (it may still fail on config, not on auth).
+        response = self.client.post(
+            reverse('students:api_send_barcode', kwargs={'student_id': self.student.pk})
+        )
+        self.assertNotEqual(response.status_code, 403)
+
+
+class TestNoDeadEndLinks(TestRBACBase):
+    """
+    A page must never offer a role a link that answers 403. The nav and the
+    list-page "add" buttons were rendered unconditionally, so a teacher saw
+    the scanner, payments, recycle bin and five create buttons — every one of
+    which refused them on click.
+
+    This crawls what each role is actually served and follows every internal
+    link, so a future template that forgets its guard fails here.
+    """
+
+    PAGES = [
+        '/reports/', '/reports/attendance/', '/students/', '/teachers/',
+        '/teachers/groups/', '/teachers/rooms/', '/teachers/subjects/',
+    ]
+
+    def _dead_ends(self, username):
+        import re
+        self.client.login(username=username, password='TestPass123!')
+        seen, dead = set(), []
+        for page in self.PAGES:
+            response = self.client.get(page)
+            if response.status_code != 200:
+                continue
+            for href in set(re.findall(r'href="(/[a-z0-9\-/_]*)"', response.content.decode())):
+                if href.startswith('/static') or href == '/' or href in seen:
+                    continue
+                seen.add(href)
+                if self.client.get(href).status_code in (401, 403):
+                    dead.append(href)
+        return sorted(set(dead))
+
+    def test_teacher_sees_no_forbidden_links(self):
+        self.assertEqual(self._dead_ends('rbac_teacher'), [])
+
+    def test_supervisor_sees_no_forbidden_links(self):
+        self.assertEqual(self._dead_ends('rbac_supervisor'), [])
+
+    def test_admin_sees_no_forbidden_links(self):
+        self.assertEqual(self._dead_ends('rbac_admin'), [])
+
+
+class TestSuperuserPredicates(TestRBACBase):
+    """
+    A superuser passes every ``@admin_required`` view (``_has_role``
+    short-circuits on ``is_superuser``), so the template predicates must
+    agree — otherwise they get an admin's access behind a supervisor's menu.
+    """
+
+    def test_superuser_on_default_role_counts_as_admin(self):
+        su = User.objects.create_superuser(
+            username='rbac_su', password='TestPass123!', email='su@example.com',
+        )
+        self.assertEqual(su.role, 'supervisor')       # the default
+        self.assertTrue(su.is_admin())
+        self.assertTrue(su.is_supervisor())
+        self.assertTrue(su.can_see_financials())
+        self.assertTrue(su.can_collect_payments())
+
+    def test_plain_supervisor_is_not_admin(self):
+        self.assertTrue(self.supervisor.is_supervisor())
+        self.assertFalse(self.supervisor.is_admin())
+        self.assertFalse(self.supervisor.can_see_financials())
+
+    def test_teacher_is_neither(self):
+        self.assertFalse(self.teacher.is_admin())
+        self.assertFalse(self.teacher.is_supervisor())
+        self.assertFalse(self.teacher.can_collect_payments())

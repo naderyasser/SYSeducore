@@ -25,7 +25,7 @@ logger = logging.getLogger('attendance')
 SERVER_ERROR_MESSAGE = 'حدث خطأ في النظام، يرجى المحاولة مرة أخرى'
 
 
-@login_required
+@supervisor_required
 def scanner_page(request):
     """
     صفحة إدخال كود الطالب (النظام الجديد)
@@ -35,7 +35,7 @@ def scanner_page(request):
     })
 
 
-@ajax_login_required
+@ajax_supervisor_required
 @ratelimit(key=ratelimit_key, rate='30/m', block=False)
 @require_http_methods(["POST"])
 def process_student_code(request):
@@ -738,7 +738,7 @@ def grant_exception(request):
         return JsonResponse({'success': False, 'message': SERVER_ERROR_MESSAGE}, status=500)
 
 
-@ajax_login_required
+@ajax_supervisor_required
 @require_http_methods(["GET"])
 def exception_reasons_list(request):
     """

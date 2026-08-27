@@ -26,9 +26,11 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0"><i class="bi bi-collection me-2"></i>إدارة المجموعات</h4>
+    {% if user.is_supervisor %}
     <a href="{% url 'teachers:group_create' %}" class="btn btn-success">
         <i class="bi bi-plus-lg me-2"></i>إضافة مجموعة
     </a>
+    {% endif %}
 </div>
 
 <div class="card">
