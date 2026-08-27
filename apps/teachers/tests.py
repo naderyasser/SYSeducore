@@ -1032,3 +1032,53 @@ class GroupRosterPrintTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'طالب الكشف')
         self.assertContains(response, 'زائر / غير مسجَّل')
+
+
+class GroupCycleDisplayTest(TestCase):
+    """
+    Group detail must show the group's own cycle system (4 vs 8 sessions)
+    and the value of a single session derived from it — groups differ
+    (8×1h/week vs 4×2h/week) so a flat number would be wrong for half of them.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.supervisor = get_user_model().objects.create_user(
+            username='cyc_sup', password='TestPass123!', role='supervisor',
+        )
+        self.client.login(username='cyc_sup', password='TestPass123!')
+        self.room = Room.objects.create(name='قاعة الدورة', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الدورة', phone='01044440000',
+            specialization='علوم', hire_date=date(2024, 1, 1),
+        )
+
+    def _group(self, sessions, fee):
+        return create_group_with_schedule(
+            group_name=f'مجموعة {sessions}', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(9, 0),
+            standard_fee=Decimal(fee), sessions_per_month=sessions,
+        )
+
+    def test_eight_session_group_per_session_fee(self):
+        group = self._group(8, '400.00')
+        response = self.client.get(
+            reverse('teachers:group_detail', kwargs={'group_id': group.group_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['per_session_fee'], Decimal('50.00'))
+
+    def test_four_session_group_per_session_fee(self):
+        group = self._group(4, '400.00')
+        response = self.client.get(
+            reverse('teachers:group_detail', kwargs={'group_id': group.group_id})
+        )
+        self.assertEqual(response.context['per_session_fee'], Decimal('100.00'))
+
+    def test_uncounted_group_has_no_per_session_fee(self):
+        """sessions_per_month = 0 means the group isn't cycle-billed at all."""
+        group = self._group(0, '400.00')
+        response = self.client.get(
+            reverse('teachers:group_detail', kwargs={'group_id': group.group_id})
+        )
+        self.assertIsNone(response.context['per_session_fee'])

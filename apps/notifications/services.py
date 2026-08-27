@@ -363,56 +363,23 @@ class WhatsAppService:
 
         return self.send_bulk_message([r['phone'] for r in recipients], message)
 
-    #: Egypt country code, used only when the number is unmistakably local.
+    #: Kept as class attributes for backwards compatibility — the real
+    #: implementation now lives in ``apps.students.utils.whatsapp_number``.
     DEFAULT_COUNTRY_CODE = '20'
-    #: Length of an Egyptian mobile number written without the leading zero.
     EGYPT_LOCAL_LENGTH = 10
 
     def _format_phone_number(self, phone):
         """
-        Format a phone number for the WhatsApp API (digits, country code first).
+        Format a phone number for the WhatsApp API (digits, country code
+        first).
 
-        DATA-28: the old implementation force-prefixed ``20`` onto *anything*
-        that did not already start with ``20``, so ``+966501234567`` was
-        mangled into ``20966501234567`` and delivered to a stranger — or to
-        nobody. The rules now are:
-
-        * an explicit international prefix (``+`` or ``00``) is respected and
-          only stripped of its punctuation — never re-prefixed;
-        * ``01xxxxxxxxx`` — the canonical stored format (see
-          ``apps.students.utils.normalize_phone``) — becomes ``201xxxxxxxxx``;
-        * a bare 10-digit local number gets the Egypt code;
-        * anything already starting with ``20`` is left alone;
-        * anything else is passed through as digits rather than guessed at.
+        Delegates to :func:`apps.students.utils.whatsapp_number`, which is the
+        single implementation shared with every ``wa.me`` link in the
+        templates — a second copy here is exactly how the two drifted apart
+        before (DATA-28).
         """
-        raw = str(phone or '').strip()
-
-        # Explicit international format: trust the caller, just normalise it.
-        if raw.startswith('+'):
-            return ''.join(filter(str.isdigit, raw))
-
-        digits = ''.join(filter(str.isdigit, raw))
-        if not digits:
-            return digits
-
-        # 00 <country code> ... is the other international prefix.
-        if digits.startswith('00'):
-            return digits[2:]
-
-        # Local Egyptian format 01xxxxxxxxx -> 201xxxxxxxxx
-        if digits.startswith('0'):
-            return self.DEFAULT_COUNTRY_CODE + digits[1:]
-
-        if digits.startswith(self.DEFAULT_COUNTRY_CODE):
-            return digits
-
-        # A bare local number with the trunk zero dropped.
-        if len(digits) == self.EGYPT_LOCAL_LENGTH:
-            return self.DEFAULT_COUNTRY_CODE + digits
-
-        # Unknown shape (already a foreign country code, a short code, ...) —
-        # sending it unchanged is far safer than inventing an Egyptian number.
-        return digits
+        from apps.students.utils import whatsapp_number
+        return whatsapp_number(phone)
 
     def build_attendance_message(self, student_name, status, time):
         """

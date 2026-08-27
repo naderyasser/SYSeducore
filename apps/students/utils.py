@@ -109,6 +109,55 @@ def normalize_phone(phone):
     return phone
 
 
+#: Egypt country code, used when a stored local number is dialled internationally.
+DEFAULT_COUNTRY_CODE = '20'
+#: Length of an Egyptian mobile number once the trunk ``0`` is dropped.
+EGYPT_LOCAL_LENGTH = 10
+
+
+def whatsapp_number(phone):
+    """
+    A phone in the digits-only, country-code-first form ``wa.me`` and the
+    WhatsApp API both require (``201xxxxxxxxx``) — never with a ``+``.
+
+    This is the single implementation. ``normalize_phone`` above defines how
+    a number is *stored* (``01xxxxxxxxx``); this defines how it is *dialled*.
+    Templates that hand a raw stored number to ``wa.me`` produce a dead link
+    (``wa.me/01012345678`` is not a valid number), so every WhatsApp link and
+    every API send must go through here.
+
+    DATA-28: a foreign number must never be re-prefixed with Egypt's code —
+    ``+966501234567`` used to become ``20966501234567`` and reach a stranger.
+    """
+    raw = str(phone or '').strip()
+
+    # Explicit international format: trust it, just strip punctuation.
+    if raw.startswith('+'):
+        return ''.join(filter(str.isdigit, raw))
+
+    digits = ''.join(filter(str.isdigit, raw))
+    if not digits:
+        return digits
+
+    if digits.startswith('00'):
+        return digits[2:]
+
+    # Canonical stored local format 01xxxxxxxxx -> 201xxxxxxxxx
+    if digits.startswith('0'):
+        return DEFAULT_COUNTRY_CODE + digits[1:]
+
+    if digits.startswith(DEFAULT_COUNTRY_CODE):
+        return digits
+
+    # A bare local number with the trunk zero dropped.
+    if len(digits) == EGYPT_LOCAL_LENGTH:
+        return DEFAULT_COUNTRY_CODE + digits
+
+    # Unknown shape (foreign code, short code, ...) — passing it through is
+    # far safer than inventing an Egyptian number for it.
+    return digits
+
+
 def enrollment_compatibility_errors(student, group):
     """
     Arabic error messages for an incompatible student/group enrollment.

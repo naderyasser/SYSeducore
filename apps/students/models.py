@@ -191,6 +191,23 @@ class Student(SoftDeleteModel):
             return "رقم الأب"
         return "رقم الأم/الأخت"
 
+    @property
+    def student_whatsapp(self):
+        """
+        رقم الطالب بصيغة ``wa.me`` (بلا + وبكود الدولة أولًا).
+
+        القوالب لا يجوز أن تمرر ``student_phone`` الخام إلى ``wa.me`` — الرقم
+        مخزَّن ``01xxxxxxxxx`` و``wa.me/01…`` رابط ميت.
+        """
+        from .utils import whatsapp_number
+        return whatsapp_number(self.student_phone)
+
+    @property
+    def parent_whatsapp(self):
+        """رقم ولي الأمر بصيغة ``wa.me`` — انظر :attr:`student_whatsapp`."""
+        from .utils import whatsapp_number
+        return whatsapp_number(self.parent_phone)
+
     def clean(self):
         super().clean()
         STAGE_YEAR_MAP = {

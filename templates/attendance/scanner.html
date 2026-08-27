@@ -1460,8 +1460,11 @@ function renderDossier(d) {
     // Parent contact — fixed WhatsApp URL
     let contactHtml = '';
     if (d.parent_phone) {
-        const phone = d.parent_phone.replace(/\D/g, '');
-        const waPhone = phone.startsWith('0') ? '2' + phone : phone;
+        // Server-computed (apps.students.utils.whatsapp_number). Deriving it
+        // here in JS was a third copy of the rule and mangled non-Egyptian
+        // numbers; the fallback only covers an older cached response.
+        const waPhone = d.parent_whatsapp
+            || (function (p) { return p.startsWith('0') ? '2' + p : p; })(d.parent_phone.replace(/\D/g, ''));
         const safePhone = escHtml(d.parent_phone);
         contactHtml = `
             <div class="dossier-contact">

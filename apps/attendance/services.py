@@ -854,6 +854,10 @@ class AttendanceService:
             'education': student.get_education_display_full(),
             'student_phone': student.student_phone or None,
             'parent_phone': student.parent_phone or None,
+            # Dial-ready form for wa.me — computed server-side by the single
+            # implementation (apps.students.utils.whatsapp_number) instead of
+            # the scanner re-deriving it in JS and drifting from it.
+            'parent_whatsapp': student.parent_whatsapp or None,
             'parent_name': student.parent_name or None,
             'personal': {
                 'address': student.address or '',

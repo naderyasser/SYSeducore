@@ -485,8 +485,9 @@ def group_detail(request, group_id):
     الطلاب ومبالغهم؛ رُفع إلى ``@supervisor_required``.
     """
     from datetime import timedelta
+    from decimal import Decimal
     from apps.attendance.grids import build_group_attendance_grid
-    from apps.payments.models import Payment
+    from apps.payments.models import Payment, to_money
     from apps.teachers.models import GroupCycle
 
     group = get_object_or_404(
@@ -539,6 +540,19 @@ def group_detail(request, group_id):
             'payment_amount_due': payment.amount_due if payment else None,
         })
 
+    # قيمة الحصة الواحدة = مصروف الدورة ÷ عدد حصصها. المجموعات تختلف
+    # (8 حصص ساعة مرتين أسبوعيًا مقابل 4 حصص ساعتين أسبوعيًا)، فالقيمة
+    # تُشتق من جدول المجموعة نفسها لا من رقم ثابت.
+    per_session_fee = None
+    if group.sessions_per_month and group.standard_fee:
+        per_session_fee = to_money(
+            Decimal(group.standard_fee) / Decimal(group.sessions_per_month)
+        )
+
+    cycle_sessions_done = (
+        open_cycle.sessions.filter(is_cancelled=False).count() if open_cycle else 0
+    )
+
     context = {
         'group': group,
         'enrolled_students': enrolled_students,
@@ -551,6 +565,8 @@ def group_detail(request, group_id):
         'grid_from': grid_from,
         'grid_to': grid_to,
         'open_cycle': open_cycle,
+        'per_session_fee': per_session_fee,
+        'cycle_sessions_done': cycle_sessions_done,
     }
     return render(request, 'teachers/groups/detail.html', context)
 

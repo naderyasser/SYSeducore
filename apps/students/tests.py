@@ -792,3 +792,53 @@ class StudentCreateInitialPaymentTest(AuditBaseTest):
         payment = Payment.objects.get(student=student, group=self.group)
         self.assertEqual(payment.amount_paid, Decimal('200.00'))
         self.assertEqual(payment.status, 'paid')
+
+
+class WhatsAppNumberTest(TestCase):
+    """
+    apps.students.utils.whatsapp_number — the single dial-ready formatter
+    shared by every wa.me link and the WhatsApp API. A stored 01xxxxxxxxx
+    handed straight to wa.me is a dead link, and a foreign number must never
+    be re-prefixed with Egypt's code (DATA-28).
+    """
+
+    def test_local_egyptian_gets_country_code(self):
+        from apps.students.utils import whatsapp_number
+        self.assertEqual(whatsapp_number('01012345678'), '201012345678')
+
+    def test_already_international_plus_is_kept(self):
+        from apps.students.utils import whatsapp_number
+        self.assertEqual(whatsapp_number('+966501234567'), '966501234567')
+
+    def test_double_zero_prefix_stripped(self):
+        from apps.students.utils import whatsapp_number
+        self.assertEqual(whatsapp_number('00201012345678'), '201012345678')
+
+    def test_already_prefixed_left_alone(self):
+        from apps.students.utils import whatsapp_number
+        self.assertEqual(whatsapp_number('201012345678'), '201012345678')
+
+    def test_bare_ten_digits_gets_code(self):
+        from apps.students.utils import whatsapp_number
+        self.assertEqual(whatsapp_number('1012345678'), '201012345678')
+
+    def test_empty_is_safe(self):
+        from apps.students.utils import whatsapp_number
+        self.assertEqual(whatsapp_number(''), '')
+        self.assertEqual(whatsapp_number(None), '')
+
+    def test_whatsapp_service_delegates_to_same_rule(self):
+        """The API sender and the templates must agree, byte for byte."""
+        from apps.notifications.services import WhatsAppService
+        from apps.students.utils import whatsapp_number
+        svc = WhatsAppService()
+        for raw in ('01012345678', '+966501234567', '00201012345678', '1012345678'):
+            self.assertEqual(svc._format_phone_number(raw), whatsapp_number(raw))
+
+    def test_student_properties(self):
+        student = Student.objects.create(
+            student_code='WA001', full_name='طالب واتساب', gender='male',
+            student_phone='01011112222', parent_phone='01033334444',
+        )
+        self.assertEqual(student.student_whatsapp, '201011112222')
+        self.assertEqual(student.parent_whatsapp, '201033334444')
