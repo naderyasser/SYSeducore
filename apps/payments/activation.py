@@ -65,7 +65,9 @@ def activate_payment(payment, *, paid_on=None, user=None, request=None):
                 session__is_cancelled=False, session__session_date__gte=paid_on,
             )
             .exclude(status='absent')
-            .order_by('session__sequence_in_cycle')
+            # By date, not by sequence_in_cycle — sequences are renumbered
+            # when a session is cancelled or backfilled, dates are not.
+            .order_by('session__session_date')
             .select_related('session')
             .first()
         )

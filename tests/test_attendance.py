@@ -341,3 +341,116 @@ class TestUpdatePaymentSessions(AttendanceTestMixin, TestCase):
         self.assertEqual(payment.entitlement_start_seq, 2)
         self.assertEqual(payment.sessions_total, 3)
         self.assertEqual(payment.amount_due, Decimal('150.00'))
+
+
+class TestLateJoinerNotChargedForEarlierAbsences(AttendanceTestMixin, TestCase):
+    """
+    Counting starts at the student's FIRST ATTENDANCE, not at the start of
+    the cycle. ``auto_mark_absent_sessions`` writes an absence row for every
+    enrolled student from day one, so counting from the cycle start charged a
+    late joiner for sessions they were never at — and, because entitlement is
+    pro-rated to what remains, exhausted it before their first lesson.
+    """
+
+    def test_absences_before_first_attendance_do_not_consume(self):
+        for i in range(3):
+            self._attend(day_offset=i, status='absent')
+        session4 = self._attend(day_offset=3, status='present')
+
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment = Payment.objects.get(student=self.student, cycle=session4.cycle)
+
+        self.assertEqual(payment.entitlement_start_seq, 4)
+        self.assertEqual(payment.sessions_total, 1)
+        self.assertEqual(payment.sessions_attended, 1)
+        # 200 ج.م over 4 sessions, entitled to the last one only.
+        self.assertEqual(payment.amount_due, Decimal('50.00'))
+
+    def test_absence_after_first_attendance_does_consume(self):
+        """Once counting has started, an absence burns a session as normal."""
+        self._attend(day_offset=0, status='present')
+        self._attend(day_offset=1, status='absent')
+
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment = Payment.objects.get(student=self.student, group=self.group)
+        self.assertEqual(payment.entitlement_start_seq, 1)
+        self.assertEqual(payment.sessions_attended, 2)
+
+    def test_never_attended_consumes_nothing(self):
+        """An enrolled student who never shows up must not burn entitlement."""
+        for i in range(3):
+            self._attend(day_offset=i, status='absent')
+
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment = Payment.objects.get(student=self.student, group=self.group)
+        self.assertIsNone(payment.entitlement_start_seq)
+        self.assertEqual(payment.sessions_attended, 0)
+
+    def test_late_joiner_is_not_locked_out_after_first_lesson(self):
+        """The end-to-end symptom the bug produced: instant lockout."""
+        self._mark_as_returning_student()
+        for i in range(3):
+            self._attend(day_offset=i, status='absent')
+        self._attend(day_offset=3, status='present')
+        AttendanceService.update_payment_sessions(self.student, self.group)
+
+        result = AttendanceService.check_financial_status(self.student, self.group)
+        self.assertNotEqual(
+            result.get('error_type'), 'sessions_exhausted',
+            'a student who has attended once must not already be exhausted',
+        )
+
+
+class TestAnchorSurvivesRenumbering(AttendanceTestMixin, TestCase):
+    """
+    The consumed-session count is anchored on the start session's DATE, not
+    its sequence number. Sequences are renumbered when a session is cancelled
+    or backfilled at an earlier date, so a sequence-based anchor would
+    silently come to mean a different lesson and mis-count the student.
+    """
+
+    def test_cancelling_an_earlier_session_does_not_shift_the_count(self):
+        from apps.attendance.entitlement import _consumed_sessions
+
+        s1 = self._attend(day_offset=0, status='absent')
+        s2 = self._attend(day_offset=1, status='absent')
+        s3 = self._attend(day_offset=2, status='present')   # student starts here
+        self._attend(day_offset=3, status='present')
+
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment = Payment.objects.get(student=self.student, cycle=s3.cycle)
+        self.assertEqual(payment.entitlement_start_session_id, s3.session_id)
+        self.assertEqual(_consumed_sessions(
+            self.student, s3.cycle, anchor_session=payment.entitlement_start_session), 2)
+
+        # Cancel a session BEFORE the student's start — everything after it
+        # renumbers, but the student's own count must not move.
+        from apps.teachers.cycles import renumber_cycle
+        s2.is_cancelled = True
+        s2.save(update_fields=['is_cancelled'])
+        renumber_cycle(s3.cycle)
+
+        payment.refresh_from_db()
+        s3.refresh_from_db()
+        self.assertEqual(s3.sequence_in_cycle, 2, 'sequence did shift')
+        self.assertEqual(payment.entitlement_start_session_id, s3.session_id)
+        self.assertEqual(
+            _consumed_sessions(self.student, s3.cycle,
+                               anchor_session=payment.entitlement_start_session),
+            2,
+            'count must still be the 2 sessions from the anchor date onward',
+        )
+
+    def test_cancelled_session_loses_its_sequence(self):
+        s1 = self._attend(day_offset=0, status='present')
+        s2 = self._attend(day_offset=1, status='present')
+        from apps.teachers.cycles import renumber_cycle
+
+        s1.is_cancelled = True
+        s1.save(update_fields=['is_cancelled'])
+        renumber_cycle(s1.cycle)
+
+        s1.refresh_from_db()
+        s2.refresh_from_db()
+        self.assertIsNone(s1.sequence_in_cycle)
+        self.assertEqual(s2.sequence_in_cycle, 1)

@@ -44,23 +44,63 @@ def _has_ever_paid(student, group):
     return Payment.objects.filter(student=student, group=group, status='paid').exists()
 
 
-def _consumed_sessions(student, cycle, from_seq=None):
+def first_consumed_session(student, cycle):
     """
-    Count of non-cancelled sessions in ``cycle`` this student has consumed
-    (present, late, absent, or exception all count — an absence still burns
-    the session). ``from_seq`` restricts to sessions at/after that sequence
-    number (used to measure grace from the student's own join point).
+    The session at which this student's counting starts — their first *real*
+    attendance in ``cycle`` (present / late / exception, never a bare absence).
+
+    The client's rule is explicit: counting begins at the first session the
+    student actually attends, and only from then on does an absence burn a
+    session ("بمجرد تسجيل أول حضور للطالب، يبدأ السيستم في عد الحصص سواء
+    حضر أو غاب"). ``auto_mark_absent_sessions`` writes an absence row for
+    every *enrolled* student whether or not they have ever shown up, so
+    counting from the start of the cycle would charge a late-joining student
+    for sessions they were never at — and, since their entitlement is
+    pro-rated to what is left, would exhaust it before their first lesson.
+
+    Returns the :class:`~apps.attendance.models.Session`, or ``None`` when
+    the student has no qualifying attendance yet.
     """
     from .models import Attendance
 
-    qs = Attendance.objects.filter(
+    first = (
+        Attendance.objects.filter(
+            student=student, session__cycle=cycle, session__is_cancelled=False,
+        )
+        .exclude(status='absent')
+        .order_by('session__session_date')
+        .select_related('session')
+        .first()
+    )
+    return first.session if first else None
+
+
+def _consumed_sessions(student, cycle, anchor_session=None):
+    """
+    Count of non-cancelled sessions in ``cycle`` this student has consumed
+    (present, late, absent or exception all count — an absence burns a
+    session, once counting has started).
+
+    Anchored on the start session's **date**, never on its
+    ``sequence_in_cycle``. Sequence numbers are renumbered whenever a session
+    is cancelled or one is backfilled at an earlier date, so a stored
+    sequence silently comes to point at a different lesson; the date does
+    not move. (``Payment.entitlement_start_seq`` stays a frozen snapshot for
+    pricing — that one is *meant* not to follow later changes.)
+    """
+    from .models import Attendance
+
+    if anchor_session is None:
+        anchor_session = first_consumed_session(student, cycle)
+        if anchor_session is None:
+            return 0
+
+    return Attendance.objects.filter(
         student=student,
         session__cycle=cycle,
         session__is_cancelled=False,
-    )
-    if from_seq is not None:
-        qs = qs.filter(session__sequence_in_cycle__gte=from_seq)
-    return qs.count()
+        session__session_date__gte=anchor_session.session_date,
+    ).count()
 
 
 def evaluate(enrollment, cycle, *, payment=None, today=None):
@@ -125,8 +165,8 @@ def evaluate(enrollment, cycle, *, payment=None, today=None):
     grace_sessions = getattr(settings, 'BILLING_GRACE_SESSIONS', GRACE_SESSIONS_DEFAULT)
     allowance = 0 if (strict_first_cycle and not ever_paid) else grace_sessions
 
-    start_seq = payment.entitlement_start_seq if payment is not None else None
-    grace_used = _consumed_sessions(student, cycle, from_seq=start_seq)
+    anchor = payment.entitlement_start_session if payment is not None else None
+    grace_used = _consumed_sessions(student, cycle, anchor_session=anchor)
 
     if grace_used < allowance:
         return {

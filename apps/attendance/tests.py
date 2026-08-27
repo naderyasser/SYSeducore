@@ -1539,20 +1539,45 @@ class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
             group=self.group, session_date=timezone.localdate()
         ))
 
-    def test_absence_updates_payment_sessions(self):
+    def test_absence_is_recorded_but_does_not_consume_before_first_attendance(self):
+        """
+        The task still writes the absence row and still opens the billing row,
+        but a student who has never attended has not started their count —
+        the client's rule begins at the first attendance, and charging from
+        the cycle start would exhaust a late joiner before their first lesson.
+        """
         from apps.attendance.tasks import auto_mark_absent_sessions
 
         auto_mark_absent_sessions()
 
-        attendance = Attendance.objects.get(
-            student=self.student, session=self.session
-        )
+        attendance = Attendance.objects.get(student=self.student, session=self.session)
         self.assertEqual(attendance.status, 'absent')
 
         payment = Payment.objects.get(
             student=self.student, group=self.group, cycle=self.session.cycle,
         )
-        self.assertEqual(payment.sessions_attended, 1)
+        self.assertEqual(payment.sessions_attended, 0)
+        self.assertIsNone(payment.entitlement_start_seq)
+
+    def test_absence_consumes_once_the_student_has_started(self):
+        """After a real attendance, a later auto-absence does burn a session."""
+        from apps.attendance.tasks import auto_mark_absent_sessions
+        from apps.teachers.cycles import assign_to_cycle as _assign
+
+        earlier = _assign(Session.objects.create(
+            group=self.group, session_date=timezone.localdate() - timedelta(days=1),
+        ))
+        Attendance.objects.create(
+            student=self.student, session=earlier, status='present',
+        )
+
+        auto_mark_absent_sessions()
+
+        payment = Payment.objects.get(
+            student=self.student, group=self.group, cycle=self.session.cycle,
+        )
+        self.assertEqual(payment.entitlement_start_seq, 1)
+        self.assertEqual(payment.sessions_attended, 2)
 
     def test_soft_deleted_student_is_skipped(self):
         from apps.attendance.tasks import auto_mark_absent_sessions

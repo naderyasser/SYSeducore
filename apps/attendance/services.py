@@ -900,17 +900,12 @@ class AttendanceService:
         """
         from apps.teachers.cycles import open_cycle_for
         from apps.payments.pricing import prorated_fee, entitled_sessions
+        from .entitlement import first_consumed_session, _consumed_sessions
 
         if not group.sessions_per_month:
             return
 
         cycle = open_cycle_for(group)
-
-        sessions_count = Attendance.objects.filter(
-            student=student,
-            session__cycle=cycle,
-            session__is_cancelled=False,
-        ).count()
 
         try:
             enrollment = StudentGroupEnrollment.objects.get(student=student, group=group)
@@ -918,36 +913,52 @@ class AttendanceService:
             enrollment = None
 
         payment = Payment.objects.filter(student=student, cycle=cycle).first()
+
+        # Counting starts at the student's own first attendance, never at the
+        # start of the cycle: ``auto_mark_absent_sessions`` writes absences for
+        # every enrolled student from day one, so a late joiner would otherwise
+        # arrive already over their (pro-rated) entitlement and be locked out
+        # after their very first lesson.
+        anchor = (
+            payment.entitlement_start_session
+            if (payment and payment.entitlement_start_session_id)
+            else first_consumed_session(student, cycle)
+        )
+        sessions_count = _consumed_sessions(student, cycle, anchor_session=anchor)
+
+        # The sequence is the *pricing* snapshot, frozen at billing time.
+        anchor_seq = anchor.sequence_in_cycle if anchor else None
+
         if payment is None:
-            first = (
-                Attendance.objects.filter(
-                    student=student, session__cycle=cycle, session__is_cancelled=False,
-                )
-                .exclude(status='absent')
-                .order_by('session__sequence_in_cycle')
-                .select_related('session')
-                .first()
-            )
-            first_seq = first.session.sequence_in_cycle if first else 1
-            payment = Payment.objects.create(
+            Payment.objects.create(
                 student=student,
                 group=group,
                 cycle=cycle,
                 month=cycle.started_on.replace(day=1) if cycle.started_on else timezone.localdate().replace(day=1),
                 amount_due=prorated_fee(
                     enrollment, cycle_size=cycle.sessions_planned,
-                    first_sequence=first_seq, group=group,
+                    first_sequence=anchor_seq or 1, group=group,
                 ) if enrollment else 0,
                 sessions_attended=sessions_count,
                 sessions_total=entitled_sessions(
-                    cycle_size=cycle.sessions_planned, first_sequence=first_seq,
+                    cycle_size=cycle.sessions_planned, first_sequence=anchor_seq or 1,
                 ),
-                entitlement_start_session=first.session if first else None,
-                entitlement_start_seq=first_seq if first else None,
+                entitlement_start_session=anchor,
+                entitlement_start_seq=anchor_seq,
             )
         else:
             payment.sessions_attended = sessions_count
-            payment.save(update_fields=['sessions_attended'])
+            # Stamp the anchor the first time the student actually attends —
+            # a row opened by billing (roll_group_cycles) or by the desk has
+            # none until then.
+            if payment.entitlement_start_session_id is None and anchor is not None:
+                payment.entitlement_start_session = anchor
+                payment.entitlement_start_seq = anchor_seq
+                payment.save(update_fields=[
+                    'sessions_attended', 'entitlement_start_seq', 'entitlement_start_session',
+                ])
+            else:
+                payment.save(update_fields=['sessions_attended'])
 
     # ``update_billing_cycle`` used to live here. It was never called by
     # anything and diverged from ``apps.attendance.tasks.roll_group_cycles``

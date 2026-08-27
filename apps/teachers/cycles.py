@@ -42,31 +42,56 @@ def open_cycle_for(group):
     )
 
 
+def _renumber(cycle):
+    """
+    Number a cycle's non-cancelled sessions 1..N **in date order**, and clear
+    the number on every cancelled one. No closed-cycle guard — internal.
+    """
+    from apps.attendance.models import Session
+
+    live = list(
+        Session.objects.select_for_update()
+        .filter(cycle=cycle, is_cancelled=False)
+        .order_by('session_date', 'session_id')
+    )
+    for seq, session in enumerate(live, start=1):
+        if session.sequence_in_cycle != seq:
+            session.sequence_in_cycle = seq
+            session.save(update_fields=['sequence_in_cycle'])
+
+    cancelled_ids = list(
+        Session.objects.filter(cycle=cycle, is_cancelled=True)
+        .exclude(sequence_in_cycle=None)
+        .values_list('session_id', flat=True)
+    )
+    if cancelled_ids:
+        Session.objects.filter(session_id__in=cancelled_ids).update(sequence_in_cycle=None)
+
+
 def assign_to_cycle(session):
     """
-    Attach ``session`` to its group's open cycle and set its
-    ``sequence_in_cycle``.
+    Attach ``session`` to its group's open cycle and (re)number the cycle.
+
+    The sequence is derived from **date order**, not insertion order: a
+    session backfilled for an earlier date must not land after ones already
+    recorded, or the entitlement anchor (which is a sequence number) would
+    point at the wrong lesson. Renumbering the whole cycle is cheap — a cycle
+    is 4 to 8 sessions.
 
     A cancelled session is attached (for bookkeeping / display) but always
-    gets ``sequence_in_cycle=None`` — it must never consume a student's
-    entitlement. Idempotent: calling it twice on the same session is safe.
+    gets ``sequence_in_cycle=None`` — it must never consume entitlement.
+    Idempotent: calling it twice on the same session is safe.
     """
     with transaction.atomic():
         cycle = open_cycle_for(session.group)
-        if cycle.started_on is None:
+        if cycle.started_on is None or session.session_date < cycle.started_on:
             cycle.started_on = session.session_date
             cycle.save(update_fields=['started_on'])
 
         session.cycle = cycle
-        if session.is_cancelled:
-            session.sequence_in_cycle = None
-        else:
-            session.sequence_in_cycle = (
-                cycle.sessions.filter(is_cancelled=False)
-                .exclude(pk=session.pk)
-                .count() + 1
-            )
-        session.save(update_fields=['cycle', 'sequence_in_cycle'])
+        session.save(update_fields=['cycle'])
+        _renumber(cycle)
+        session.refresh_from_db(fields=['sequence_in_cycle'])
     return session
 
 
@@ -83,26 +108,8 @@ def renumber_cycle(cycle):
     if cycle.closed_on is not None:
         raise ValueError('لا يمكن تعديل حصص دورة مغلقة — استخدم استثناء بدلاً من ذلك')
 
-    from apps.attendance.models import Session
-
     with transaction.atomic():
-        live = list(
-            Session.objects.select_for_update()
-            .filter(cycle=cycle, is_cancelled=False)
-            .order_by('session_date', 'session_id')
-        )
-        for seq, session in enumerate(live, start=1):
-            if session.sequence_in_cycle != seq:
-                session.sequence_in_cycle = seq
-                session.save(update_fields=['sequence_in_cycle'])
-
-        cancelled_ids = list(
-            Session.objects.filter(cycle=cycle, is_cancelled=True)
-            .exclude(sequence_in_cycle=None)
-            .values_list('session_id', flat=True)
-        )
-        if cancelled_ids:
-            Session.objects.filter(session_id__in=cancelled_ids).update(sequence_in_cycle=None)
+        _renumber(cycle)
 
 
 def ensure_next(group, count=1):

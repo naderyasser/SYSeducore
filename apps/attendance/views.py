@@ -165,6 +165,16 @@ def cancel_session(request, session_id):
     session.cancellation_reason = reason
     session.save(update_fields=['is_cancelled', 'cancellation_reason'])
 
+    # A cancelled session must stop counting toward the cycle: clear its
+    # sequence and close the gap it left. Refused on a closed cycle — that
+    # billing is settled, so a correction there goes through an exception.
+    if session.cycle_id:
+        from apps.teachers.cycles import renumber_cycle
+        try:
+            renumber_cycle(session.cycle)
+        except ValueError as exc:
+            return JsonResponse({'success': False, 'error': str(exc)}, status=409)
+
     ActivityLog.log(
         user=request.user,
         action='session_cancel',

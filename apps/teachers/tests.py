@@ -1082,3 +1082,73 @@ class GroupCycleDisplayTest(TestCase):
             reverse('teachers:group_detail', kwargs={'group_id': group.group_id})
         )
         self.assertIsNone(response.context['per_session_fee'])
+
+
+class CycleSequencingTest(TestCase):
+    """
+    apps.teachers.cycles — sequence_in_cycle must follow DATE order, not the
+    order rows happened to be inserted. The entitlement anchor is a sequence
+    number, so a backfilled earlier session landing last would point a
+    student's billing at the wrong lesson.
+    """
+
+    def setUp(self):
+        from apps.attendance.models import Session
+        self.Session = Session
+        self.room = Room.objects.create(name='قاعة الترتيب', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الترتيب', phone='01033330000',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الترتيب', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(9, 0),
+            standard_fee=Decimal('200.00'), sessions_per_month=4,
+        )
+
+    def _make(self, day_offset, cancelled=False):
+        from django.utils import timezone as tz
+        from datetime import timedelta
+        from apps.teachers.cycles import assign_to_cycle
+        return assign_to_cycle(self.Session.objects.create(
+            group=self.group,
+            session_date=tz.localdate() + timedelta(days=day_offset),
+            is_cancelled=cancelled,
+        ))
+
+    def test_out_of_order_insert_is_renumbered_by_date(self):
+        later = self._make(5)
+        self.assertEqual(later.sequence_in_cycle, 1)
+
+        earlier = self._make(0)           # backfilled, an earlier date
+        later.refresh_from_db()
+        self.assertEqual(earlier.sequence_in_cycle, 1)
+        self.assertEqual(later.sequence_in_cycle, 2)
+
+    def test_cycle_start_moves_back_for_an_earlier_session(self):
+        from django.utils import timezone as tz
+        from datetime import timedelta
+
+        self._make(5)
+        earlier = self._make(0)
+        earlier.cycle.refresh_from_db()
+        self.assertEqual(earlier.cycle.started_on, tz.localdate())
+
+    def test_cancelled_session_never_gets_a_sequence(self):
+        self._make(0)
+        cancelled = self._make(1, cancelled=True)
+        after = self._make(2)
+        self.assertIsNone(cancelled.sequence_in_cycle)
+        self.assertEqual(after.sequence_in_cycle, 2)
+
+    def test_renumber_refuses_a_closed_cycle(self):
+        from apps.teachers.cycles import renumber_cycle
+        from django.utils import timezone as tz
+
+        session = self._make(0)
+        cycle = session.cycle
+        cycle.closed_on = tz.localdate()
+        cycle.save(update_fields=['closed_on'])
+
+        with self.assertRaises(ValueError):
+            renumber_cycle(cycle)
