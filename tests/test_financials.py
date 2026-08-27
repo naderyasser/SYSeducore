@@ -315,3 +315,127 @@ class TestStudentFeeCalculation(TestCase):
         )
         fee = self.student.get_monthly_fee_for_group(self.group)
         self.assertEqual(fee, Decimal('100.00'))
+
+
+class TestPricingModule(TestCase):
+    """
+    apps.payments.pricing — the single pricing rule + cycle pro-ration.
+
+    Pure-function tests: no DB fixtures needed for most of them, which is
+    the point of collapsing the four historical copies into one module.
+    """
+
+    def setUp(self):
+        self.room = Room.objects.create(name='قاعة تسعير', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس تسعير', phone='01055556666',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة تسعير',
+            teacher=self.teacher, room=self.room,
+            schedule_day='Thursday', schedule_time=time(11, 0),
+            duration_minutes=90, standard_fee=Decimal('300.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='PRC001', full_name='طالب تسعير',
+            gender='male', parent_phone='01055557777',
+            student_phone='01055558888',
+        )
+
+    def test_base_fee_parts_normal(self):
+        from apps.payments.pricing import base_fee_parts
+        self.assertEqual(
+            base_fee_parts('normal', None, Decimal('300.00')), Decimal('300.00')
+        )
+
+    def test_base_fee_parts_exempt_ignores_everything_else(self):
+        from apps.payments.pricing import base_fee_parts
+        self.assertEqual(
+            base_fee_parts('exempt', Decimal('50.00'), Decimal('300.00')), Decimal('0.00')
+        )
+
+    def test_base_fee_parts_symbolic_uses_custom_fee(self):
+        from apps.payments.pricing import base_fee_parts
+        self.assertEqual(
+            base_fee_parts('symbolic', Decimal('120.00'), Decimal('300.00')), Decimal('120.00')
+        )
+
+    def test_base_fee_parts_symbolic_without_custom_fee_is_zero(self):
+        from apps.payments.pricing import base_fee_parts
+        self.assertEqual(
+            base_fee_parts('symbolic', None, Decimal('300.00')), Decimal('0.00')
+        )
+
+    def test_entitled_sessions_full_cycle(self):
+        from apps.payments.pricing import entitled_sessions
+        self.assertEqual(entitled_sessions(cycle_size=4, first_sequence=1), 4)
+
+    def test_entitled_sessions_mid_cycle_join(self):
+        from apps.payments.pricing import entitled_sessions
+        # Joined at the group's 2nd session of a 4-session cycle → 3 left.
+        self.assertEqual(entitled_sessions(cycle_size=4, first_sequence=2), 3)
+        self.assertEqual(entitled_sessions(cycle_size=4, first_sequence=4), 1)
+
+    def test_entitled_sessions_never_negative(self):
+        from apps.payments.pricing import entitled_sessions
+        self.assertEqual(entitled_sessions(cycle_size=4, first_sequence=9), 0)
+
+    def test_prorated_fee_full_cycle_returns_exact_fee_no_division(self):
+        from apps.payments.pricing import prorated_fee
+        fee = prorated_fee(
+            _FakeEnrollment('normal', None), cycle_size=4, first_sequence=1,
+            group=_FakeGroup(Decimal('300.00')),
+        )
+        self.assertEqual(fee, Decimal('300.00'))
+
+    def test_prorated_fee_mid_cycle_join_three_of_four(self):
+        from apps.payments.pricing import prorated_fee
+        fee = prorated_fee(
+            _FakeEnrollment('normal', None), cycle_size=4, first_sequence=2,
+            group=_FakeGroup(Decimal('100.00')),
+        )
+        self.assertEqual(fee, Decimal('75.00'))
+
+    def test_prorated_fee_applies_on_top_of_symbolic_custom_fee(self):
+        from apps.payments.pricing import prorated_fee
+        fee = prorated_fee(
+            _FakeEnrollment('symbolic', Decimal('200.00')), cycle_size=4, first_sequence=2,
+            group=_FakeGroup(Decimal('300.00')),
+        )
+        self.assertEqual(fee, Decimal('150.00'))
+
+    def test_prorated_fee_exempt_is_zero(self):
+        from apps.payments.pricing import prorated_fee
+        fee = prorated_fee(
+            _FakeEnrollment('exempt', None), cycle_size=4, first_sequence=2,
+            group=_FakeGroup(Decimal('300.00')),
+        )
+        self.assertEqual(fee, Decimal('0.00'))
+
+    def test_get_monthly_fee_for_group_delegates_to_pricing(self):
+        """The kept shim on Student must produce the same result as base_fee."""
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+        from apps.payments.pricing import base_fee
+        enrollment = StudentGroupEnrollment.objects.get(
+            student=self.student, group=self.group,
+        )
+        self.assertEqual(
+            self.student.get_monthly_fee_for_group(self.group),
+            base_fee(enrollment, self.group),
+        )
+
+
+class _FakeEnrollment:
+    """Minimal stand-in so pricing tests don't need a DB round-trip."""
+    def __init__(self, financial_status, custom_fee):
+        self.financial_status = financial_status
+        self.custom_fee = custom_fee
+
+
+class _FakeGroup:
+    def __init__(self, standard_fee):
+        self.standard_fee = standard_fee

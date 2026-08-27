@@ -38,9 +38,27 @@ class User(AbstractUser):
     
     def is_admin(self):
         return self.role == 'admin'
-    
+
     def is_supervisor(self):
         return self.role in ['admin', 'supervisor']
-    
+
     def is_teacher(self):
         return self.role == 'teacher'
+
+    def can_see_financials(self):
+        """
+        Cumulative money — total revenue, centre dues, collection rate.
+        Admin only.
+
+        ``is_admin()`` misses a superuser whose ``role`` is still the
+        default ``'supervisor'``: they pass every ``@admin_required`` view
+        but ``is_admin()`` says False, so templates gated on it disagree
+        with what the view actually allows. Views and templates must both
+        gate on this method (not ``role == 'admin'`` directly) so the two
+        can never diverge.
+        """
+        return bool(self.is_superuser or self.role == 'admin')
+
+    def can_collect_payments(self):
+        """Day-to-day desk collection (per-payment, not aggregates) — admin or supervisor."""
+        return bool(self.is_superuser or self.role in ('admin', 'supervisor'))

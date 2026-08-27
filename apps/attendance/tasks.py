@@ -31,10 +31,33 @@ def auto_mark_absent_sessions():
     from apps.attendance.models import Session, Attendance
     from apps.attendance.services import AttendanceService, local_datetime
     from apps.students.models import StudentGroupEnrollment
+    from apps.teachers.models import Group
+    from apps.teachers.cycles import assign_to_cycle
 
     now = timezone.now()
     today = timezone.localdate()
     day_name = AttendanceService.get_current_day_name()
+
+    # ── Step 0: materialize today's Session rows once their scheduled start
+    # time has passed, even if nobody has scanned. Without this, a group
+    # nobody scans in gets no Session row at all, so nobody is ever marked
+    # absent and its cycle can never accumulate sessions or close.
+    groups_without_session_today = (
+        Group.objects.filter(is_active=True, deleted_at__isnull=True)
+        .exclude(sessions__session_date=today)
+        .prefetch_related('schedules__room')
+    )
+    for group in groups_without_session_today:
+        entry = group.get_schedule_for_day(day_name)
+        if entry is None or not entry.start_time:
+            continue
+        if now < local_datetime(today, entry.start_time):
+            continue
+        session, created = Session.objects.get_or_create(
+            group=group, session_date=today, defaults={'teacher_attended': False},
+        )
+        if created:
+            assign_to_cycle(session)
 
     sessions = Session.objects.filter(
         session_date=today,
@@ -101,194 +124,102 @@ def auto_mark_absent_sessions():
     return f"Auto-absence: created {count_created} absent records"
 
 
-def _next_month(month_start):
-    """First day of the month after ``month_start``."""
-    return (month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-
-
-def _projected_cycle_end(cycle_start, sessions_per_cycle, sessions_per_week):
-    """
-    The date the current cycle is expected to finish.
-
-    ``sessions_per_cycle`` sessions delivered at ``sessions_per_week`` per week
-    take ``ceil(sessions_per_cycle / sessions_per_week)`` weeks.
-    """
-    per_week = max(1, sessions_per_week)
-    weeks = -(-sessions_per_cycle // per_week)  # ceil division
-    return cycle_start + timedelta(days=weeks * 7 - 1)
-
-
 @shared_task
-def check_billing_cycles():
+def roll_group_cycles():
     """
     Celery task: runs every 6 hours.
 
-    Session-based billing: a cycle is measured by sessions consumed (attended
-    **or** absent), not by calendar days. For every active enrollment this
-    task:
+    Session-based billing at the **group** level: every student enrolled in
+    a group shares the same cycle and renews together (replaces the old
+    per-enrollment ``check_billing_cycles``, which gave each student their
+    own independent ``cycle_start_date``/``cycle_end_date`` — the opposite
+    of what session-based billing is supposed to mean).
 
-    * seeds ``cycle_start_date`` / ``cycle_end_date`` the first time it sees
-      the enrollment — they used to be read and never written, so they stayed
-      ``None`` forever and every cycle silently fell back to the calendar
-      month;
-    * marks the current month's ``Payment.billing_cycle_completed`` once
-      ``sessions_per_cycle`` sessions have been consumed;
-    * opens the next month's ``Payment`` row;
-    * rolls the enrollment onto the next cycle.
+    For every group billed by cycle (``sessions_per_month > 0``):
+      * count that group's open cycle's non-cancelled sessions;
+      * once they reach ``cycle.sessions_planned``, close the cycle
+        (``closed_on`` = the date of the Nth non-cancelled session),
+        flag every ``Payment`` on it ``billing_cycle_completed``, and open
+        the next cycle at full price for every active, non-exempt
+        enrollment that doesn't already have a Payment on it (a package —
+        see ``apps.payments.pricing`` — may already have pre-paid it).
 
-    Everything is batched: a handful of queries in total rather than two or
-    more per enrollment.
+    A group's cycle can only close a handful of times per run (weekly
+    groups cannot complete two 4-session cycles inside 6 hours), so this
+    stays cheap without needing the old task's single-giant-query batching
+    — a few queries per group, over ~dozens of groups.
     """
-    from apps.attendance.models import Attendance
+    from apps.teachers.models import Group, GroupCycle
+    from apps.teachers.cycles import open_cycle_for
     from apps.students.models import StudentGroupEnrollment
     from apps.payments.models import Payment
+    from apps.payments.pricing import base_fee
 
-    today = timezone.localdate()
-    current_month = today.replace(day=1)
+    closed_count = 0
 
-    enrollments = list(
-        StudentGroupEnrollment.objects.filter(is_active=True)
-        .select_related('student', 'group')
-        .prefetch_related('group__schedules')
-    )
-    if not enrollments:
-        return "Billing cycles checked: 0 cycles completed, next month payments created"
-
-    # ── 1. Seed missing cycle dates ──────────────────────────────────────
-    def cycle_size(enr):
-        size = enr.sessions_per_cycle or enr.group.sessions_per_month or 0
-        return size if size > 0 else 4
-
-    enrollments_to_update = []
-    dirty_ids = set()
-    for enr in enrollments:
-        if enr.cycle_start_date is None:
-            enr.cycle_start_date = current_month
-            enr.cycle_end_date = None
-        if enr.cycle_end_date is None:
-            enr.cycle_end_date = _projected_cycle_end(
-                enr.cycle_start_date,
-                cycle_size(enr),
-                len(enr.group.get_schedule_entries()),
-            )
-            enrollments_to_update.append(enr)
-            dirty_ids.add(enr.pk)
-
-    # ── 2. Count consumed sessions per (student, group) in one query ─────
-    group_ids = list({enr.group_id for enr in enrollments})
-    student_ids = list({enr.student_id for enr in enrollments})
-    earliest_cycle_start = min(enr.cycle_start_date for enr in enrollments)
-
-    consumed = {}  # (student_id, group_id) -> [session_date, ...]
-    for row in Attendance.objects.filter(
-        student_id__in=student_ids,
-        session__group_id__in=group_ids,
-        session__session_date__gte=earliest_cycle_start,
-        session__is_cancelled=False,
-    ).values('student_id', 'session__group_id', 'session__session_date'):
-        key = (row['student_id'], row['session__group_id'])
-        consumed.setdefault(key, []).append(row['session__session_date'])
-
-    # ── 3. Current-month payments in one query ───────────────────────────
-    payments = {
-        (p.student_id, p.group_id): p
-        for p in Payment.objects.filter(
-            student_id__in=student_ids,
-            group_id__in=group_ids,
-            month=current_month,
-        )
-    }
-
-    next_month_date = _next_month(current_month)
-    existing_next_month = set(
-        Payment.objects.filter(
-            student_id__in=student_ids,
-            group_id__in=group_ids,
-            month=next_month_date,
-        ).values_list('student_id', 'group_id')
+    groups = (
+        Group.objects.filter(is_active=True, deleted_at__isnull=True, sessions_per_month__gt=0)
+        .select_related('teacher')
     )
 
-    # ── 4. Decide, in memory ─────────────────────────────────────────────
-    payments_to_update = []
-    payments_to_create = []
-    updated = 0
+    for group in groups:
+        cycle = open_cycle_for(group)
+        if cycle.started_on is None:
+            continue  # no session has happened in this cycle yet
 
-    for enr in enrollments:
-        sessions_per_cycle = cycle_size(enr)
-        all_dates = sorted(consumed.get((enr.student_id, enr.group_id), []))
-
-        # Consume as many complete cycles as the attendance already supports
-        # (several can complete inside one calendar month between two runs
-        # of this task), rolling cur_start forward each time.
-        cur_start = enr.cycle_start_date
-        last_completed_on = None
-        while True:
-            remaining = [d for d in all_dates if d >= cur_start]
-            if len(remaining) < sessions_per_cycle:
-                break
-            last_completed_on = remaining[sessions_per_cycle - 1]
-            cur_start = last_completed_on + timedelta(days=1)
-
-        if last_completed_on is None:
+        counted = cycle.sessions.filter(is_cancelled=False).count()
+        if counted < cycle.sessions_planned:
             continue
 
-        # Always roll the enrollment onto its next cycle, even when the
-        # payment for the completed month turns out to be already flagged
-        # below. Skipping this roll (as the old code did via `continue`)
-        # left cycle_start_date stalled, so the very same already-billed
-        # sessions kept being "just enough" to look complete on every later
-        # run and the cycle could never advance past a month boundary.
-        enr.cycle_start_date = cur_start
-        enr.cycle_end_date = _projected_cycle_end(
-            cur_start,
-            sessions_per_cycle,
-            len(enr.group.get_schedule_entries()),
+        closing_session = (
+            cycle.sessions.filter(is_cancelled=False)
+            .order_by('sequence_in_cycle')[cycle.sessions_planned - 1:cycle.sessions_planned]
+            .first()
         )
-        if enr.pk not in dirty_ids:
-            enrollments_to_update.append(enr)
-            dirty_ids.add(enr.pk)
-        updated += 1
 
-        # Billing is decided by the calendar month the *last* completed
-        # cycle actually fell in, not unconditionally current_month.
-        target_month = last_completed_on.replace(day=1)
-        if target_month != current_month:
-            continue
-        payment = payments.get((enr.student_id, enr.group_id))
-        if payment is None or payment.billing_cycle_completed:
-            continue
+        with transaction.atomic():
+            cycle.closed_on = closing_session.session_date if closing_session else timezone.localdate()
+            cycle.save(update_fields=['closed_on'])
 
-        payment.billing_cycle_completed = True
-        payments_to_update.append(payment)
-
-        fee = enr.student.get_monthly_fee_for_group(enr.group)
-        key = (enr.student_id, enr.group_id)
-        if fee > 0 and key not in existing_next_month:
-            existing_next_month.add(key)
-            payments_to_create.append(Payment(
-                student=enr.student,
-                group=enr.group,
-                month=next_month_date,
-                amount_due=fee,
-                status='unpaid',
-                sessions_total=sessions_per_cycle,
-            ))
-
-    # ── 5. Write, in bulk ────────────────────────────────────────────────
-    with transaction.atomic():
-        if payments_to_update:
-            Payment.objects.bulk_update(payments_to_update, ['billing_cycle_completed'])
-        if payments_to_create:
-            Payment.objects.bulk_create(payments_to_create, ignore_conflicts=True)
-        if enrollments_to_update:
-            StudentGroupEnrollment.objects.bulk_update(
-                enrollments_to_update, ['cycle_start_date', 'cycle_end_date']
+            Payment.objects.filter(cycle=cycle, billing_cycle_completed=False).update(
+                billing_cycle_completed=True
             )
 
-    return (
-        f"Billing cycles checked: {updated} cycles completed, "
-        f"next month payments created"
-    )
+            next_index = (
+                GroupCycle.objects.filter(group=group).order_by('-index')
+                .values_list('index', flat=True).first()
+            ) or cycle.index
+            next_cycle = GroupCycle.objects.create(
+                group=group, index=next_index + 1,
+                sessions_planned=group.sessions_per_month,
+            )
+
+            already_billed = set(
+                Payment.objects.filter(cycle=next_cycle).values_list('student_id', flat=True)
+            )
+            enrollments = (
+                StudentGroupEnrollment.objects.filter(group=group, is_active=True)
+                .exclude(financial_status='exempt')
+                .exclude(student_id__in=already_billed)
+                .select_related('student')
+            )
+            to_create = []
+            for enr in enrollments:
+                fee = base_fee(enr, group)
+                if fee <= 0:
+                    continue
+                to_create.append(Payment(
+                    student=enr.student, group=group, cycle=next_cycle,
+                    month=timezone.localdate().replace(day=1),
+                    amount_due=fee, status='unpaid',
+                    sessions_total=next_cycle.sessions_planned,
+                ))
+            if to_create:
+                Payment.objects.bulk_create(to_create, ignore_conflicts=True)
+
+        closed_count += 1
+
+    return f"Group cycles checked: {closed_count} cycle(s) closed and rolled"
 
 
 @shared_task

@@ -142,16 +142,6 @@ class StudentModelTest(BaseTestMixin, TestCase):
         total = self.student.get_total_paid_amount()
         self.assertEqual(total, Decimal('150.00'))
 
-    def test_activate_subscription(self):
-        self.student.activate_subscription(days=30)
-        self.assertIsNotNone(self.student.subscription_expiry_date)
-        self.assertTrue(self.student.is_subscription_active())
-
-    def test_subscription_expired(self):
-        self.student.subscription_expiry_date = timezone.now().date() - timedelta(days=1)
-        self.student.save()
-        self.assertFalse(self.student.is_subscription_active())
-
     def test_get_parent_label_male(self):
         self.student.gender = 'male'
         label = self.student.get_parent_label()
@@ -276,14 +266,24 @@ class PaymentModelTest(BaseTestMixin, TestCase):
         self.assertEqual(payment.amount_due, Decimal('200.00'))
 
     def test_payment_unique_constraint(self):
+        """
+        Uniqueness is now (student, cycle) — not (student, group, month).
+        Two cycles can legitimately close inside one calendar month for an
+        8-session group, so ``month`` alone can no longer be the key.
+        """
+        from apps.teachers.models import GroupCycle
+
         month = date.today().replace(day=1)
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=month,
+        )
         Payment.objects.create(
-            student=self.student, group=self.group,
+            student=self.student, group=self.group, cycle=cycle,
             month=month, amount_due=Decimal('200.00'),
         )
         with self.assertRaises(Exception):
             Payment.objects.create(
-                student=self.student, group=self.group,
+                student=self.student, group=self.group, cycle=cycle,
                 month=month, amount_due=Decimal('200.00'),
             )
 
@@ -1103,3 +1103,35 @@ class MessageTagTest(BaseTestMixin, TestCase):
             'password': 'TestPass123!',
         }, follow=True)
         self.assertContains(response, 'مرحباً')
+
+
+class StickerPdfArabicFontTest(TestCase):
+    """
+    apps.students.services.sticker_pdf / apps.core.pdf — Arabic names must
+    actually render (FE-07): the old code silently fell back to Helvetica,
+    which cannot draw a single Arabic glyph, on any registration failure.
+    """
+
+    def test_arabic_font_is_registered_not_helvetica(self):
+        from apps.core.pdf import get_arabic_fonts
+        font, bold = get_arabic_fonts()
+        self.assertNotEqual(font, 'Helvetica')
+        self.assertNotEqual(bold, 'Helvetica-Bold')
+
+    def test_sticker_pdf_renders_for_arabic_name(self):
+        from apps.students.models import Student
+        from apps.students.services.sticker_pdf import build_sticker_pdf
+
+        student = Student.objects.create(
+            student_code='PDF001', full_name='فاطمة الزهراء', gender='female',
+            parent_phone='01099998888',
+        )
+        pdf_bytes = build_sticker_pdf(student)
+        self.assertTrue(pdf_bytes.startswith(b'%PDF'))
+        self.assertGreater(len(pdf_bytes), 200)
+
+    def test_rtl_reshapes_arabic_text(self):
+        from apps.core.pdf import rtl
+        reshaped = rtl('محمد')
+        self.assertNotEqual(reshaped, 'محمد')
+        self.assertTrue(reshaped)

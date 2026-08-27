@@ -1,51 +1,13 @@
 from io import BytesIO
-import os
 
 from reportlab.lib.pagesizes import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 import barcode
 from barcode.writer import ImageWriter
 from PIL import Image
-from django.conf import settings
 
-try:
-    import arabic_reshaper
-    from bidi.algorithm import get_display
-    _HAS_BIDI = True
-except ImportError:
-    _HAS_BIDI = False
-
-
-FONTS_DIR = os.path.join(settings.BASE_DIR, 'static', 'fonts')
-
-# Register fonts — try Cairo first, fall back to DejaVuSans (Arabic-capable)
-_font_registered = False
-AR_FONT = 'Helvetica'
-AR_BOLD = 'Helvetica-Bold'
-
-def _ensure_fonts():
-    global _font_registered, AR_FONT, AR_BOLD
-    if _font_registered:
-        return
-    _font_registered = True
-    for name, regular, bold in [
-        ('Cairo', 'Cairo-Regular.ttf', 'Cairo-Bold.ttf'),
-        ('DejaVuSans', 'DejaVuSans.ttf', 'DejaVuSans-Bold.ttf'),
-    ]:
-        reg_path = os.path.join(FONTS_DIR, regular)
-        bold_path = os.path.join(FONTS_DIR, bold)
-        if os.path.isfile(reg_path) and os.path.getsize(reg_path) > 1000:
-            try:
-                pdfmetrics.registerFont(TTFont(name, reg_path))
-                pdfmetrics.registerFont(TTFont(f'{name}-Bold', bold_path))
-                AR_FONT = name
-                AR_BOLD = f'{name}-Bold'
-                return
-            except Exception:
-                continue
+from apps.core.pdf import get_arabic_fonts, rtl
 
 
 def _generate_barcode_png(code: str) -> BytesIO:
@@ -64,7 +26,7 @@ def _generate_barcode_png(code: str) -> BytesIO:
 
 def build_sticker_pdf(student) -> bytes:
     """Generate a 35mm x 10mm thermal sticker PDF."""
-    _ensure_fonts()
+    ar_font, ar_bold = get_arabic_fonts()
 
     buf = BytesIO()
     page_w, page_h = 35 * mm, 10 * mm
@@ -79,16 +41,15 @@ def build_sticker_pdf(student) -> bytes:
                 preserveAspectRatio=True, mask='auto')
 
     # Student code (right top)
-    c.setFont(AR_BOLD, 7)
+    c.setFont(ar_bold, 7)
     c.drawString(22 * mm, 5.5 * mm, str(student.student_code))
 
     # Student name (right bottom, truncated + RTL-reshaped)
     name = (student.full_name or '')[:10]
     if len(student.full_name or '') > 10:
         name += '…'
-    if _HAS_BIDI and name:
-        name = get_display(arabic_reshaper.reshape(name))
-    c.setFont(AR_FONT, 5)
+    name = rtl(name)
+    c.setFont(ar_font, 5)
     c.drawString(22 * mm, 2 * mm, name)
 
     c.showPage()

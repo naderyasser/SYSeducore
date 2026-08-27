@@ -18,9 +18,10 @@ from django.utils import timezone
 
 from apps.attendance.models import Session, Attendance, ActivityLog
 from apps.attendance.services import AttendanceService
+from apps.teachers.cycles import assign_to_cycle
 from apps.payments.models import Payment
 from apps.students.models import Student, StudentGroupEnrollment
-from apps.teachers.models import Teacher, Group, Room, Subject
+from apps.teachers.models import Teacher, Group, Room, Subject, GroupCycle
 from tests.factories import create_group_with_schedule
 
 User = get_user_model()
@@ -61,12 +62,29 @@ class AttendanceTestMixin:
             parent_phone='01098765432',
             student_phone='01011111111',
         )
-        # Activate subscription
-        self.student.activate_subscription(days=30)
 
         self.enrollment = StudentGroupEnrollment.objects.create(
             student=self.student, group=self.group,
             financial_status='normal', is_active=True,
+        )
+
+    def _attend(self, day_offset=0, status='present', student=None):
+        """Create + cycle-assign a session, then an attendance row on it."""
+        session = assign_to_cycle(Session.objects.create(
+            group=self.group, session_date=timezone.localdate() + timedelta(days=day_offset),
+        ))
+        Attendance.objects.create(
+            student=student or self.student, session=session, status=status,
+            scan_time=timezone.now(),
+        )
+        return session
+
+    def _mark_as_returning_student(self):
+        """A Payment paid for this group in the past — 'has paid before'."""
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=None,
+            month=timezone.localdate().replace(day=1, month=1),
+            amount_due=Decimal('200.00'), amount_paid=Decimal('200.00'), status='paid',
         )
 
 
@@ -155,86 +173,46 @@ class TestStrictTimeCheck(TestCase):
 
 
 class TestFinancialBlocking(AttendanceTestMixin, TestCase):
-    """Test financial blocking: month 1 vs month 2+ grace sessions."""
+    """Financial blocking: first cycle (0 grace) vs returning student (2 grace)."""
 
-    def test_month1_no_payment_blocked(self):
-        """Month 1 student with 0 payments — should be BLOCKED (0 grace sessions)."""
-        # No attendance history = first month in group
+    def test_first_cycle_no_payment_blocked(self):
+        """First cycle in this group, no payment — BLOCKED (0 grace sessions)."""
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertFalse(result['allowed'])
         self.assertEqual(result['error_type'], 'payment_required')
 
-    def test_month1_with_payment_allowed(self):
-        """Month 1 student who has paid — should be ALLOWED."""
-        current_month = timezone.now().date().replace(day=1)
+    def test_first_cycle_with_payment_allowed(self):
+        """First cycle, but paid — ALLOWED."""
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
         Payment.objects.create(
-            student=self.student, group=self.group,
-            month=current_month, amount_due=Decimal('200.00'),
-            amount_paid=Decimal('200.00'), status='paid',
+            student=self.student, group=self.group, cycle=cycle,
+            month=timezone.localdate().replace(day=1), amount_due=Decimal('200.00'),
+            amount_paid=Decimal('200.00'), status='paid', sessions_total=4,
         )
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertTrue(result['allowed'])
 
-    def test_month2_grace_session_1_allowed(self):
-        """Month 2+ student, 0 sessions attended, no payment — 1st grace session allowed."""
-        # Create past attendance to make it NOT month 1
-        past_date = (timezone.now() - timedelta(days=35)).date()
-        past_session = Session.objects.create(
-            group=self.group, session_date=past_date
-        )
-        Attendance.objects.create(
-            student=self.student, session=past_session,
-            scan_time=timezone.now() - timedelta(days=35), status='present',
-        )
+    def test_returning_student_grace_session_1_allowed(self):
+        """Returning student (paid this group before), 0 sessions this cycle — 1st grace allowed."""
+        self._mark_as_returning_student()
+        result = AttendanceService.check_financial_status(self.student, self.group)
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result.get('grace_sessions'))
+
+    def test_returning_student_grace_session_2_allowed(self):
+        """Returning student, 1 session consumed this cycle — 2nd grace session allowed."""
+        self._mark_as_returning_student()
+        self._attend(day_offset=0)
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertTrue(result['allowed'])
 
-    def test_month2_grace_session_2_allowed(self):
-        """Month 2+ student, 1 session attended this month, no payment — 2nd grace session allowed."""
-        # Past attendance to establish month 2+
-        past_date = (timezone.now() - timedelta(days=35)).date()
-        past_session = Session.objects.create(
-            group=self.group, session_date=past_date
-        )
-        Attendance.objects.create(
-            student=self.student, session=past_session,
-            scan_time=timezone.now() - timedelta(days=35), status='present',
-        )
-
-        # 1 session this month
-        today_session = Session.objects.create(
-            group=self.group, session_date=timezone.now().date()
-        )
-        Attendance.objects.create(
-            student=self.student, session=today_session,
-            scan_time=timezone.now(), status='present',
-        )
-
-        result = AttendanceService.check_financial_status(self.student, self.group)
-        self.assertTrue(result['allowed'])
-
-    def test_month2_after_grace_blocked(self):
-        """Month 2+ student, 2 sessions attended, no payment — 3rd session BLOCKED."""
-        # Past attendance to establish month 2+
-        past_date = (timezone.now() - timedelta(days=35)).date()
-        past_session = Session.objects.create(
-            group=self.group, session_date=past_date
-        )
-        Attendance.objects.create(
-            student=self.student, session=past_session,
-            scan_time=timezone.now() - timedelta(days=35), status='present',
-        )
-
-        # 2 sessions this month
-        current_month = timezone.now().date().replace(day=1)
-        for i in range(2):
-            s_date = current_month + timedelta(days=i)
-            session = Session.objects.create(group=self.group, session_date=s_date)
-            Attendance.objects.create(
-                student=self.student, session=session,
-                scan_time=timezone.now(), status='present',
-            )
-
+    def test_returning_student_after_grace_blocked(self):
+        """Returning student, 2 sessions consumed, no payment for the new cycle — 3rd BLOCKED."""
+        self._mark_as_returning_student()
+        self._attend(day_offset=0)
+        self._attend(day_offset=1)
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertFalse(result['allowed'])
 
@@ -249,93 +227,51 @@ class TestFinancialBlocking(AttendanceTestMixin, TestCase):
 
 
 class TestSessionExhaustion(AttendanceTestMixin, TestCase):
-    """Test session limit enforcement (sessions_per_month)."""
+    """Session limit enforcement — bounded by GroupCycle.sessions_planned, not calendar days."""
 
     def test_sessions_exhausted_blocked(self):
-        """Student attended 4/4 sessions — 5th scan must be BLOCKED."""
-        current_month = timezone.now().date().replace(day=1)
-
-        # Create payment so financial check passes
-        Payment.objects.create(
-            student=self.student, group=self.group,
-            month=current_month, amount_due=Decimal('200.00'),
-            amount_paid=Decimal('200.00'), status='paid',
+        """Student consumed 4/4 sessions of a paid cycle — 5th scan must be BLOCKED."""
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
         )
-
-        # Create 4 attendance records (= sessions_per_month)
-        for i in range(4):
-            s_date = current_month + timedelta(days=i)
-            session = Session.objects.create(group=self.group, session_date=s_date)
-            Attendance.objects.create(
-                student=self.student, session=session,
-                scan_time=timezone.now(), status='present',
-            )
-
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=cycle,
+            month=timezone.localdate().replace(day=1), amount_due=Decimal('200.00'),
+            amount_paid=Decimal('200.00'), status='paid',
+            sessions_attended=4, sessions_total=4,
+        )
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertFalse(result['allowed'])
         self.assertEqual(result['error_type'], 'sessions_exhausted')
         self.assertEqual(result['sessions_limit'], 4)
 
     def test_3_of_4_sessions_allowed(self):
-        """Student attended 3/4 sessions — 4th scan should be ALLOWED."""
-        current_month = timezone.now().date().replace(day=1)
-
-        # Create payment
+        """Student consumed 3/4 sessions of a paid cycle — 4th scan should be ALLOWED."""
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
         Payment.objects.create(
-            student=self.student, group=self.group,
-            month=current_month, amount_due=Decimal('200.00'),
+            student=self.student, group=self.group, cycle=cycle,
+            month=timezone.localdate().replace(day=1), amount_due=Decimal('200.00'),
             amount_paid=Decimal('200.00'), status='paid',
+            sessions_attended=3, sessions_total=4,
         )
-
-        # Past attendance to establish month 2+
-        past_date = (timezone.now() - timedelta(days=35)).date()
-        past_session = Session.objects.create(group=self.group, session_date=past_date)
-        Attendance.objects.create(
-            student=self.student, session=past_session,
-            scan_time=timezone.now() - timedelta(days=35), status='present',
-        )
-
-        # 3 sessions this month
-        for i in range(3):
-            s_date = current_month + timedelta(days=i)
-            session = Session.objects.create(group=self.group, session_date=s_date)
-            Attendance.objects.create(
-                student=self.student, session=session,
-                scan_time=timezone.now(), status='present',
-            )
-
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertTrue(result['allowed'])
 
     def test_custom_session_limit(self):
-        """Group with sessions_per_month=8 — student should be allowed after 4 sessions."""
+        """8-session cycle — student allowed after consuming only 4 of 8."""
         self.group.sessions_per_month = 8
         self.group.save()
-
-        current_month = timezone.now().date().replace(day=1)
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=8, started_on=timezone.localdate(),
+        )
         Payment.objects.create(
-            student=self.student, group=self.group,
-            month=current_month, amount_due=Decimal('200.00'),
+            student=self.student, group=self.group, cycle=cycle,
+            month=timezone.localdate().replace(day=1), amount_due=Decimal('200.00'),
             amount_paid=Decimal('200.00'), status='paid',
+            sessions_attended=4, sessions_total=8,
         )
-
-        # Past attendance for month 2+
-        past_date = (timezone.now() - timedelta(days=35)).date()
-        past_session = Session.objects.create(group=self.group, session_date=past_date)
-        Attendance.objects.create(
-            student=self.student, session=past_session,
-            scan_time=timezone.now() - timedelta(days=35), status='present',
-        )
-
-        # 4 sessions this month (out of 8)
-        for i in range(4):
-            s_date = current_month + timedelta(days=i)
-            session = Session.objects.create(group=self.group, session_date=s_date)
-            Attendance.objects.create(
-                student=self.student, session=session,
-                scan_time=timezone.now(), status='present',
-            )
-
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertTrue(result['allowed'])
 
@@ -360,55 +296,48 @@ class TestDuplicateScanPrevention(AttendanceTestMixin, TestCase):
         self.assertTrue(exists)
 
 
-class TestSubscriptionExpiry(AttendanceTestMixin, TestCase):
-    """Test subscription expiry blocking."""
-
-    def test_expired_subscription_blocked(self):
-        """Student with expired subscription — is_subscription_active() should return False."""
-        self.student.subscription_expiry_date = timezone.now().date() - timedelta(days=1)
-        self.student.save()
-
-        self.assertFalse(self.student.is_subscription_active())
-
-    def test_active_subscription_allowed(self):
-        """Student with active subscription — should return True."""
-        self.student.subscription_expiry_date = timezone.now().date() + timedelta(days=15)
-        self.student.save()
-
-        self.assertTrue(self.student.is_subscription_active())
-
-    def test_no_subscription_active_when_no_date(self):
-        """Student with no subscription_expiry_date — treated as 'no restriction', returns True.
-        Business rule: no date set = subscription system not configured for this student = allow entry.
-        (Changed from inactive to active in Feb 2026 fix to avoid blocking students who simply
-        haven't had a subscription date configured yet.)
-        """
-        self.student.subscription_expiry_date = None
-        self.student.last_payment_date = None
-        self.student.save()
-
-        self.assertTrue(self.student.is_subscription_active())
-
-
 class TestUpdatePaymentSessions(AttendanceTestMixin, TestCase):
-    """Test that payment session counter updates correctly."""
+    """update_payment_sessions — cycle-scoped, not calendar-month-scoped."""
 
     def test_sessions_counted_correctly(self):
-        """After 3 attendances, Payment.sessions_attended should be 3."""
-        current_month = timezone.now().date().replace(day=1)
-
+        """After 3 attendances, Payment.sessions_attended should be 3, cycle-scoped."""
+        session = None
         for i in range(3):
-            s_date = current_month + timedelta(days=i)
-            session = Session.objects.create(group=self.group, session_date=s_date)
-            Attendance.objects.create(
-                student=self.student, session=session,
-                scan_time=timezone.now(), status='present',
-            )
+            session = self._attend(day_offset=i)
 
         AttendanceService.update_payment_sessions(self.student, self.group)
 
-        payment = Payment.objects.get(
-            student=self.student, group=self.group, month=current_month
-        )
+        payment = Payment.objects.get(student=self.student, cycle=session.cycle)
         self.assertEqual(payment.sessions_attended, 3)
         self.assertEqual(payment.sessions_total, 4)
+
+    def test_first_consumed_session_stamps_entitlement_anchor(self):
+        """The very first session consumed in a cycle becomes the pricing anchor."""
+        session = self._attend(day_offset=0)
+        AttendanceService.update_payment_sessions(self.student, self.group)
+
+        payment = Payment.objects.get(student=self.student, cycle=session.cycle)
+        self.assertEqual(payment.entitlement_start_seq, 1)
+        self.assertEqual(payment.entitlement_start_session_id, session.session_id)
+        self.assertEqual(payment.amount_due, Decimal('200.00'))
+
+    def test_mid_cycle_join_prorates_amount_due(self):
+        """Joining at the group's 2nd session of a 4-session cycle → 3/4 fee."""
+        other_student = Student.objects.create(
+            student_code='ATT002', full_name='طالب آخر', gender='male',
+            parent_phone='01098765433',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=other_student, group=self.group, financial_status='normal', is_active=True,
+        )
+        session1 = self._attend(day_offset=0, student=other_student)
+        AttendanceService.update_payment_sessions(other_student, self.group)
+
+        session2 = self._attend(day_offset=1, student=self.student)
+        AttendanceService.update_payment_sessions(self.student, self.group)
+
+        self.assertEqual(session2.cycle_id, session1.cycle_id)
+        payment = Payment.objects.get(student=self.student, cycle=session2.cycle)
+        self.assertEqual(payment.entitlement_start_seq, 2)
+        self.assertEqual(payment.sessions_total, 3)
+        self.assertEqual(payment.amount_due, Decimal('150.00'))

@@ -3,21 +3,10 @@ from decimal import Decimal
 
 from apps.teachers.models import Group
 
-from .models import Payment
-
-
-def _fee_for(enrollment, group):
-    """
-    Expected monthly fee for an enrollment — the same rule as
-    ``Student.get_monthly_fee_for_group`` but without a query per student.
-    """
-    if enrollment is None:
-        return Decimal('0')
-    if enrollment.financial_status == 'exempt':
-        return Decimal('0')
-    if enrollment.financial_status == 'symbolic':
-        return enrollment.custom_fee or Decimal('0')
-    return group.standard_fee or Decimal('0')
+from .models import (
+    Payment, TeacherSettlement, TeacherSettlementLine, SettlementLockedError, to_money,
+)
+from .pricing import base_fee as _fee_for, base_fee
 
 
 class SettlementService:
@@ -151,3 +140,134 @@ class SettlementService:
             'revenue': float(revenue),
             'students': students
         }
+
+    # ------------------------------------------------------------------
+    #  Persisted, editable, approvable settlement sheet
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _prorate_by_sessions(fee_full, sessions_consumed, sessions_entitled):
+        """
+        A student who consumed 2 of their 4 entitled sessions is billed (for
+        settlement purposes) at half the full-cycle fee — never at the full
+        amount, regardless of what they were actually invoiced. Mirrors the
+        client's explicit rule: "الطالب الذي حضر حصصاً أقل لا يُحسب كمن حضر
+        الشهر كاملاً".
+        """
+        fee_full = to_money(fee_full)
+        if sessions_entitled <= 0:
+            return fee_full
+        n = min(sessions_consumed, sessions_entitled)
+        return to_money(fee_full * Decimal(n) / Decimal(sessions_entitled))
+
+    @staticmethod
+    def _session_dates_for(student_id, cycle_id):
+        if not cycle_id:
+            return []
+        from apps.attendance.models import Attendance
+        dates = (
+            Attendance.objects.filter(
+                student_id=student_id, session__cycle_id=cycle_id, session__is_cancelled=False,
+            )
+            .order_by('session__session_date')
+            .values_list('session__session_date', flat=True)
+        )
+        return [d.isoformat() for d in dates]
+
+    @staticmethod
+    def build_or_refresh(teacher, period_start, period_end, user=None):
+        """
+        Create (or refresh, if still ``draft``) the persisted settlement
+        sheet for ``teacher`` over ``[period_start, period_end]``.
+
+        Refreshing rewrites only the SNAPSHOT columns on each line — every
+        manual override (``is_excluded``, ``is_free``, ``amount_override``,
+        ``percentage_override``) survives untouched, which is the entire
+        point of separating the two: an operator's edit can never be wiped
+        out by "إعادة الحساب".
+
+        Raises :class:`~apps.payments.models.SettlementLockedError` if the
+        sheet is already approved — reopen it first.
+        """
+        from apps.students.models import StudentGroupEnrollment
+
+        settlement, created = TeacherSettlement.objects.get_or_create(
+            teacher=teacher, period_start=period_start, period_end=period_end,
+            defaults={'created_by': user},
+        )
+        if settlement.status == TeacherSettlement.STATUS_APPROVED:
+            raise SettlementLockedError('الكشف معتمد — يجب إعادة فتحه أولاً قبل إعادة الحساب')
+
+        groups = list(Group.all_objects.filter(teacher=teacher))
+        group_ids = [g.group_id for g in groups]
+        groups_by_id = {g.group_id: g for g in groups}
+
+        payments = (
+            Payment.objects.filter(
+                group_id__in=group_ids, month__gte=period_start, month__lte=period_end,
+            )
+            .select_related('student', 'cycle')
+        )
+
+        enrollments = {
+            (enr.group_id, enr.student_id): enr
+            for enr in StudentGroupEnrollment.objects.filter(group_id__in=group_ids)
+        }
+
+        existing_lines = {(l.group_id, l.student_id): l for l in settlement.lines.all()}
+        seen_keys = set()
+
+        for payment in payments:
+            key = (payment.group_id, payment.student_id)
+            seen_keys.add(key)
+            group = groups_by_id.get(payment.group_id)
+            enrollment = enrollments.get(key)
+
+            line = existing_lines.get(key)
+            if line is None:
+                line = TeacherSettlementLine(
+                    settlement=settlement, group_id=payment.group_id, student_id=payment.student_id,
+                )
+
+            fee_full = base_fee(enrollment, group) if (enrollment and group) else to_money(payment.amount_due)
+            sessions_entitled = payment.sessions_total
+            sessions_consumed = payment.sessions_attended
+
+            line.cycle = payment.cycle
+            line.payment = payment
+            line.sessions_consumed = sessions_consumed
+            line.sessions_entitled = sessions_entitled
+            line.session_dates = SettlementService._session_dates_for(
+                payment.student_id, payment.cycle_id,
+            )
+            line.fee_full = fee_full
+            line.computed_amount = SettlementService._prorate_by_sessions(
+                fee_full, sessions_consumed, sessions_entitled,
+            )
+            line.collected_amount = payment.amount_paid
+            line.financial_status = enrollment.financial_status if enrollment else ''
+            line.group_center_percentage = group.center_percentage if group else settlement.default_center_percentage
+            line.apply()
+            line.save(force_locked=True)
+
+        # A line whose payment disappeared from this period (enrollment
+        # removed, payment deleted) is EXCLUDED, never deleted — deleting it
+        # would erase the audit trail of what the teacher was once credited.
+        for key, line in existing_lines.items():
+            if key not in seen_keys and not line.is_excluded:
+                line.is_excluded = True
+                if not line.override_reason:
+                    line.override_reason = 'لم يعد له دفعة في هذه الفترة'
+                line.apply()
+                line.save(force_locked=True)
+
+        if created or not groups:
+            avg_pct = (
+                sum(g.center_percentage for g in groups) / len(groups)
+                if groups else Decimal('30.00')
+            )
+            settlement.default_center_percentage = avg_pct
+            settlement.save(update_fields=['default_center_percentage'])
+
+        settlement.recalculate_totals()
+        return settlement

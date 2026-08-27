@@ -143,18 +143,23 @@ class Student(SoftDeleteModel):
 
     is_active = models.BooleanField(default=True, verbose_name="نشط")
     
-    # Subscription fields - حقول الاشتراك
+    # مهمل — النظام الزمني (30 يوم) استُبدل بالكامل بنظام الحصص لكل
+    # (طالب × مجموعة) على حدة (انظر Payment.cycle و apps.attendance.entitlement).
+    # الحقلان مُبقيان بلا حذف لمرحلة انتقالية فقط؛ لا يوجد أي كود يقرأهما أو
+    # يكتب فيهما بعد الآن.
     last_payment_date = models.DateField(
         null=True,
         blank=True,
-        verbose_name="تاريخ آخر دفع",
-        help_text="تاريخ تفعيل آخر اشتراك"
+        editable=False,
+        verbose_name="تاريخ آخر دفع (مهمل)",
+        help_text="مهمل — لم يعد مستخدماً، انظر Payment.paid_on لكل مجموعة",
     )
     subscription_expiry_date = models.DateField(
         null=True,
         blank=True,
-        verbose_name="تاريخ انتهاء الاشتراك",
-        help_text="تاريخ انتهاء صلاحية الاشتراك (30 يوم من التفعيل)"
+        editable=False,
+        verbose_name="تاريخ انتهاء الاشتراك (مهمل)",
+        help_text="مهمل — لم يعد مستخدماً، الاستحقاق الآن بالحصص لكل مجموعة",
     )
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -318,79 +323,20 @@ class Student(SoftDeleteModel):
         return filepath
 
     def get_monthly_fee_for_group(self, group):
-        """احسب المصروفات الشهرية لمجموعة معينة حسب الحالة المالية"""
+        """
+        احسب المصروفات الشهرية لمجموعة معينة حسب الحالة المالية.
+
+        Thin shim over ``apps.payments.pricing.base_fee`` — the single
+        pricing rule — kept because this bound-method form is used all over
+        the codebase (``services.py``, ``views.py``, ``tasks.py``, tests).
+        """
         from decimal import Decimal
+        from apps.payments.pricing import base_fee
         try:
-            enrollment = StudentGroupEnrollment.objects.get(
-                student=self,
-                group=group
-            )
-            if enrollment.financial_status == 'exempt':
-                return Decimal('0')
-            elif enrollment.financial_status == 'symbolic':
-                return enrollment.custom_fee or Decimal('0')
-            else:
-                return group.standard_fee
+            enrollment = StudentGroupEnrollment.objects.get(student=self, group=group)
         except StudentGroupEnrollment.DoesNotExist:
             return Decimal('0')
-
-    def is_subscription_active(self):
-        """التحقق من صلاحية الاشتراك"""
-        # No subscription date set = subscription not configured, allow entry
-        if not self.subscription_expiry_date:
-            return True
-        # localdate(): the centre works in Africa/Cairo, so a subscription must
-        # live until the end of the *local* day, not the UTC one.
-        return timezone.localdate() <= self.subscription_expiry_date
-
-    def activate_subscription(self, days=30):
-        """تفعيل اشتراك الطالب لمدة محددة (افتراضي 30 يوم)"""
-        from datetime import timedelta
-
-        today = timezone.localdate()
-        self.last_payment_date = today
-        self.subscription_expiry_date = today + timedelta(days=days)
-        self.is_active = True
-        self.save()
-        
-        return self.subscription_expiry_date
-    
-    def get_subscription_status(self):
-        """الحصول على حالة الاشتراك"""
-        if not self.subscription_expiry_date:
-            return {
-                'status': 'inactive',
-                'message': 'لم يتم تفعيل الاشتراك',
-                'days_remaining': 0
-            }
-        
-        today = timezone.localdate()
-        days_remaining = (self.subscription_expiry_date - today).days
-        
-        if days_remaining < 0:
-            return {
-                'status': 'expired',
-                'message': f'منتهي منذ {abs(days_remaining)} يوم',
-                'days_remaining': days_remaining
-            }
-        elif days_remaining == 0:
-            return {
-                'status': 'expires_today',
-                'message': 'ينتهي اليوم',
-                'days_remaining': 0
-            }
-        elif days_remaining <= 3:
-            return {
-                'status': 'expiring_soon',
-                'message': f'ينتهي خلال {days_remaining} يوم',
-                'days_remaining': days_remaining
-            }
-        else:
-            return {
-                'status': 'active',
-                'message': f'نشط - متبقي {days_remaining} يوم',
-                'days_remaining': days_remaining
-            }
+        return base_fee(enrollment, group)
 
     def get_active_groups_count(self):
         """Get count of active group enrollments"""

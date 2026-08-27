@@ -85,6 +85,11 @@
                             <a href="{% url 'teachers:update' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-warning">
                                 <i class="bi bi-pencil"></i>
                             </a>
+                            {% if user.can_see_financials %}
+                            <a href="{% url 'payments:settlement_index' %}" class="btn btn-sm btn-outline-success" title="كشف التصفية">
+                                <i class="bi bi-calculator"></i>
+                            </a>
+                            {% endif %}
                             <form method="post" action="{% url 'teachers:delete' teacher_id=teacher.teacher_id %}" class="d-inline">
                                 {% csrf_token %}
                                 <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذا المدرس؟')">

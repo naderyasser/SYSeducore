@@ -5,13 +5,14 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
 
 from apps.accounts.decorators import (
     ajax_login_required,
     ajax_supervisor_required,
+    supervisor_required,
     ratelimit_key,
 )
 from .models import Session, Attendance, ActivityLog
@@ -300,97 +301,83 @@ def today_sessions(request):
         }, status=500)
 
 
-@ajax_login_required
-@require_http_methods(["POST"])
+@supervisor_required
+@require_http_methods(["GET"])
 def export_report(request):
     """
-    API Endpoint: تصدير تقرير الحضور
+    تصدير تقرير الحضور — ملف CSV حقيقي للتحميل المباشر.
+
+    كان POST يُرجع محتوى CSV كنص JSON بلا BOM (فيظهر العربي مشفّرًا في
+    إكسل) ثم JavaScript يبنى منه Blob — الآن GET يُرجع ملفًا فعليًا
+    برأسية ``utf-8-sig`` فيعمل رابط تحميل مباشر (``<a href>``) بلا CSRF
+    ولا fetch. تصدير كل حضور السنتر ليس بيانات مدرس، فرُفع من
+    ``@ajax_login_required`` إلى ``@supervisor_required``.
     """
+    report_date = request.GET.get('date')
+    report_type = request.GET.get('type', 'summary')
+
+    if not report_date:
+        return JsonResponse({'success': False, 'message': 'التاريخ مطلوب'}, status=400)
+
+    from datetime import datetime
     try:
-        data = json.loads(request.body)
-        report_date = data.get('date')
-        report_type = data.get('type', 'summary')
-
-        if not report_date:
-            return JsonResponse({
-                'success': False,
-                'message': 'التاريخ مطلوب'
-            }, status=400)
-
-        from datetime import datetime
         report_date_obj = datetime.strptime(report_date, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'success': False, 'message': 'صيغة التاريخ غير صحيحة'}, status=400)
 
-        # جلب بيانات الحسبور للتاريخ المحدد
-        attendances = Attendance.objects.filter(
-            session__session_date=report_date_obj
-        ).select_related('student', 'session__group', 'session__group__teacher').order_by('-scan_time')
+    attendances = Attendance.objects.filter(
+        session__session_date=report_date_obj
+    ).select_related('student', 'session__group', 'session__group__teacher').order_by('-scan_time')
 
-        if not attendances.exists():
-            return JsonResponse({
-                'success': False,
-                'message': 'لا توجد بيانات لهذا التاريخ'
-            })
+    import csv
 
-        # إنشاء محتوى CSV
-        import csv
-        from io import StringIO
+    response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    response['Content-Disposition'] = f'attachment; filename="attendance_{report_date}.csv"'
+    # utf-8-sig on the content-type covers the encoding, but Django's
+    # HttpResponse writer needs the literal BOM bytes at the start of the
+    # body too — Excel keys off this, not the header, to detect UTF-8.
+    response.write('﻿')
+    writer = csv.writer(response)
 
-        output = StringIO()
-        writer = csv.writer(output)
+    if not attendances.exists():
+        writer.writerow(['لا توجد بيانات لهذا التاريخ', report_date])
+        return response
 
-        if report_type == 'summary':
-            # تقرير ملخص
-            writer.writerow(['تقرير حضور مختصر', report_date])
-            writer.writerow([])
-            writer.writerow(['إجمالي الحضور', attendances.filter(status='present').count()])
-            writer.writerow(['عدد المتأخرين', attendances.filter(status='late').count()])
-            writer.writerow(['عدد الغياب', attendances.filter(status='absent').count()])
+    if report_type == 'summary':
+        writer.writerow(['تقرير حضور مختصر', report_date])
+        writer.writerow([])
+        writer.writerow(['إجمالي الحضور', attendances.filter(status='present').count()])
+        writer.writerow(['عدد المتأخرين', attendances.filter(status='late').count()])
+        writer.writerow(['عدد الغياب', attendances.filter(status='absent').count()])
 
-        elif report_type == 'detailed':
-            # تقرير تفصيلي
-            writer.writerow(['تقرير حضور تفصيلي', report_date])
-            writer.writerow([])
-            writer.writerow(['اسم الطالب', 'كود الطالب', 'المجموعة', 'المعلم', 'الحالة', 'وقت المسح'])
+    elif report_type == 'detailed':
+        writer.writerow(['تقرير حضور تفصيلي', report_date])
+        writer.writerow([])
+        writer.writerow(['اسم الطالب', 'كود الطالب', 'المجموعة', 'المعلم', 'الحالة', 'وقت المسح'])
+        for att in attendances:
+            writer.writerow([
+                att.student.full_name,
+                att.student.student_code,
+                att.session.group.group_name,
+                att.session.group.teacher.full_name if att.session.group.teacher else '-',
+                att.get_status_display(),
+                timezone.localtime(att.scan_time).strftime('%I:%M %p')
+            ])
 
-            for att in attendances:
-                writer.writerow([
-                    att.student.full_name,
-                    att.student.student_code,
-                    att.session.group.group_name,
-                    att.session.group.teacher.full_name if att.session.group.teacher else '-',
-                    att.get_status_display(),
-                    timezone.localtime(att.scan_time).strftime('%I:%M %p')
-                ])
+    elif report_type == 'students':
+        writer.writerow(['قائمة الطلاب المسجلين', report_date])
+        writer.writerow([])
+        writer.writerow(['اسم الطالب', 'كود الطالب', 'المجموعة', 'الحالة', 'وقت المسح'])
+        for att in attendances:
+            writer.writerow([
+                att.student.full_name,
+                att.student.student_code,
+                att.session.group.group_name,
+                att.get_status_display(),
+                timezone.localtime(att.scan_time).strftime('%I:%M %p')
+            ])
 
-        elif report_type == 'students':
-            # قائمة الطلاب
-            writer.writerow(['قائمة الطلاب المسجلين', report_date])
-            writer.writerow([])
-            writer.writerow(['اسم الطالب', 'كود الطالب', 'المجموعة', 'الحالة', 'وقت المسح'])
-
-            for att in attendances:
-                writer.writerow([
-                    att.student.full_name,
-                    att.student.student_code,
-                    att.session.group.group_name,
-                    att.get_status_display(),
-                    timezone.localtime(att.scan_time).strftime('%I:%M %p')
-                ])
-
-        content = output.getvalue()
-
-        return JsonResponse({
-            'success': True,
-            'content': content,
-            'filename': f'attendance_report_{report_date}.csv'
-        })
-
-    except Exception:
-        logger.exception('export_report failed')
-        return JsonResponse({
-            'success': False,
-            'message': 'خطأ في التصدير'
-        }, status=500)
+    return response
 
 
 # ─────────────────────────────────────────────────────────────
@@ -402,16 +389,21 @@ def _resolve_scanner_payment(student, group_id=None):
     Pick the Payment row the scanner's "ادفع الان" button should settle.
 
     Preference order: the group the scanner asked about, then the first active
-    enrollment that still owes money this month, then the first active
-    enrollment. Blindly taking the *first* enrollment charged the wrong group
-    for a student enrolled in several.
+    enrollment that still owes money on its **current cycle**, then the first
+    active enrollment. Blindly taking the *first* enrollment charged the
+    wrong group for a student enrolled in several.
+
+    Money is per (student, group) via that group's open
+    :class:`~apps.teachers.models.GroupCycle` — never by calendar month, so
+    two cycles closing inside one month never collide.
 
     Returns ``(payment, error_message)``.
     """
     from apps.payments.models import Payment
+    from apps.payments.pricing import prorated_fee
     from apps.students.models import StudentGroupEnrollment
+    from apps.teachers.cycles import open_cycle_for
 
-    current_month = timezone.localdate().replace(day=1)
     enrollments = list(
         StudentGroupEnrollment.objects.filter(
             student=student,
@@ -427,12 +419,15 @@ def _resolve_scanner_payment(student, group_id=None):
     if group_id:
         enrollments = [e for e in enrollments if str(e.group_id) == str(group_id)] or enrollments
 
+    cycles_by_group = {
+        enr.group_id: open_cycle_for(enr.group)
+        for enr in enrollments if enr.group.sessions_per_month
+    }
     payments = {
         p.group_id: p
         for p in Payment.objects.filter(
             student=student,
-            group_id__in=[e.group_id for e in enrollments],
-            month=current_month,
+            cycle_id__in=[c.cycle_id for c in cycles_by_group.values()],
         )
     }
 
@@ -441,16 +436,28 @@ def _resolve_scanner_payment(student, group_id=None):
         if payment is None or payment.status != 'paid':
             if payment is not None:
                 return payment, None
-            fee = student.get_monthly_fee_for_group(enr.group)
+            cycle = cycles_by_group.get(enr.group_id)
+            if cycle is None:
+                continue  # group is not cycle-billed at all — nothing to collect
+            fee = prorated_fee(
+                enr, cycle_size=cycle.sessions_planned, first_sequence=1, group=enr.group,
+            )
             payment, _ = Payment.objects.get_or_create(
-                student=student, group=enr.group, month=current_month,
-                defaults={'amount_due': fee, 'status': 'unpaid'},
+                student=student, group=enr.group, cycle=cycle,
+                defaults={
+                    'amount_due': fee, 'status': 'unpaid',
+                    'month': (cycle.started_on or timezone.localdate()).replace(day=1),
+                    'sessions_total': cycle.sessions_planned,
+                },
             )
             return payment, None
 
+    if not payments:
+        return None, 'لا يوجد مستحقات لهذا الطالب'
     # Everything is already settled — return the first row so the caller gets
     # an idempotent success instead of a confusing error.
-    return payments[enrollments[0].group_id], None
+    first_with_payment = next((e for e in enrollments if e.group_id in payments), enrollments[0])
+    return payments.get(first_with_payment.group_id) or next(iter(payments.values())), None
 
 
 @ajax_supervisor_required
@@ -458,20 +465,27 @@ def _resolve_scanner_payment(student, group_id=None):
 def scanner_pay_now(request):
     """
     Called from the scanner UI when the supervisor taps "ادفع الان".
-    Marks the current-month payment as paid and activates the subscription.
+    Marks this cycle's payment as paid and re-activates the enrollment for
+    this group only — never touches any other group the student is in.
 
     Moves money, so it is restricted to admin/supervisor, written to the
     activity log ("who marked this paid?") and applied atomically.
     """
     import json as _json
+    from datetime import date as _date
     from apps.payments.models import Payment
-    from apps.payments.api_views import _activate_student_for_payment
+    from apps.payments.activation import activate_payment
 
     try:
         body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
         payment_id = body.get('payment_id')
         student_id = body.get('student_id')
         group_id = body.get('group_id')
+        raw_paid_on = body.get('paid_on')
+        try:
+            paid_on = _date.fromisoformat(raw_paid_on) if raw_paid_on else None
+        except ValueError:
+            paid_on = None
 
         if payment_id:
             payment = Payment.objects.select_related('student', 'group').get(pk=payment_id)
@@ -487,10 +501,12 @@ def scanner_pay_now(request):
         with transaction.atomic():
             # Settle through the payment ledger so the movement leaves a
             # receipt row with its author, instead of overwriting amount_paid.
-            payment.settle_full(user=request.user, note='تسديد من الماسح الضوئي')
+            payment.settle_full(
+                user=request.user, note='تسديد من الماسح الضوئي', effective_on=paid_on,
+            )
 
-            # Activate subscription + enrollment
-            _activate_student_for_payment(payment, user=request.user)
+            # Re-activate the enrollment for THIS group only.
+            activate_payment(payment, paid_on=paid_on, user=request.user, request=request)
 
             ActivityLog.log(
                 user=request.user,
@@ -555,16 +571,10 @@ def scanner_grace_period(request):
         grace_date = today + timedelta(days=days)
 
         with transaction.atomic():
-            # Extend subscription by X days so Step 1.5 passes — but only move
-            # the expiry FORWARD. A student who already paid through a later
-            # date must not have that date shortened by a shorter grace period.
-            if not student.subscription_expiry_date or student.subscription_expiry_date < grace_date:
-                student.activate_subscription(days=days)
-            else:
-                student.last_payment_date = today
-                student.is_active = True
-                student.save()
-
+            # Grace is scoped to (student × group) only — it must never touch
+            # any other group this student is enrolled in. It used to extend
+            # a global ``subscription_expiry_date``, so a 3-day grace for one
+            # teacher silently granted 3 free days everywhere.
             enrollments = StudentGroupEnrollment.objects.filter(
                 student=student, is_active=True,
             )

@@ -285,25 +285,54 @@ def student_create(request):
                             )
 
                             # Handle initial payment if provided (Decimal only —
-                            # float money silently reintroduces rounding errors)
+                            # float money silently reintroduces rounding errors).
+                            # Routed through the ledger (record_transaction) and
+                            # apps.payments.activation.activate_payment instead of
+                            # writing amount_paid/status directly — a direct write
+                            # leaves no PaymentTransaction receipt behind it.
                             amount = parse_money(request.POST.get(f'initial_payment_{group_id}'))
                             if amount and amount > 0:
-                                if financial_status == 'exempt':
-                                    amount_due = Decimal('0')
-                                elif custom_fee is not None:
-                                    amount_due = custom_fee
-                                else:
-                                    amount_due = Decimal(group.standard_fee)
-                                payment_status = 'paid' if amount >= amount_due else 'partial'
-                                Payment.objects.create(
+                                from apps.payments.pricing import base_fee_parts
+                                from apps.payments.activation import activate_payment
+                                from apps.teachers.cycles import open_cycle_for
+
+                                paid_on = None
+                                raw_paid_on = request.POST.get(f'paid_on_{group_id}')
+                                if raw_paid_on:
+                                    try:
+                                        from datetime import date as _date
+                                        paid_on = _date.fromisoformat(raw_paid_on)
+                                    except ValueError:
+                                        paid_on = None
+
+                                amount_due = base_fee_parts(
+                                    financial_status, custom_fee, group.standard_fee,
+                                )
+                                cycle = open_cycle_for(group) if group.sessions_per_month else None
+                                payment = Payment.objects.create(
                                     student=student,
                                     group=group,
-                                    month=timezone.localdate().replace(day=1),
+                                    cycle=cycle,
+                                    month=(
+                                        (cycle.started_on or timezone.localdate()).replace(day=1)
+                                        if cycle else timezone.localdate().replace(day=1)
+                                    ),
                                     amount_due=amount_due,
-                                    amount_paid=amount,
-                                    payment_date=timezone.now(),
-                                    status=payment_status,
+                                    sessions_total=cycle.sessions_planned if cycle else 4,
                                 )
+                                # record_transaction rejects a total above
+                                # amount_due (system-wide rule, unlike the old
+                                # direct-write path which silently accepted
+                                # any typed amount) — clamp instead of letting
+                                # a receptionist's rounding/typo 500 the page.
+                                payment.record_transaction(
+                                    min(amount, amount_due), user=request.user,
+                                    note='دفعة عند التسجيل', effective_on=paid_on,
+                                )
+                                if payment.status == 'paid':
+                                    activate_payment(
+                                        payment, paid_on=paid_on, user=request.user, request=request,
+                                    )
                         except Group.DoesNotExist:
                             pass
 

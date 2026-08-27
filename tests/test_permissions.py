@@ -559,3 +559,68 @@ class TestSessionTimeoutMiddleware(TestCase):
         request.session['last_activity'] = time.time() - 10 * 3600
         middleware(request)
         self.assertNotIn('last_activity', request.session)
+
+
+class TestFinancialAggregateVisibility(TestRBACBase):
+    """
+    Cumulative financial figures (total revenue, collection rate, centre
+    dues) must be admin-only. Per-payment desk data (individual payments,
+    pending-payment counts) stays visible to supervisors. Context is
+    checked, not just template output — hiding the number in HTML while it
+    still reaches ``response.context`` is not a fix.
+    """
+
+    def test_supervisor_dashboard_has_no_cumulative_totals(self):
+        self.client.login(username='rbac_supervisor', password='TestPass123!')
+        response = self.client.get(reverse('reports:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('month_total_due', response.context)
+        self.assertNotIn('collection_rate', response.context)
+        self.assertFalse(response.context['show_financials'])
+        self.assertNotIn('نسبة التحصيل'.encode(), response.content)
+
+    def test_admin_dashboard_has_cumulative_totals(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(reverse('reports:dashboard'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('month_total_due', response.context)
+        self.assertIn('collection_rate', response.context)
+        self.assertTrue(response.context['show_financials'])
+
+    def test_supervisor_payment_report_has_no_totals(self):
+        self.client.login(username='rbac_supervisor', password='TestPass123!')
+        response = self.client.get(reverse('reports:payments'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('total_due', response.context)
+        self.assertNotIn('total_paid', response.context)
+
+    def test_admin_payment_report_has_totals(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(reverse('reports:payments'))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('total_due', response.context)
+
+    def test_supervisor_cannot_open_tsfya(self):
+        self.client.login(username='rbac_supervisor', password='TestPass123!')
+        response = self.client.get(reverse('reports:tsfya'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_open_tsfya(self):
+        self.client.login(username='rbac_admin', password='TestPass123!')
+        response = self.client.get(reverse('reports:tsfya'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_superuser_with_supervisor_role_sees_financials(self):
+        """A superuser must be treated as financially-privileged regardless of ``role``."""
+        superuser = User.objects.create_superuser(
+            username='rbac_super', password='TestPass123!', email='s@example.com',
+        )
+        superuser.role = 'supervisor'
+        superuser.save(update_fields=['role'])
+
+        self.assertTrue(superuser.can_see_financials())
+        self.client.login(username='rbac_super', password='TestPass123!')
+        response = self.client.get(reverse('reports:dashboard'))
+        self.assertTrue(response.context['show_financials'])
+        response = self.client.get(reverse('reports:tsfya'))
+        self.assertEqual(response.status_code, 200)

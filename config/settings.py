@@ -337,8 +337,8 @@ if crontab is not None:
             'task': 'apps.attendance.tasks.auto_mark_absent_sessions',
             'schedule': crontab(minute='*/2'),  # Every 2 minutes
         },
-        'check-billing-cycles': {
-            'task': 'apps.attendance.tasks.check_billing_cycles',
+        'roll-group-cycles': {
+            'task': 'apps.attendance.tasks.roll_group_cycles',
             'schedule': crontab(hour='*/6'),  # Every 6 hours
         },
     }

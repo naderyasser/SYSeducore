@@ -3,10 +3,15 @@
 {% block title %}{{ teacher.full_name }}{% endblock %}
 
 {% block content %}
-<div class="mb-4">
+<div class="mb-4 d-flex justify-content-between">
     <a href="{% url 'teachers:list' %}" class="btn btn-outline-secondary">
         <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
     </a>
+    {% if user.can_see_financials %}
+    <a href="{% url 'payments:settlement_index' %}" class="btn btn-outline-primary">
+        <i class="bi bi-calculator me-2"></i>كشف التصفية
+    </a>
+    {% endif %}
 </div>
 
 <div class="row g-4">

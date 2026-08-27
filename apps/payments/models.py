@@ -42,6 +42,60 @@ def to_money(value):
         raise PaymentAmountError('قيمة المبلغ غير صالحة')
 
 
+class PaymentPackage(models.Model):
+    """
+    شراء عدة دورات مقدَّمًا (باقة)، عادة بسعر مخفَّض عن مجموع الدورات منفردة.
+
+    يُمثَّل الغطاء بصف :class:`Payment` واحد **لكل دورة** (وليس بحقل "عدد
+    الدورات" على صف دفعة واحدة) — تصفية المدرس تحاسب بالدورة المُغلقة فعليًا،
+    فتوزيع المبلغ على صفوف منفصلة يمنع احتساب 100% من قيمة الباقة في شهر
+    تحصيل واحد ثم عجزًا وهميًا في الشهر التالي.
+    """
+    package_id = models.AutoField(primary_key=True)
+    student = models.ForeignKey(
+        'students.Student',
+        on_delete=models.PROTECT,
+        related_name='payment_packages',
+        verbose_name="الطالب",
+    )
+    group = models.ForeignKey(
+        'teachers.Group',
+        on_delete=models.PROTECT,
+        related_name='payment_packages',
+        verbose_name="المجموعة",
+    )
+    cycles = models.PositiveSmallIntegerField(verbose_name="عدد الدورات")
+    total_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="المبلغ الإجمالي المدفوع"
+    )
+    list_amount = models.DecimalField(
+        max_digits=10, decimal_places=2, verbose_name="المبلغ الإجمالي بدون خصم"
+    )
+    paid_on = models.DateField(verbose_name="تاريخ الدفع")
+    notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='payment_packages_created',
+        verbose_name="أنشئت بواسطة",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'payment_packages'
+        verbose_name = 'باقة دفع'
+        verbose_name_plural = 'باقات الدفع'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.student.full_name} - {self.group.group_name} - {self.cycles} دورات"
+
+    @property
+    def discount(self):
+        return to_money(self.list_amount) - to_money(self.total_amount)
+
+
 class Payment(models.Model):
     """
     Payment model for managing student payments.
@@ -75,6 +129,22 @@ class Payment(models.Model):
         verbose_name="المجموعة"
     )
 
+    cycle = models.ForeignKey(
+        'teachers.GroupCycle',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='payments',
+        verbose_name="دورة الفوترة",
+        help_text="مفتاح الفوترة الفعلي — ``month`` يبقى مشتقًا منه للتوافق مع التقارير القديمة",
+    )
+    package = models.ForeignKey(
+        'PaymentPackage',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='payments',
+        verbose_name="الباقة",
+    )
+
     month = models.DateField(verbose_name="الشهر", db_index=True)
     amount_due = models.DecimalField(
         max_digits=10,
@@ -91,8 +161,27 @@ class Payment(models.Model):
     )
 
     payment_date = models.DateTimeField(null=True, blank=True, verbose_name="تاريخ الدفع")
-    sessions_attended = models.PositiveIntegerField(default=0, verbose_name="عدد الحصص المحضورة")
-    sessions_total = models.PositiveIntegerField(default=4, verbose_name="إجمالي الحصص في الشهر")
+    paid_on = models.DateField(
+        null=True, blank=True,
+        verbose_name="تاريخ الدفع",
+        help_text=(
+            "التاريخ الفعلي الذي دفع فيه ولي الأمر (يُدخله الموظف يدويًا) — "
+            "بخلاف payment_date المُشتق تلقائيًا من سجل الحركات المحاسبي"
+        ),
+    )
+    entitlement_start_session = models.ForeignKey(
+        'attendance.Session',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='+',
+        verbose_name="أول حصة مستحقة",
+    )
+    entitlement_start_seq = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        verbose_name="ترتيب أول حصة مستحقة في الدورة",
+    )
+    sessions_attended = models.PositiveIntegerField(default=0, verbose_name="عدد الحصص المستهلكة")
+    sessions_total = models.PositiveIntegerField(default=4, verbose_name="عدد الحصص المستحقة")
     status = models.CharField(
         max_length=10,
         choices=STATUS_CHOICES,
@@ -128,7 +217,13 @@ class Payment(models.Model):
 
     class Meta:
         db_table = 'payments'
-        unique_together = ['student', 'group', 'month']
+        # مفتاح الفوترة الحقيقي أصبح (student, cycle) لا (student, group, month):
+        # مجموعة بحصص 8 يمكن أن تُغلق دورتان فيها داخل نفس الشهر التقويمي، وهو
+        # ما كان يفشل تحت القيد القديم. صفوف قديمة بلا دورة (cycle=None) لا
+        # تتعارض مع بعضها — NULL لا يساوي NULL في قيود التفرد.
+        constraints = [
+            models.UniqueConstraint(fields=['student', 'cycle'], name='uniq_payment_student_cycle'),
+        ]
         ordering = ['-month']
 
     def __str__(self):
@@ -221,7 +316,8 @@ class Payment(models.Model):
         return self._apply_ledger_total(self.sync_ledger(user=user), save=save)
 
     @transaction.atomic
-    def record_transaction(self, amount, user=None, note='', kind=None, allow_reversal=False):
+    def record_transaction(self, amount, user=None, note='', kind=None, allow_reversal=False,
+                            effective_on=None):
         """
         Record one money movement and reconcile the payment.
 
@@ -233,12 +329,18 @@ class Payment(models.Model):
           zero.
         * ``amount == 0`` is a no-op that still reconciles (the desk UI posts
           0 when the cashier clears the field).
+        * ``effective_on`` is the business date the desk was told the money
+          changed hands (defaults to today) — recorded on the ledger row and
+          mirrored onto ``Payment.paid_on`` for a real (positive) movement.
+          ``PaymentTransaction.created_at`` itself is never back-dated: it
+          stays the untouchable audit timestamp of when the row was written.
 
         Returns the created :class:`PaymentTransaction`, or ``None`` for a
         zero-amount no-op. Raises :class:`PaymentAmountError` — Arabic
         message — on any rejection.
         """
         amount = to_money(amount)
+        effective_on = effective_on or timezone.localdate()
 
         if amount < 0 and not allow_reversal:
             raise PaymentAmountError('لا يمكن تسجيل مبلغ سالب')
@@ -270,21 +372,26 @@ class Payment(models.Model):
                 ),
                 created_by=user,
                 note=note,
+                effective_on=effective_on,
             )
 
         # Apply the already-known total: re-reading the ledger through
         # ``sync_ledger`` here would see the (now stale) ``amount_paid`` of
         # the locked row and "restore" a reversal as an opening balance.
         locked._apply_ledger_total(new_total)
+        if amount > 0:
+            locked.paid_on = effective_on
+            locked.save(update_fields=['paid_on'])
 
         # Mirror the reconciled state onto the caller's instance.
         self.amount_paid = locked.amount_paid
         self.status = locked.status
         self.payment_date = locked.payment_date
+        self.paid_on = locked.paid_on
         return txn
 
     @transaction.atomic
-    def settle_full(self, user=None, note=''):
+    def settle_full(self, user=None, note='', effective_on=None):
         """
         تسديد كامل — record the outstanding balance as one movement.
 
@@ -300,6 +407,7 @@ class Payment(models.Model):
             outstanding,
             user=user,
             note=note or 'تسديد كامل',
+            effective_on=effective_on,
         )
 
     def reverse_all(self, user=None, note=''):
@@ -367,6 +475,14 @@ class PaymentTransaction(models.Model):
         verbose_name="بواسطة",
     )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True, verbose_name="التاريخ")
+    effective_on = models.DateField(
+        null=True, blank=True,
+        verbose_name="تاريخ الدفع الفعلي",
+        help_text=(
+            "التاريخ الذي أعطاه ولي الأمر (قد يسبق created_at)، بخلاف "
+            "created_at الذي يبقى ثابتًا ولا يُعدَّل أبدًا كدليل تدقيق"
+        ),
+    )
     note = models.TextField(blank=True, verbose_name="ملاحظة")
 
     class Meta:
@@ -381,3 +497,214 @@ class PaymentTransaction(models.Model):
     def __str__(self):
         who = self.created_by.get_username() if self.created_by else 'النظام'
         return f"{self.payment_id} — {self.amount} ج.م — {who}"
+
+
+class SettlementLockedError(Exception):
+    """الكشف معتمد — لا يمكن تعديله قبل إعادة فتحه."""
+
+
+class TeacherSettlement(models.Model):
+    """
+    كشف تصفية مدرس عن فترة معينة — رأس الكشف. يُحتسَب بالحصص المستهلكة
+    فعليًا (لا بافتراض أن كل طالب أكمل الدورة)، ويمكن تعديله يدويًا أثناء
+    المحاسبة (استبعاد طالب، تخفيض مبلغ، تعديل نسبة) قبل اعتماده.
+
+    ``computed_*`` مبنية من مجموع ``TeacherSettlementLine`` — الحساب الفعلي
+    في ``apps.payments.services.SettlementService``.
+    """
+    STATUS_DRAFT = 'draft'
+    STATUS_APPROVED = 'approved'
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'مسودة'),
+        (STATUS_APPROVED, 'معتمد'),
+    ]
+
+    settlement_id = models.AutoField(primary_key=True)
+    teacher = models.ForeignKey(
+        'teachers.Teacher', on_delete=models.PROTECT, related_name='settlements',
+        verbose_name="المدرس",
+    )
+    period_start = models.DateField(verbose_name="بداية الفترة")
+    period_end = models.DateField(verbose_name="نهاية الفترة")
+    period_label = models.CharField(max_length=64, blank=True, verbose_name="تسمية الفترة")
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default=STATUS_DRAFT, db_index=True,
+        verbose_name="الحالة",
+    )
+
+    computed_gross = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="الإجمالي المحسوب")
+    adjusted_gross = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="الإجمالي بعد التعديل")
+    center_share = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="نصيب المركز")
+    teacher_share = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="نصيب المدرس")
+    default_center_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal('30.00'), verbose_name="نسبة المركز الافتراضية",
+    )
+
+    notes = models.TextField(blank=True, verbose_name="ملاحظات")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='settlements_created', verbose_name="أنشئت بواسطة",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='settlements_approved', verbose_name="اعتُمد بواسطة",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    reopened_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='settlements_reopened', verbose_name="أُعيد فتحه بواسطة",
+    )
+    reopened_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'teacher_settlements'
+        unique_together = [('teacher', 'period_start', 'period_end')]
+        ordering = ['-period_start', 'teacher_id']
+        indexes = [
+            models.Index(fields=['teacher', 'status'], name='settle_teacher_status_idx'),
+        ]
+        verbose_name = 'كشف تصفية مدرس'
+        verbose_name_plural = 'كشوفات تصفية المدرسين'
+
+    def __str__(self):
+        return f"{self.teacher.full_name} — {self.period_start} إلى {self.period_end} ({self.get_status_display()})"
+
+    @property
+    def is_approved(self):
+        return self.status == self.STATUS_APPROVED
+
+    def recalculate_totals(self):
+        """أعِد حساب مجاميع الرأس من مجموع سطوره — استعلام واحد."""
+        agg = self.lines.aggregate(
+            computed=models.Sum('computed_amount'),
+            adjusted=models.Sum('effective_amount'),
+            center=models.Sum('line_center_share'),
+            teacher=models.Sum('line_teacher_share'),
+        )
+        self.computed_gross = agg['computed'] or ZERO
+        self.adjusted_gross = agg['adjusted'] or ZERO
+        self.center_share = agg['center'] or ZERO
+        self.teacher_share = agg['teacher'] or ZERO
+        self.save(update_fields=['computed_gross', 'adjusted_gross', 'center_share', 'teacher_share', 'updated_at'])
+
+
+class TeacherSettlementLine(models.Model):
+    """
+    سطر تصفية لطالب واحد ضمن مجموعة واحدة داخل كشف مدرس.
+
+    ثلاث مجموعات من الحقول متعمَّد فصلها:
+      * **لقطة (snapshot)** — ما حسبه النظام؛ تُعاد كتابتها عند "إعادة الحساب"
+        فقط، ولا تُمس التعديلات اليدوية أبدًا.
+      * **تعديل يدوي (override)** — ``None`` تعني "لا يوجد تعديل"، ليست صفرًا.
+      * **مُشتقّ (derived)** — محفوظ لا يُحسب وقت العرض، فتبقى القراءة رخيصة
+        والكشف مفهومًا بعد سنوات حتى لو تغيّرت الأسعار والنسب.
+    """
+    line_id = models.AutoField(primary_key=True)
+    settlement = models.ForeignKey(
+        TeacherSettlement, on_delete=models.CASCADE, related_name='lines',
+        verbose_name="الكشف",
+    )
+    group = models.ForeignKey(
+        'teachers.Group', on_delete=models.PROTECT, related_name='settlement_lines',
+        verbose_name="المجموعة",
+    )
+    student = models.ForeignKey(
+        'students.Student', on_delete=models.PROTECT, related_name='settlement_lines',
+        verbose_name="الطالب",
+    )
+    cycle = models.ForeignKey(
+        'teachers.GroupCycle', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='settlement_lines', verbose_name="الدورة",
+    )
+    payment = models.ForeignKey(
+        Payment, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='settlement_lines', verbose_name="الدفعة (للتتبع فقط)",
+    )
+
+    # ── لقطة: ما حسبه النظام وقت البناء/إعادة الحساب ──
+    sessions_consumed = models.PositiveIntegerField(default=0, verbose_name="الحصص المستهلكة")
+    sessions_entitled = models.PositiveIntegerField(default=0, verbose_name="الحصص المستحقة")
+    session_dates = models.JSONField(default=list, blank=True, verbose_name="تواريخ الحصص")
+    fee_full = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="السعر الكامل للدورة")
+    computed_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="المبلغ المحسوب آليًا")
+    collected_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="المبلغ المُحصَّل فعليًا")
+    financial_status = models.CharField(max_length=15, blank=True, verbose_name="الحالة المالية")
+    group_center_percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal('30.00'), verbose_name="نسبة المركز للمجموعة",
+    )
+
+    # ── تعديل يدوي — None يعني "لا تعديل" ──
+    is_excluded = models.BooleanField(default=False, verbose_name="مستبعد")
+    is_free = models.BooleanField(default=False, verbose_name="حالة مجانية/خاصة")
+    amount_override = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="مبلغ مُعدَّل",
+    )
+    percentage_override = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True, verbose_name="نسبة مُعدَّلة",
+    )
+    override_reason = models.CharField(max_length=255, blank=True, verbose_name="سبب التعديل")
+
+    # ── مُشتقّ ومحفوظ ──
+    effective_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="المبلغ الفعلي بعد التعديل")
+    line_center_share = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="نصيب المركز")
+    line_teacher_share = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="نصيب المدرس")
+
+    edited_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='settlement_lines_edited', verbose_name="آخر مُعدِّل",
+    )
+    edited_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'teacher_settlement_lines'
+        unique_together = [('settlement', 'group', 'student')]
+        ordering = ['group__group_name', 'student__full_name']
+        indexes = [
+            models.Index(fields=['settlement', 'group'], name='settleline_stl_grp_idx'),
+        ]
+        verbose_name = 'سطر تصفية'
+        verbose_name_plural = 'سطور التصفية'
+
+    def __str__(self):
+        return f"{self.student.full_name} — {self.group.group_name}"
+
+    def save(self, *args, **kwargs):
+        """
+        يمنع أي تعديل على سطر ينتمي لكشف مُعتمَد، حتى لو تم تجاوز واجهة
+        العرض (شِل، أمر إداري). ``force_locked=True`` يُتيح إعادة الفتح نفسها
+        (تكتب على الرأس لا على السطر، فلا تحتاج هذا أصلًا) وأي عملية نظامية
+        موثوقة صراحةً.
+        """
+        force = kwargs.pop('force_locked', False)
+        if self.settlement_id and not force:
+            if self.settlement.status == TeacherSettlement.STATUS_APPROVED:
+                raise SettlementLockedError('الكشف معتمد — لا يمكن تعديله')
+        super().save(*args, **kwargs)
+
+    def apply(self):
+        """
+        طبّق قواعد الحساب (استبعاد/مجاني/تعديل مبلغ/تعديل نسبة) وخزّن
+        الأعمدة المُشتقّة. لا تحفظ — الاستدعاء يقرر متى.
+        """
+        if self.is_excluded:
+            base = center = teacher = ZERO
+        else:
+            if self.is_free:
+                base = ZERO
+            elif self.amount_override is not None:
+                base = to_money(self.amount_override)
+            else:
+                base = to_money(self.computed_amount)
+
+            pct = (
+                self.percentage_override if self.percentage_override is not None
+                else self.group_center_percentage
+            )
+            center = (base * pct / Decimal('100')).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+            teacher = base - center
+
+        self.effective_amount = base
+        self.line_center_share = center
+        self.line_teacher_share = teacher

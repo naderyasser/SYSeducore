@@ -22,7 +22,6 @@ DAY_NAMES_AR = WEEK_DAYS_AR
 SEVERITY_MAP = {
     'not_found': 'error',
     'invalid_code': 'error',
-    'subscription_expired': 'error',
     'payment_required': 'warning',
     'sessions_exhausted': 'warning',
     'too_early': 'info',
@@ -32,6 +31,7 @@ SEVERITY_MAP = {
     'wrong_schedule': 'info',
     'skipped': 'warning',
     'no_session': 'info',
+    'no_cycle': 'info',
 }
 
 
@@ -195,12 +195,11 @@ class AttendanceService:
         """
         معالجة إدخال كود الطالب - النظام المبسط
 
-        الخوارزمية (5 خطوات):
+        الخوارزمية:
         1. جلب الطالب بـ student_code
-        2. التحقق من صلاحية الاشتراك (30 يوم)
-        3. مطابقة الجدول (الوقت واليوم الحاليين)
-        4. قاعدة 10 دقائق صارمة (>10 = BLOCK)
-        5. فحص مالي
+        2. مطابقة الجدول (الوقت واليوم الحاليين)
+        3. قاعدة 10 دقائق صارمة (>10 = BLOCK)
+        4. فحص مالي بالحصص لكل مجموعة على حدة (انظر apps.attendance.entitlement)
         + الكشف الفوري للحالة المالية
         """
         # ========================================
@@ -234,23 +233,6 @@ class AttendanceService:
             if 'value' not in dossier_cache:
                 dossier_cache['value'] = AttendanceService.build_student_dossier(student)
             return dossier_cache['value']
-
-        # ========================================
-        # الخطوة 1.5: التحقق من صلاحية الاشتراك
-        # ========================================
-        if not student.is_subscription_active():
-            subscription_status = student.get_subscription_status()
-            days_expired = abs(subscription_status.get('days_remaining', 0))
-            return {
-                'success': False,
-                'message': f'اشتراك الطالب {student.full_name} منتهي منذ {days_expired} يوم — يجب التجديد قبل تسجيل الحضور',
-                'sound': 'error',
-                'error_type': 'subscription_expired',
-                'severity': 'error',
-                'student_name': student.full_name,
-                'subscription_status': subscription_status,
-                'dossier': dossier(),
-            }
 
         # ========================================
         # الخطوة 2: مطابقة الجدول — جمع كل الحصص المطابقة
@@ -376,11 +358,14 @@ class AttendanceService:
             # supervisors scanning the same card at once must not leave a
             # half-written group behind when they race on unique_together.
             with transaction.atomic():
-                session, _ = Session.objects.get_or_create(
+                session, session_created = Session.objects.get_or_create(
                     group=matching_group,
                     session_date=timezone.localdate(),
                     defaults={'teacher_attended': False}
                 )
+                if session_created:
+                    from apps.teachers.cycles import assign_to_cycle
+                    assign_to_cycle(session)
 
                 if session.is_cancelled:
                     reason = session.cancellation_reason or 'تم إلغاء الحصة'
@@ -665,143 +650,38 @@ class AttendanceService:
         }
     
     @staticmethod
-    def is_student_first_month_in_group(student, group):
-        """
-        تحديد هل هذا هو الشهر الأول للطالب في مجموعة معينة
-        """
-        current_month = timezone.localdate().replace(day=1)
-
-        # البحث عن أول حضور للطالب في هذه المجموعة
-        first_attendance = Attendance.objects.filter(
-            student=student,
-            session__group=group
-        ).order_by('scan_time').first()
-
-        if not first_attendance:
-            # لم يسجل حضور من قبل في هذه المجموعة = شهر أول
-            return True
-
-        # تاريخ أول حضور — بالتوقيت المحلي: مسح بعد منتصف الليل بالقاهرة
-        # كان يُحسب على الشهر السابق فينقلب حكم "الشهر الأول".
-        first_month = timezone.localtime(first_attendance.scan_time).date().replace(day=1)
-
-        # إذا كان أول حضور في نفس الشهر الحالي = شهر أول
-        return first_month == current_month
-    
-    @staticmethod
     def check_financial_status(student, group):
         """
-        الخطوة 4: فحص الحالة المالية
-        يتحقق من الحالة المالية للطالب في المجموعة المحددة
-        """
-        from django.conf import settings as django_settings
+        الخطوة 4: فحص الحالة المالية — بالحصص، لكل (طالب × مجموعة) على حدة.
 
-        # جلب معلومات التسجيل في المجموعة
+        غلاف رقيق حول ``apps.attendance.entitlement.evaluate`` — القرار
+        الفعلي منطقي بحت وقابل للاختبار هناك بمعزل عن قاعدة البيانات
+        والسكانر. الاسم والشكل المُرجَع أُبقيا كما هما تمامًا لأن
+        ``process_scan`` وعشرات الاختبارات يعتمدون عليهما.
+        """
+        from apps.teachers.cycles import open_cycle_for
+        from . import entitlement
+
         try:
-            enrollment = StudentGroupEnrollment.objects.get(
-                student=student,
-                group=group,
-                is_active=True
+            enrollment = StudentGroupEnrollment.objects.select_related('group').get(
+                student=student, group=group, is_active=True,
             )
         except StudentGroupEnrollment.DoesNotExist:
             return {
                 'allowed': False,
                 'reason': 'ممنوع الدخول: غير مسجل في هذه المجموعة',
-                'error_type': 'not_enrolled'
+                'error_type': 'not_enrolled',
             }
 
-        # الطلاب المعفيين دائماً مسموح لهم
-        if enrollment.financial_status == 'exempt':
-            return {'allowed': True, 'exempt': True}
-
-        # الحصول على الشهر الحالي
-        current_month = timezone.localdate().replace(day=1)
-
-        # عدد الحصص المسجلة هذا الشهر لهذه المجموعة فقط
-        sessions_count = Attendance.objects.filter(
-            student=student,
-            session__group=group,
-            session__session_date__gte=current_month,
-            session__is_cancelled=False,
-        ).count()
-
-        # فحص هل هو الشهر الأول في هذه المجموعة
-        is_first_month = AttendanceService.is_student_first_month_in_group(student, group)
-
-        # القاعدة:
-        # - الشهر الأول مع تفعيل الدفع الصارم: لازم يدفع قبل الدخول (0 حصص سماح)
-        # - الشهر الأول بدون دفع صارم: يدخل حصتين قبل الدفع (2 حصص سماح)
-        # - الشهور التالية: يدخل حصتين قبل الدفع (2 حصص سماح)
-        strict_first_month = getattr(django_settings, 'ENABLE_FIRST_MONTH_STRICT_PAYMENT', True)
-        if is_first_month and strict_first_month:
-            allowed_sessions = 0
+        if not group.sessions_per_month:
+            cycle = None
         else:
-            allowed_sessions = 2
-
-        # التحقق من استنفاد الحصص الشهرية
-        # sessions_per_month = 0 تعني "بدون حد" — قبل ذلك كان الشرط
-        # ``sessions_count >= 0`` صحيحاً دائماً فيُرفض كل طلاب المجموعة.
-        sessions_limit = group.sessions_per_month or 0
-        if sessions_limit > 0 and sessions_count >= sessions_limit:
-            return {
-                'allowed': False,
-                'reason': f'تم استنفاد جميع الحصص ({sessions_limit} حصة) لهذا الشهر. يرجى تجديد الاشتراك.',
-                'error_type': 'sessions_exhausted',
-                'sessions_attended': sessions_count,
-                'sessions_limit': sessions_limit,
-            }
-
-        # منع الدخول بعد الحصة المسموح إذا لم يدفع
-        if sessions_count >= allowed_sessions:
-            # ── Check active payment exceptions first ──
-            exception = AttendanceService.check_exception_status(
-                student, group, exception_type='payment'
+            cycle = (
+                group.cycles.filter(closed_on__isnull=True).order_by('-index').first()
+                or open_cycle_for(group)
             )
-            if exception:
-                return {
-                    'allowed': True,
-                    'exception_applied': True,
-                    'exception_id': exception.exception_id,
-                    'exception_reason': exception.reason_display,
-                }
 
-            # ── Check grace period ──
-            today = timezone.localdate()
-            if enrollment.grace_until and enrollment.grace_until >= today:
-                return {
-                    'allowed': True,
-                    'grace_period': True,
-                    'grace_until': enrollment.grace_until.isoformat(),
-                }
-
-            # Read-only lookup: a *check* must not create billing rows. A
-            # missing row means nobody has invoiced this month yet, which is
-            # exactly "not paid". ``scanner_pay_now`` creates the row when the
-            # supervisor actually settles the debt.
-            payment = Payment.objects.filter(
-                student=student,
-                group=group,
-                month=current_month,
-            ).first()
-            if payment is None or payment.status != 'paid':
-                reason = 'ممنوع الدخول: الدفع مطلوب'
-                if is_first_month:
-                    reason += ' (الشهر الأول)'
-                amount_due = (
-                    payment.amount_due if payment is not None
-                    else student.get_monthly_fee_for_group(group)
-                )
-                return {
-                    'allowed': False,
-                    'reason': reason,
-                    'error_type': 'payment_required',
-                    'payment_id': payment.payment_id if payment is not None else None,
-                    'student_id': student.student_id,
-                    'group_id': group.group_id,
-                    'amount_due': float(amount_due),
-                }
-
-        return {'allowed': True}
+        return entitlement.evaluate(enrollment, cycle)
 
     @staticmethod
     def check_exception_status(student, group, exception_type='payment'):
@@ -867,14 +747,20 @@ class AttendanceService:
             .prefetch_related('group__schedules')
         )
 
-        # مدفوعات الشهر الحالي لكل المجموعات في استعلام واحد
-        # (كان استعلاماً لكل مجموعة داخل الحلقة)
+        # الدورة المفتوحة الحالية لكل مجموعة، ثم مدفوعات تلك الدورات — كل ذلك
+        # في استعلامين فقط (كان استعلاماً لكل مجموعة داخل الحلقة).
+        group_ids = [enr.group_id for enr in enrollments]
+        from apps.teachers.models import GroupCycle
+        open_cycles_by_group = {
+            c.group_id: c
+            for c in GroupCycle.objects.filter(group_id__in=group_ids, closed_on__isnull=True)
+        }
         payments_by_group = {
             p.group_id: p
             for p in Payment.objects.filter(
                 student=student,
-                group_id__in=[enr.group_id for enr in enrollments],
-                month=current_month,
+                group_id__in=group_ids,
+                cycle_id__in=[c.cycle_id for c in open_cycles_by_group.values()],
             )
         }
 
@@ -883,6 +769,7 @@ class AttendanceService:
         for enr in enrollments:
             group = enr.group
             payment = payments_by_group.get(group.pk)
+            cycle = open_cycles_by_group.get(group.pk)
 
             if enr.financial_status == 'exempt':
                 pay_status = 'exempt'
@@ -937,10 +824,15 @@ class AttendanceService:
                     'amount_paid': amount_paid,
                     'remaining': remaining,
                 },
+                'entitlement': {
+                    'cycle_index': cycle.index if cycle else None,
+                    'sessions_consumed': payment.sessions_attended if payment else 0,
+                    'sessions_total': (
+                        payment.sessions_total if payment
+                        else (cycle.sessions_planned if cycle else None)
+                    ),
+                },
             })
-
-        # حالة الاشتراك
-        sub_status = student.get_subscription_status()
 
         # إحصائيات الحضور هذا الشهر
         month_attendances = Attendance.objects.filter(
@@ -971,15 +863,6 @@ class AttendanceService:
                 'parent_name': student.parent_name or '',
                 'registration_date': student.created_at.strftime('%Y-%m-%d') if student.created_at else None,
             },
-            'subscription': {
-                'status': sub_status.get('status'),
-                'status_display': sub_status.get('message'),
-                'days_remaining': sub_status.get('days_remaining'),
-                'expiry_date': (
-                    student.subscription_expiry_date.isoformat()
-                    if student.subscription_expiry_date else None
-                ),
-            },
             'enrollments': enrollments_data,
             'financial_summary': {
                 'total_due': sum(e['payment']['amount_due'] for e in enrollments_data),
@@ -999,38 +882,71 @@ class AttendanceService:
     @staticmethod
     def update_payment_sessions(student, group):
         """
-        Update sessions_attended on the Payment record.
-        Now includes absent records (auto-marked or manual) so that
-        missed sessions count toward the billing cycle.
+        Update ``sessions_attended`` on this student's Payment for the
+        group's **current cycle** — not the calendar month. Absences (auto-
+        marked or manual) still count, so a missed session still burns
+        entitlement exactly like an attended one.
 
-        Total sessions: sum of present + late + absent + exception.
+        If this is the student's first consumed session of the cycle, also
+        stamps the entitlement anchor (``entitlement_start_session`` /
+        ``entitlement_start_seq``) and prices the row via
+        :mod:`apps.payments.pricing` (pro-rated for a mid-cycle join).
+        Never called for a group with no cycle billing
+        (``sessions_per_month == 0``) — callers check that first.
         """
-        current_month = timezone.localdate().replace(day=1)
+        from apps.teachers.cycles import open_cycle_for
+        from apps.payments.pricing import prorated_fee, entitled_sessions
+
+        if not group.sessions_per_month:
+            return
+
+        cycle = open_cycle_for(group)
 
         sessions_count = Attendance.objects.filter(
             student=student,
-            session__group=group,
-            session__session_date__gte=current_month,
+            session__cycle=cycle,
             session__is_cancelled=False,
         ).count()
 
-        payment, created = Payment.objects.get_or_create(
-            student=student,
-            group=group,
-            month=current_month,
-            defaults={
-                'amount_due': student.get_monthly_fee_for_group(group),
-                'sessions_attended': sessions_count,
-                'sessions_total': group.sessions_per_month,
-            }
-        )
+        try:
+            enrollment = StudentGroupEnrollment.objects.get(student=student, group=group)
+        except StudentGroupEnrollment.DoesNotExist:
+            enrollment = None
 
-        if not created:
+        payment = Payment.objects.filter(student=student, cycle=cycle).first()
+        if payment is None:
+            first = (
+                Attendance.objects.filter(
+                    student=student, session__cycle=cycle, session__is_cancelled=False,
+                )
+                .exclude(status='absent')
+                .order_by('session__sequence_in_cycle')
+                .select_related('session')
+                .first()
+            )
+            first_seq = first.session.sequence_in_cycle if first else 1
+            payment = Payment.objects.create(
+                student=student,
+                group=group,
+                cycle=cycle,
+                month=cycle.started_on.replace(day=1) if cycle.started_on else timezone.localdate().replace(day=1),
+                amount_due=prorated_fee(
+                    enrollment, cycle_size=cycle.sessions_planned,
+                    first_sequence=first_seq, group=group,
+                ) if enrollment else 0,
+                sessions_attended=sessions_count,
+                sessions_total=entitled_sessions(
+                    cycle_size=cycle.sessions_planned, first_sequence=first_seq,
+                ),
+                entitlement_start_session=first.session if first else None,
+                entitlement_start_seq=first_seq if first else None,
+            )
+        else:
             payment.sessions_attended = sessions_count
             payment.save(update_fields=['sessions_attended'])
 
     # ``update_billing_cycle`` used to live here. It was never called by
-    # anything and diverged from ``apps.attendance.tasks.check_billing_cycles``
-    # (which reimplemented the same rule with different queries and, unlike
-    # this copy, also rolled the next month's Payment). The Celery task is now
-    # the single implementation of billing-cycle completion.
+    # anything and diverged from ``apps.attendance.tasks.roll_group_cycles``
+    # (which reimplements the same rule at the group level, since every
+    # student on a group shares one cycle). The Celery task is now the
+    # single implementation of cycle-completion.

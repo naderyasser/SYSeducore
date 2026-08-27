@@ -465,23 +465,22 @@ class PaymentAPIPermissionTest(LedgerTestBase):
         """
         A payment already settled must not be re-activated by a replayed
         mark-paid POST — ``settle_full`` returns ``None`` (no ledger row),
-        so the student's deliberate deactivation must survive.
+        so a deliberately deactivated enrollment must survive. (Activation
+        is scoped to the enrollment now, not a global Student flag.)
         """
         self.client.login(username='ledger_supervisor', password='TestPass123!')
         self.client.post(self.mark_url)
         self.assertEqual(self.payment.transactions.count(), 1)
 
-        self.student.is_active = False
-        self.student.subscription_expiry_date = date(2020, 1, 1)
-        self.student.save(update_fields=['is_active', 'subscription_expiry_date'])
+        self.enrollment.is_active = False
+        self.enrollment.save(update_fields=['is_active'])
 
         response = self.client.post(self.mark_url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.payment.transactions.count(), 1)
 
-        self.student.refresh_from_db()
-        self.assertFalse(self.student.is_active)
-        self.assertEqual(self.student.subscription_expiry_date, date(2020, 1, 1))
+        self.enrollment.refresh_from_db()
+        self.assertFalse(self.enrollment.is_active)
 
     def test_settlement_page_is_admin_only(self):
         url = reverse('payments:settlement', kwargs={'teacher_id': self.teacher.pk})
@@ -732,3 +731,386 @@ class LedgerBackfillMigrationTest(LedgerTestBase):
         # Idempotent: a second run must not double the balance.
         migration.backfill(global_apps, None)
         self.assertEqual(self.payment.transactions.count(), 1)
+
+
+class CollectPaymentApiTest(LedgerTestBase):
+    """
+    payments:api_collect — the quick per-(student, group) "تسجيل دفع" dialog
+    that replaces the old global "تفعيل الاشتراك". Money is per (student,
+    group) via the group's open GroupCycle.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('api_collect')
+        self.client = Client()
+        self.client.login(username='ledger_supervisor', password='TestPass123!')
+
+    def test_collect_creates_and_settles_current_cycle_payment(self):
+        from apps.teachers.models import GroupCycle
+
+        response = self.client.post(self.url, {
+            'student_id': self.student.pk, 'group_id': self.group.pk,
+            'amount': '300.00',
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['payment']['status'], 'paid')
+
+        cycle = GroupCycle.objects.get(group=self.group, closed_on__isnull=True)
+        payment = Payment.objects.get(student=self.student, cycle=cycle)
+        self.assertEqual(payment.amount_paid, Decimal('300.00'))
+        self.assertEqual(payment.status, 'paid')
+
+    def test_collect_reactivates_inactive_enrollment(self):
+        self.enrollment.is_active = False
+        self.enrollment.save(update_fields=['is_active'])
+
+        response = self.client.post(self.url, {
+            'student_id': self.student.pk, 'group_id': self.group.pk,
+            'amount': '300.00',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.enrollment.refresh_from_db()
+        self.assertTrue(self.enrollment.is_active)
+
+    def test_collect_does_not_touch_other_group(self):
+        """Paying for self.group must not affect an unrelated enrollment."""
+        other_teacher = Teacher.objects.create(
+            full_name='مدرس آخر السجل', phone='01234500099',
+            specialization='لغة', hire_date=timezone.localdate(),
+        )
+        other_group = create_group_with_schedule(
+            group_name='مجموعة أخرى السجل', teacher=other_teacher, room=self.room,
+            schedule_day='Wednesday', schedule_time=time(11, 0),
+            standard_fee=Decimal('100.00'),
+        )
+        other_enrollment = StudentGroupEnrollment.objects.create(
+            student=self.student, group=other_group, financial_status='normal',
+            is_active=False,
+        )
+        self.client.post(self.url, {
+            'student_id': self.student.pk, 'group_id': self.group.pk,
+            'amount': '300.00',
+        })
+        other_enrollment.refresh_from_db()
+        self.assertFalse(other_enrollment.is_active)
+
+    def test_collect_overpayment_rejected(self):
+        response = self.client.post(self.url, {
+            'student_id': self.student.pk, 'group_id': self.group.pk,
+            'amount': '9999.00',
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_collect_missing_ids_rejected(self):
+        response = self.client.post(self.url, {'amount': '100'})
+        self.assertEqual(response.status_code, 400)
+
+    def test_collect_not_enrolled_rejected(self):
+        other_student = Student.objects.create(
+            student_code='LDG002', full_name='طالب غير مسجل',
+            parent_phone='01234500002',
+        )
+        response = self.client.post(self.url, {
+            'student_id': other_student.pk, 'group_id': self.group.pk,
+            'amount': '100',
+        })
+        self.assertEqual(response.status_code, 404)
+
+    def test_collect_package_splits_across_cycles(self):
+        from apps.teachers.models import GroupCycle
+
+        response = self.client.post(self.url, {
+            'student_id': self.student.pk, 'group_id': self.group.pk,
+            'amount': '540.00', 'package_cycles': '2',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+
+        cycles = GroupCycle.objects.filter(group=self.group).order_by('index')
+        self.assertEqual(cycles.count(), 2)
+        payments = Payment.objects.filter(student=self.student, cycle__in=cycles)
+        self.assertEqual(payments.count(), 2)
+        self.assertEqual(
+            sum(p.amount_due for p in payments), Decimal('540.00'),
+        )
+        self.assertTrue(all(p.status == 'paid' for p in payments))
+
+
+class TeacherSettlementBuildTest(LedgerTestBase):
+    """
+    SettlementService.build_or_refresh — persisted, session-aware, editable
+    teacher settlement. Amounts must be Decimal end-to-end (the old
+    calculate_teacher_settlement converts everything to float).
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.teachers.models import GroupCycle
+
+        self.cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
+        self.payment.cycle = self.cycle
+        self.payment.sessions_total = 4
+        self.payment.sessions_attended = 2  # only consumed half the cycle
+        self.payment.amount_paid = Decimal('300.00')
+        self.payment.status = 'paid'
+        self.payment.save()
+
+        self.month_start = timezone.localdate().replace(day=1)
+
+    def test_prorate_by_sessions_half_cycle(self):
+        from apps.payments.services import SettlementService
+        amount = SettlementService._prorate_by_sessions(Decimal('300.00'), 2, 4)
+        self.assertEqual(amount, Decimal('150.00'))
+
+    def test_prorate_never_exceeds_full_fee(self):
+        from apps.payments.services import SettlementService
+        amount = SettlementService._prorate_by_sessions(Decimal('300.00'), 99, 4)
+        self.assertEqual(amount, Decimal('300.00'))
+
+    def test_build_creates_settlement_with_prorated_line(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(
+            self.teacher, self.month_start, self.month_start, user=self.admin,
+        )
+        self.assertEqual(settlement.status, 'draft')
+        line = settlement.lines.get(student=self.student, group=self.group)
+        self.assertEqual(line.sessions_consumed, 2)
+        self.assertEqual(line.sessions_entitled, 4)
+        self.assertEqual(line.computed_amount, Decimal('150.00'))
+        self.assertEqual(line.effective_amount, Decimal('150.00'))
+        # 30% default center_percentage
+        self.assertEqual(line.line_center_share, Decimal('45.00'))
+        self.assertEqual(line.line_teacher_share, Decimal('105.00'))
+        self.assertEqual(settlement.adjusted_gross, Decimal('150.00'))
+
+    def test_refresh_preserves_manual_override(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.get(student=self.student, group=self.group)
+        line.amount_override = Decimal('50.00')
+        line.override_reason = 'دفع نص المبلغ فقط'
+        line.apply()
+        line.save()
+
+        # A second refresh (e.g. more attendance came in) must not touch the override.
+        self.payment.sessions_attended = 3
+        self.payment.save(update_fields=['sessions_attended'])
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line.refresh_from_db()
+        self.assertEqual(line.sessions_consumed, 3)  # snapshot updated
+        self.assertEqual(line.amount_override, Decimal('50.00'))  # override untouched
+        self.assertEqual(line.effective_amount, Decimal('50.00'))  # override still applied
+
+    def test_exclude_zeroes_both_shares(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.get(student=self.student, group=self.group)
+        line.is_excluded = True
+        line.apply()
+        line.save()
+        settlement.recalculate_totals()
+
+        self.assertEqual(line.effective_amount, Decimal('0.00'))
+        self.assertEqual(line.line_center_share, Decimal('0.00'))
+        self.assertEqual(line.line_teacher_share, Decimal('0.00'))
+
+    def test_percentage_override_does_not_change_amount(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.get(student=self.student, group=self.group)
+        line.percentage_override = Decimal('50.00')
+        line.apply()
+
+        self.assertEqual(line.effective_amount, Decimal('150.00'))  # unchanged
+        self.assertEqual(line.line_center_share, Decimal('75.00'))  # 50% of 150
+        self.assertEqual(line.line_teacher_share, Decimal('75.00'))
+
+    def test_cannot_refresh_approved_settlement(self):
+        from apps.payments.models import SettlementLockedError
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        settlement.status = 'approved'
+        settlement.save()
+
+        with self.assertRaises(SettlementLockedError):
+            SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+
+    def test_line_save_rejected_on_approved_settlement(self):
+        from apps.payments.models import SettlementLockedError
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.first()
+        settlement.status = 'approved'
+        settlement.save()
+
+        line.is_excluded = True
+        with self.assertRaises(SettlementLockedError):
+            line.save()
+
+
+class TeacherSettlementViewsTest(LedgerTestBase):
+    """
+    Teacher settlement pages + API: build, per-line edit, approve, reopen.
+    Admin only throughout — a settlement sheet exposes centre-wide splits.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.teachers.models import GroupCycle
+
+        self.cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
+        self.payment.cycle = self.cycle
+        self.payment.sessions_total = 4
+        self.payment.sessions_attended = 4
+        self.payment.amount_paid = Decimal('300.00')
+        self.payment.status = 'paid'
+        self.payment.save()
+        self.month_start = timezone.localdate().replace(day=1)
+
+        self.client = Client()
+
+    def test_supervisor_cannot_build_settlement(self):
+        self.client.login(username='ledger_supervisor', password='TestPass123!')
+        response = self.client.post(reverse('api_settlement_build'), {
+            'teacher_id': self.teacher.pk,
+            'period_start': self.month_start.isoformat(),
+            'period_end': self.month_start.isoformat(),
+        })
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_builds_settlement(self):
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        response = self.client.post(reverse('api_settlement_build'), {
+            'teacher_id': self.teacher.pk,
+            'period_start': self.month_start.isoformat(),
+            'period_end': self.month_start.isoformat(),
+        })
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['settlement']['status'], 'draft')
+        self.assertEqual(data['settlement']['adjusted_gross'], 300.0)
+
+    def test_settlement_index_and_detail_admin_only(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+
+        self.client.login(username='ledger_teacher_user', password='TestPass123!')
+        self.assertEqual(self.client.get(reverse('payments:settlement_index')).status_code, 403)
+        self.assertEqual(
+            self.client.get(reverse('payments:settlement_detail', kwargs={'settlement_id': settlement.pk})).status_code,
+            403,
+        )
+
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        self.assertEqual(self.client.get(reverse('payments:settlement_index')).status_code, 200)
+        self.assertEqual(
+            self.client.get(reverse('payments:settlement_detail', kwargs={'settlement_id': settlement.pk})).status_code,
+            200,
+        )
+
+    def test_line_edit_excludes_and_updates_totals(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.get(student=self.student, group=self.group)
+
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        response = self.client.post(
+            reverse('api_settlement_line', kwargs={'line_id': line.pk}),
+            {'is_excluded': '1'},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data['line']['effective_amount'], 0.0)
+        self.assertEqual(data['totals']['adjusted_gross'], 0.0)
+
+    def test_line_edit_amount_override_keeps_default_percentage(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.get(student=self.student, group=self.group)
+
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        response = self.client.post(
+            reverse('api_settlement_line', kwargs={'line_id': line.pk}),
+            {'amount_override': '50.00'},
+        )
+        data = response.json()
+        # 30% of 50 = 15 center, 35 teacher
+        self.assertEqual(data['line']['line_center_share'], 15.0)
+        self.assertEqual(data['line']['line_teacher_share'], 35.0)
+
+    def test_approve_then_reject_further_edits(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        line = settlement.lines.first()
+
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        response = self.client.post(reverse('api_settlement_approve', kwargs={'settlement_id': settlement.pk}))
+        self.assertEqual(response.status_code, 200)
+        settlement.refresh_from_db()
+        self.assertEqual(settlement.status, 'approved')
+        self.assertIsNotNone(settlement.approved_at)
+
+        # Further edits must be rejected while approved.
+        response = self.client.post(
+            reverse('api_settlement_line', kwargs={'line_id': line.pk}),
+            {'is_excluded': '1'},
+        )
+        self.assertEqual(response.status_code, 409)
+
+        response = self.client.post(
+            reverse('api_settlement_build'), {
+                'teacher_id': self.teacher.pk,
+                'period_start': self.month_start.isoformat(),
+                'period_end': self.month_start.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_reopen_allows_edits_again_without_auto_recalculating(self):
+        from apps.payments.services import SettlementService
+
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        self.client.post(reverse('api_settlement_approve', kwargs={'settlement_id': settlement.pk}))
+
+        response = self.client.post(reverse('api_settlement_reopen', kwargs={'settlement_id': settlement.pk}))
+        self.assertEqual(response.status_code, 200)
+        settlement.refresh_from_db()
+        self.assertEqual(settlement.status, 'draft')
+
+        # Edits now succeed again.
+        line = settlement.lines.first()
+        response = self.client.post(
+            reverse('api_settlement_line', kwargs={'line_id': line.pk}),
+            {'is_free': '1'},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_activity_log_records_settlement_actions(self):
+        from apps.payments.services import SettlementService
+
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        settlement = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+        self.client.post(reverse('api_settlement_approve', kwargs={'settlement_id': settlement.pk}))
+
+        self.assertTrue(
+            ActivityLog.objects.filter(action='settlement_approve', target_id=settlement.pk).exists()
+        )

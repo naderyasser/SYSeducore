@@ -698,137 +698,63 @@ def bulk_action(request):
     })
 
 
-@ajax_supervisor_required
-@require_http_methods(["POST"])
-def activate_subscription(request, student_id):
+@ajax_login_required
+@require_http_methods(["GET"])
+def entitlement_status(request, student_id):
     """
-    تفعيل اشتراك الطالب لمدة 30 يوم
+    حالة الاستحقاق بالحصص لكل تسجيل مجموعة على حدة.
 
-    This moves money: it marks the current month's Payment rows as fully paid.
-    It is therefore supervisor+ (it used to be open to any authenticated
-    account, teachers included), runs in a single transaction, and writes an
-    ActivityLog entry so "who marked this paid?" has an answer.
-
-    It no longer re-activates *every* previously removed enrollment — a
-    deliberate un-enrollment is not something a payment should undo. Only
-    enrollments that are already active are billed and paid.
+    يحل محل ``activate_subscription``/``subscription_status`` القديمين —
+    لا يوجد بعد الآن اشتراك عالمي واحد، فكل مجموعة (مدرس/مادة) لها دورتها
+    ودفعها المستقل تمامًا. للتفعيل الفعلي استخدم نقاط الدفع
+    (``api_record_payment`` / ``api_mark_paid`` / ``api_collect`` /
+    ``attendance:scanner_pay_now``) التي تمر عبر السجل المحاسبي.
     """
-    # Use all_objects to include soft-deleted students (payments may still reference them)
+    from apps.payments.models import Payment
+    from apps.teachers.models import GroupCycle
+
     try:
         student = Student.all_objects.get(pk=student_id)
     except Student.DoesNotExist:
         return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
 
-    try:
-        days = int(request.POST.get('days', 30))
-    except (TypeError, ValueError):
-        return JsonResponse({'success': False, 'message': 'عدد الأيام غير صحيح'}, status=400)
-    if days <= 0 or days > 366:
-        return JsonResponse({
-            'success': False,
-            'message': 'عدد الأيام يجب أن يكون بين 1 و 366'
-        }, status=400)
+    enrollments = list(
+        StudentGroupEnrollment.objects.filter(student=student, is_active=True)
+        .select_related('group')
+    )
+    group_ids = [e.group_id for e in enrollments]
+    open_cycles = {
+        c.group_id: c
+        for c in GroupCycle.objects.filter(group_id__in=group_ids, closed_on__isnull=True)
+    }
+    payments = {
+        p.group_id: p
+        for p in Payment.objects.filter(
+            student=student,
+            cycle_id__in=[c.cycle_id for c in open_cycles.values()],
+        )
+    }
 
-    try:
-        from apps.payments.models import Payment
-
-        with transaction.atomic():
-            student.activate_subscription(days=days)
-
-            # ── Ensure current-month Payment rows exist and are marked 'paid' ──
-            # Activating a subscription means the student has paid, so every
-            # active enrollment must have a Payment(status='paid') for the
-            # current month — otherwise check_financial_status() still rejects.
-            current_month = timezone.localdate().replace(day=1)
-            payments_updated = 0
-            for enr in StudentGroupEnrollment.objects.filter(
-                student=student, is_active=True,
-            ).select_related('group'):
-                fee = student.get_monthly_fee_for_group(enr.group)
-                payment, created = Payment.objects.get_or_create(
-                    student=student,
-                    group=enr.group,
-                    month=current_month,
-                    defaults={
-                        'amount_due': fee,
-                        'amount_paid': fee,
-                        'status': 'paid',
-                        'payment_date': timezone.now(),
-                    },
-                )
-                if created:
-                    payments_updated += 1
-                elif payment.status != 'paid':
-                    payment.amount_paid = payment.amount_due
-                    payment.status = 'paid'
-                    payment.payment_date = timezone.now()
-                    payment.save(update_fields=['amount_paid', 'status', 'payment_date'])
-                    payments_updated += 1
-
-            ActivityLog.log(
-                user=request.user,
-                action='payment_record',
-                description=(
-                    f'تفعيل اشتراك الطالب {student.full_name} '
-                    f'(كود: {student.student_code}) لمدة {days} يوم '
-                    f'وتسجيل {payments_updated} دفعة كمدفوعة'
-                ),
-                target_model='Student',
-                target_id=student.student_id,
-                request=request,
-            )
-    except Exception:
-        logger.exception('activate_subscription failed for student %s', student_id)
-        return JsonResponse({
-            'success': False,
-            'message': GENERIC_ERROR_MESSAGE
-        }, status=500)
-
-    subscription_status = student.get_subscription_status()
+    groups_data = []
+    for enr in enrollments:
+        cycle = open_cycles.get(enr.group_id)
+        payment = payments.get(enr.group_id)
+        groups_data.append({
+            'group_id': enr.group_id,
+            'group_name': enr.group.group_name,
+            'financial_status': enr.financial_status,
+            'cycle_index': cycle.index if cycle else None,
+            'sessions_planned': cycle.sessions_planned if cycle else None,
+            'sessions_consumed': payment.sessions_attended if payment else 0,
+            'sessions_total': payment.sessions_total if payment else None,
+            'payment_status': payment.status if payment else 'unpaid',
+            'amount_due': float(payment.amount_due) if payment else None,
+            'amount_paid': float(payment.amount_paid) if payment else 0.0,
+            'paid_on': payment.paid_on.isoformat() if payment and payment.paid_on else None,
+        })
 
     return JsonResponse({
         'success': True,
-        'message': f'تم تفعيل اشتراك {student.full_name} لمدة {days} يوم + تحديث {payments_updated} سجل دفع',
-        'student': {
-            'student_id': student.student_id,
-            'full_name': student.full_name,
-            'last_payment_date': student.last_payment_date.isoformat() if student.last_payment_date else None,
-            'subscription_expiry_date': student.subscription_expiry_date.isoformat() if student.subscription_expiry_date else None,
-        },
-        # Kept for API compatibility; blanket re-activation was removed.
-        'reactivated_enrollments': 0,
-        'payments_updated': payments_updated,
-        'subscription_status': subscription_status
+        'student': {'student_id': student.student_id, 'full_name': student.full_name},
+        'groups': groups_data,
     })
-
-
-@ajax_login_required
-@require_http_methods(["GET"])
-def subscription_status(request, student_id):
-    """
-    الحصول على حالة اشتراك الطالب
-    """
-    try:
-        try:
-            student = Student.all_objects.get(pk=student_id)
-        except Student.DoesNotExist:
-            return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=404)
-        subscription_status = student.get_subscription_status()
-
-        return JsonResponse({
-            'success': True,
-            'student': {
-                'student_id': student.student_id,
-                'full_name': student.full_name,
-                'last_payment_date': student.last_payment_date.isoformat() if student.last_payment_date else None,
-                'subscription_expiry_date': student.subscription_expiry_date.isoformat() if student.subscription_expiry_date else None,
-                'is_active': student.is_subscription_active(),
-            },
-            'subscription_status': subscription_status
-        })
-    except Exception:
-        logger.exception('subscription_status failed for student %s', student_id)
-        return JsonResponse({
-            'success': False,
-            'message': GENERIC_ERROR_MESSAGE
-        }, status=500)

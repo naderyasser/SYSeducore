@@ -1,11 +1,14 @@
 from django.urls import path
-from . import views
+from . import views, print_views
 
 app_name = 'attendance'
 
 urlpatterns = [
     # صفحة الإدخال اليدوي
     path('scanner/', views.scanner_page, name='scanner'),
+
+    # كشف حضور قابل للطباعة
+    path('groups/<int:group_id>/roster/print/', print_views.group_roster_print, name='group_roster_print'),
 
     # API: معالجة كود الطالب (النظام الجديد)
     path('api/process-code/', views.process_student_code, name='process_student_code'),

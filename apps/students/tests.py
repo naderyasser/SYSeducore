@@ -543,62 +543,45 @@ class RemoveFromGroupApiTest(AuditBaseTest):
         self.assertTrue(enrollment.is_active)
 
 
-class ActivateSubscriptionTest(AuditBaseTest):
-    """AUTH-02 — role, audit log, and no blanket enrollment reactivation."""
+class EntitlementStatusApiTest(AuditBaseTest):
+    """
+    students:api_entitlement_status — replaces the old global
+    activate/status subscription endpoints. Read-only, per-group.
+    """
 
     def setUp(self):
         super().setUp()
         self.url = reverse(
-            'students:api_activate_subscription',
+            'students:api_entitlement_status',
             kwargs={'student_id': self.student.pk},
         )
 
-    def test_teacher_forbidden(self):
-        self.login(self.teacher_user)
-        response = self.client.post(self.url, {'days': '30'})
-        self.assertEqual(response.status_code, 403)
-        self.student.refresh_from_db()
-        self.assertIsNone(self.student.subscription_expiry_date)
+    def test_requires_login(self):
+        response = self.client.get(self.url)
+        self.assertIn(response.status_code, (302, 401))
 
-    def test_removed_enrollment_is_not_reactivated(self):
-        removed = StudentGroupEnrollment.objects.create(
+    def test_lists_active_enrollments_only(self):
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, financial_status='normal',
+        )
+        StudentGroupEnrollment.objects.create(
             student=self.student, group=self.group2, is_active=False,
         )
-        StudentGroupEnrollment.objects.create(student=self.student, group=self.group)
-
         self.login(self.supervisor)
-        response = self.client.post(self.url, {'days': '30'})
+        response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
-        removed.refresh_from_db()
-        self.assertFalse(removed.is_active)
-        # Only the active enrollment gets a paid payment row
-        self.assertFalse(
-            Payment.objects.filter(student=self.student, group=self.group2).exists()
-        )
-        self.assertTrue(
-            Payment.objects.filter(
-                student=self.student, group=self.group, status='paid',
-            ).exists()
-        )
+        data = response.json()
+        self.assertTrue(data['success'])
+        group_ids = [g['group_id'] for g in data['groups']]
+        self.assertIn(self.group.group_id, group_ids)
+        self.assertNotIn(self.group2.group_id, group_ids)
 
-    def test_writes_activity_log(self):
-        StudentGroupEnrollment.objects.create(student=self.student, group=self.group)
+    def test_unknown_student_404(self):
         self.login(self.supervisor)
-        self.client.post(self.url, {'days': '30'})
-        self.assertTrue(
-            ActivityLog.objects.filter(
-                user=self.supervisor,
-                target_model='Student',
-                target_id=self.student.pk,
-            ).exists()
+        response = self.client.get(
+            reverse('students:api_entitlement_status', kwargs={'student_id': 999999})
         )
-
-    def test_invalid_days_rejected(self):
-        self.login(self.supervisor)
-        response = self.client.post(self.url, {'days': 'كثير'})
-        self.assertEqual(response.status_code, 400)
-        self.student.refresh_from_db()
-        self.assertIsNone(self.student.subscription_expiry_date)
+        self.assertEqual(response.status_code, 404)
 
 
 class StudentDeleteEnrollmentTest(AuditBaseTest):
@@ -763,23 +746,49 @@ class TotalPaidAmountTest(AuditBaseTest):
         self.assertEqual(self.student.get_total_paid_amount(), Decimal('320.00'))
 
 
-class SubscriptionLocalDateTest(AuditBaseTest):
-    """TZ-05 — expiry is evaluated against the local (Cairo) date."""
 
-    def test_expiry_uses_local_date(self):
-        from django.utils import timezone as dj_timezone
-        self.student.subscription_expiry_date = dj_timezone.localdate()
-        self.student.save()
-        self.assertTrue(self.student.is_subscription_active())
-        self.assertEqual(
-            self.student.get_subscription_status()['status'], 'expires_today',
-        )
+class StudentCreateInitialPaymentTest(AuditBaseTest):
+    """
+    The "تم الدفع" quick-registration flow at creation time — must go
+    through the payment ledger (record_transaction / activate_payment)
+    instead of writing amount_paid/status directly.
+    """
 
-        self.student.subscription_expiry_date = dj_timezone.localdate() - timedelta(days=1)
-        self.student.save()
-        self.assertFalse(self.student.is_subscription_active())
+    def test_initial_payment_creates_ledger_transaction(self):
+        from apps.payments.models import PaymentTransaction
 
-    def test_activate_uses_local_date(self):
-        from django.utils import timezone as dj_timezone
-        self.student.activate_subscription(days=30)
-        self.assertEqual(self.student.last_payment_date, dj_timezone.localdate())
+        self.login(self.supervisor)
+        response = self.client.post(reverse('students:create'), {
+            **self.student_payload(full_name='طالب دفعة أولى', student_code=''),
+            'groups': [str(self.group.group_id)],
+            f'financial_status_{self.group.group_id}': 'normal',
+            f'initial_payment_{self.group.group_id}': '200.00',
+            f'paid_on_{self.group.group_id}': '2026-08-01',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        student = Student.objects.get(full_name='طالب دفعة أولى')
+        payment = Payment.objects.get(student=student, group=self.group)
+        self.assertEqual(payment.status, 'paid')
+        self.assertEqual(payment.amount_paid, Decimal('200.00'))
+        self.assertIsNotNone(payment.cycle_id)
+        self.assertEqual(payment.paid_on.isoformat(), '2026-08-01')
+
+        txn = PaymentTransaction.objects.get(payment=payment)
+        self.assertEqual(txn.amount, Decimal('200.00'))
+        self.assertEqual(txn.created_by, self.supervisor)
+
+    def test_overtyped_initial_payment_is_clamped_not_crashed(self):
+        self.login(self.supervisor)
+        response = self.client.post(reverse('students:create'), {
+            **self.student_payload(full_name='طالب دفعة زائدة', student_code=''),
+            'groups': [str(self.group.group_id)],
+            f'financial_status_{self.group.group_id}': 'normal',
+            f'initial_payment_{self.group.group_id}': '9999.00',
+        })
+        self.assertEqual(response.status_code, 302)
+
+        student = Student.objects.get(full_name='طالب دفعة زائدة')
+        payment = Payment.objects.get(student=student, group=self.group)
+        self.assertEqual(payment.amount_paid, Decimal('200.00'))
+        self.assertEqual(payment.status, 'paid')

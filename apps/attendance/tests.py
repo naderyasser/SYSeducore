@@ -3,6 +3,8 @@ Unit Tests for Attendance Service - Educore V2
 اختبار النظام الجديد: قاعدة 10 دقائق صارمة + student_code
 """
 
+from decimal import Decimal
+
 from django.test import TestCase
 from django.test import override_settings
 from django.utils import timezone
@@ -13,6 +15,9 @@ from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Session, Attendance
 from apps.payments.models import Payment
 from apps.attendance.services import AttendanceService
+from apps.teachers.models import GroupCycle
+from apps.teachers.cycles import assign_to_cycle
+from apps.attendance import entitlement
 from tests.factories import create_group_with_schedule
 
 
@@ -144,7 +149,8 @@ class AttendanceServiceStrictTest(TestCase):
 
 class AttendanceFinancialCheckTest(TestCase):
     """
-    اختبار الفحص المالي (الحصة الثالثة)
+    اختبار الفحص المالي — بالحصص، عبر ``check_financial_status`` (الغلاف
+    الرقيق حول ``apps.attendance.entitlement.evaluate``).
     """
 
     def setUp(self):
@@ -180,7 +186,7 @@ class AttendanceFinancialCheckTest(TestCase):
             full_name='Normal Student',
             parent_phone='+201234567890'
         )
-        StudentGroupEnrollment.objects.create(
+        self.enrollment_normal = StudentGroupEnrollment.objects.create(
             student=self.student_normal,
             group=self.group,
             financial_status='normal'
@@ -198,127 +204,67 @@ class AttendanceFinancialCheckTest(TestCase):
             financial_status='exempt'
         )
 
+    def _attend(self, student, day_offset=0, status='present'):
+        session = assign_to_cycle(Session.objects.create(
+            group=self.group, session_date=timezone.localdate() + timedelta(days=day_offset),
+        ))
+        Attendance.objects.create(
+            student=student, session=session, status=status, supervisor=self.supervisor,
+        )
+        return session
+
     def test_financial_check_exempt_always_allowed(self):
         """اختبار: الطالب المعفي دائماً مسموح"""
         result = AttendanceService.check_financial_status(self.student_exempt, self.group)
         self.assertTrue(result['allowed'])
         self.assertTrue(result.get('exempt', False))
 
-    def test_financial_check_first_month_no_payment(self):
-        """اختبار: الشهر الأول - لازم دفع"""
-        # الطالب جديد (لا يوجد حضور سابق)
+    def test_financial_check_first_cycle_no_payment(self):
+        """أول دورة للطالب في هذه المجموعة، بدون دفع سابق — يُرفض فورًا."""
         result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertFalse(result['allowed'])
-        self.assertIn('الشهر الأول', result['reason'])
+        self.assertIn('أول اشتراك', result['reason'])
+        self.assertEqual(result['amount_due'], 200.0)
 
-    def test_financial_check_first_month_with_payment(self):
-        """اختبار: الشهر الأول - مع دفع"""
-        current_month = timezone.now().date().replace(day=1)
+    def test_financial_check_first_cycle_with_payment(self):
+        """أول دورة، مع دفع مسبق — مسموح."""
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
         Payment.objects.create(
-            student=self.student_normal,
-            group=self.group,
-            month=current_month,
-            amount_due=200.00,
-            amount_paid=200.00,
-            status='paid'
+            student=self.student_normal, group=self.group, cycle=cycle,
+            month=timezone.localdate().replace(day=1),
+            amount_due=200.00, amount_paid=200.00, status='paid',
+            sessions_total=4,
         )
-
         result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertTrue(result['allowed'])
 
-    def test_financial_check_subsequent_month_first_session(self):
-        """اختبار: الشهور التالية - الحصة الأولى (سماح)"""
-        # إنشاء حضور في الشهر السابق (ليكون ليس الشهر الأول)
-        previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
-        previous_session = Session.objects.create(
-            group=self.group,
-            session_date=previous_month
+    def test_financial_check_returning_student_first_session_of_new_cycle(self):
+        """طالب دفع من قبل لهذه المجموعة — الحصة الأولى في دورة جديدة غير مدفوعة مسموحة (سماح)."""
+        # سجّل دفعة قديمة (مستقلة عن الدورة الحالية) لإثبات أنه "دفع من قبل".
+        Payment.objects.create(
+            student=self.student_normal, group=self.group, cycle=None,
+            month=timezone.localdate().replace(day=1, month=1),
+            amount_due=200.00, amount_paid=200.00, status='paid',
         )
-        # تحديد scan_time بشكل صريح ليكون في الشهر السابق
-        previous_scan_time = timezone.make_aware(
-            datetime.combine(previous_month, time(9, 0))
-        )
-        Attendance.objects.create(
-            student=self.student_normal,
-            session=previous_session,
-            status='present',
-            supervisor=self.supervisor,
-            scan_time=previous_scan_time
-        )
-
-        # الشهر الحالي: الحصة الأولى (مسموح)
         result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertTrue(result['allowed'])
+        self.assertTrue(result.get('grace_sessions'))
 
-    def test_financial_check_subsequent_month_third_session_blocked(self):
-        """اختبار: الشهور التالية - الحصة الثالثة بدون دفع (رفض)"""
-        # حضور في الشهر السابق
-        previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
-        previous_session = Session.objects.create(
-            group=self.group,
-            session_date=previous_month
+    def test_financial_check_returning_student_third_session_blocked(self):
+        """طالب دفع من قبل — بعد استهلاك حصتي السماح دون دفع الدورة الجديدة، يُرفض."""
+        Payment.objects.create(
+            student=self.student_normal, group=self.group, cycle=None,
+            month=timezone.localdate().replace(day=1, month=1),
+            amount_due=200.00, amount_paid=200.00, status='paid',
         )
-        previous_scan_time = timezone.make_aware(
-            datetime.combine(previous_month, time(9, 0))
-        )
-        Attendance.objects.create(
-            student=self.student_normal,
-            session=previous_session,
-            status='present',
-            supervisor=self.supervisor,
-            scan_time=previous_scan_time
-        )
+        self._attend(self.student_normal, day_offset=0)
+        self._attend(self.student_normal, day_offset=1)
 
-        # حضور حصتين في الشهر الحالي
-        current_month = timezone.now().date().replace(day=1)
-        for i in range(2):
-            session = Session.objects.create(
-                group=self.group,
-                session_date=current_month + timedelta(days=i)
-            )
-            current_scan_time = timezone.make_aware(
-                datetime.combine(current_month + timedelta(days=i), time(9, 0))
-            )
-            Attendance.objects.create(
-                student=self.student_normal,
-                session=session,
-                status='present',
-                supervisor=self.supervisor,
-                scan_time=current_scan_time
-            )
-
-        # الحصة الثالثة (رفض)
         result = AttendanceService.check_financial_status(self.student_normal, self.group)
         self.assertFalse(result['allowed'])
         self.assertIn('ممنوع الدخول', result['reason'])
-
-    def test_is_student_first_month_in_group_true(self):
-        """اختبار: هل هو الشهر الأول - نعم"""
-        # طالب جديد بدون حضور سابق
-        result = AttendanceService.is_student_first_month_in_group(self.student_normal, self.group)
-        self.assertTrue(result)
-
-    def test_is_student_first_month_in_group_false(self):
-        """اختبار: هل هو الشهر الأول - لا"""
-        # إنشاء حضور في الشهر السابق
-        previous_month = timezone.now().date().replace(day=1) - timedelta(days=35)
-        previous_session = Session.objects.create(
-            group=self.group,
-            session_date=previous_month
-        )
-        previous_scan_time = timezone.make_aware(
-            datetime.combine(previous_month, time(9, 0))
-        )
-        Attendance.objects.create(
-            student=self.student_normal,
-            session=previous_session,
-            status='present',
-            supervisor=self.supervisor,
-            scan_time=previous_scan_time
-        )
-
-        result = AttendanceService.is_student_first_month_in_group(self.student_normal, self.group)
-        self.assertFalse(result)
 
 
 class ProcessScanIntegrationTest(TestCase):
@@ -494,26 +440,29 @@ class FirstMonthPaymentFlagTest(TestCase):
 
     @override_settings(ENABLE_FIRST_MONTH_STRICT_PAYMENT=True)
     def test_first_month_strict_true_blocks_unpaid(self):
-        """When flag is True, first-month student with no payment should be blocked."""
+        """When flag is True, first-cycle student with no payment should be blocked."""
         result = AttendanceService.check_financial_status(self.student, self.group)
         self.assertFalse(result['allowed'])
-        self.assertIn('الشهر الأول', result.get('reason', ''))
+        self.assertIn('أول اشتراك', result.get('reason', ''))
 
     @override_settings(ENABLE_FIRST_MONTH_STRICT_PAYMENT=False)
     def test_first_month_strict_false_allows_grace(self):
-        """When flag is False, first-month student gets 2-session grace like returning students."""
+        """When flag is False, first-cycle student gets 2-session grace like returning students."""
         result = AttendanceService.check_financial_status(self.student, self.group)
         # With 0 sessions attended and 2 allowed, should be allowed
         self.assertTrue(result['allowed'])
 
     @override_settings(ENABLE_FIRST_MONTH_STRICT_PAYMENT=True)
     def test_first_month_strict_true_with_payment_allowed(self):
-        """When flag is True, first-month student who has paid should be allowed."""
-        current_month = timezone.now().date().replace(day=1)
+        """When flag is True, first-cycle student who has paid should be allowed."""
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
         Payment.objects.create(
             student=self.student,
             group=self.group,
-            month=current_month,
+            cycle=cycle,
+            month=timezone.now().date().replace(day=1),
             amount_due=200.00,
             amount_paid=200.00,
             status='paid'
@@ -640,9 +589,12 @@ class DossierTest(TestCase):
 
     def test_dossier_paid_group_payment(self):
         """Group with paid payment must reflect correct amounts."""
-        current_month = timezone.localtime().date().replace(day=1)
+        cycle = GroupCycle.objects.create(
+            group=self.group_a, index=1, sessions_planned=4, started_on=timezone.localdate(),
+        )
         Payment.objects.create(
-            student=self.student, group=self.group_a, month=current_month,
+            student=self.student, group=self.group_a, cycle=cycle,
+            month=timezone.localtime().date().replace(day=1),
             amount_due=300.00, amount_paid=300.00, status='paid'
         )
         dossier = AttendanceService.build_student_dossier(self.student)
@@ -651,11 +603,7 @@ class DossierTest(TestCase):
         )
         self.assertEqual(normal_enr['payment']['status'], 'paid')
         self.assertEqual(normal_enr['payment']['remaining'], 0.0)
-
-    def test_dossier_subscription_no_date(self):
-        """Student with no subscription_expiry_date → inactive status in dossier."""
-        dossier = AttendanceService.build_student_dossier(self.student)
-        self.assertEqual(dossier['subscription']['status'], 'inactive')
+        self.assertEqual(normal_enr['entitlement']['cycle_index'], 1)
 
     def test_dossier_attendance_month_count(self):
         """Dossier attendance_month.total must match actual attendance records."""
@@ -717,16 +665,6 @@ class DossierTest(TestCase):
         result = AttendanceService.process_scan('NONEXISTENT', self.supervisor)
         self.assertEqual(result['severity'], 'error')
 
-    def test_severity_in_subscription_expired(self):
-        """Scan for expired student must return severity='error'."""
-        from datetime import timedelta
-        self.student.subscription_expiry_date = timezone.localtime().date() - timedelta(days=5)
-        self.student.save()
-        result = AttendanceService.process_scan('5500', self.supervisor)
-        if result.get('error_type') == 'subscription_expired':
-            self.assertEqual(result['severity'], 'error')
-
-
 # ─────────────────────────────────────────────────────────────
 # Scanner Quick-Action Tests  (Pay Now / Grace Period)
 # ─────────────────────────────────────────────────────────────
@@ -783,11 +721,17 @@ class ScannerPayNowTest(TestCase):
             financial_status='normal',
         )
 
-        # Create an unpaid payment for current month
+        # Create an unpaid payment for the group's (freshly opened) cycle —
+        # ``_resolve_scanner_payment`` (via student_id) resolves by the
+        # group's OPEN cycle, so the fixture payment must live there too.
         current_month = timezone.localtime().date().replace(day=1)
+        self.cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=self.group.sessions_per_month,
+        )
         self.payment = Payment.objects.create(
             student=self.student,
             group=self.group,
+            cycle=self.cycle,
             month=current_month,
             amount_due=150.00,
             amount_paid=0,
@@ -818,9 +762,6 @@ class ScannerPayNowTest(TestCase):
         self.assertEqual(self.payment.status, 'paid')
         self.assertEqual(self.payment.amount_paid, self.payment.amount_due)
         self.assertIsNotNone(self.payment.payment_date)
-
-        # Student subscription should be active
-        self.assertTrue(self.student.is_subscription_active())
 
         # Enrollment should be active
         self.assertTrue(self.enrollment.is_active)
@@ -1006,24 +947,31 @@ class ScannerGracePeriodTest(TestCase):
         self.assertEqual(self.payment.status, 'unpaid')
         self.assertEqual(self.payment.amount_paid, 0)
 
-    def test_grace_period_extends_subscription(self):
-        """Grace period should also extend the student's subscription by X days."""
-        # Set subscription as expired
-        self.student.subscription_expiry_date = timezone.localtime().date() - timedelta(days=5)
-        self.student.save()
+    def test_grace_period_is_scoped_to_this_group_only(self):
+        """Granting grace for one group must never touch the student elsewhere."""
+        other_teacher = Teacher.objects.create(
+            full_name='مدرس آخر', phone='+201000000003', hire_date=timezone.now().date(),
+        )
+        other_group = create_group_with_schedule(
+            group_name='مجموعة أخرى', teacher=other_teacher, room=self.room,
+            schedule_day='Tuesday', schedule_time=time(15, 0), standard_fee=150.00,
+        )
+        other_enrollment = StudentGroupEnrollment.objects.create(
+            student=self.student, group=other_group, financial_status='normal',
+        )
 
         url = reverse('attendance:scanner_grace_period')
-        payload = {'student_id': self.student.student_id, 'days': 3}
+        payload = {'student_id': self.student.student_id, 'group_id': self.group.group_id, 'days': 3}
         resp = self.client.post(
-            url,
-            data=json.dumps(payload),
-            content_type='application/json',
+            url, data=json.dumps(payload), content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.student.refresh_from_db()
-        self.assertTrue(self.student.is_subscription_active())
+        self.enrollment.refresh_from_db()
+        other_enrollment.refresh_from_db()
+        self.assertIsNotNone(self.enrollment.grace_until)
+        self.assertIsNone(other_enrollment.grace_until)
 
     def test_grace_period_default_days(self):
         """If days is not provided, default should be 3."""
@@ -1242,9 +1190,6 @@ class GracePeriodFinancialCheckTest(TestCase):
         the response should include payment_info so the scanner UI can show
         action buttons even without a matching session.
         """
-        # Activate subscription so step 1.5 passes
-        self.student.activate_subscription(days=30)
-
         # Scan on a day/time that doesn't match the group schedule
         # Group is Wednesday 16:00, so scanning now (likely not Wed 16:00)
         # should give a schedule rejection but still include payment_info
@@ -1590,9 +1535,9 @@ class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
         # The session started well before now so the 10-minute rule fires.
         self.group.schedule_time = time(0, 1)
         self.group.save()
-        self.session = Session.objects.create(
+        self.session = assign_to_cycle(Session.objects.create(
             group=self.group, session_date=timezone.localdate()
-        )
+        ))
 
     def test_absence_updates_payment_sessions(self):
         from apps.attendance.tasks import auto_mark_absent_sessions
@@ -1605,8 +1550,7 @@ class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
         self.assertEqual(attendance.status, 'absent')
 
         payment = Payment.objects.get(
-            student=self.student, group=self.group,
-            month=timezone.localdate().replace(day=1),
+            student=self.student, group=self.group, cycle=self.session.cycle,
         )
         self.assertEqual(payment.sessions_attended, 1)
 
@@ -1619,50 +1563,359 @@ class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
 
 
 class BillingCycleTaskTest(AuditFixturesMixin, TestCase):
-    """BUG-16: the task actually writes the cycle dates it documents."""
+    """
+    apps.attendance.tasks.roll_group_cycles — cycles are now closed and
+    rolled at the GROUP level (every enrolled student shares one cycle),
+    replacing the old per-enrollment ``check_billing_cycles``.
+    """
 
     def setUp(self):
         self.build_fixtures(day='Saturday', sessions_per_month=2)
         self.current_month = timezone.localdate().replace(day=1)
 
-    def test_cycle_dates_are_seeded(self):
-        from apps.attendance.tasks import check_billing_cycles
+    def test_open_cycle_is_created_on_first_run(self):
+        from apps.attendance.tasks import roll_group_cycles
 
-        check_billing_cycles()
-        self.enrollment.refresh_from_db()
-        self.assertEqual(self.enrollment.cycle_start_date, self.current_month)
-        self.assertIsNotNone(self.enrollment.cycle_end_date)
-        self.assertGreater(self.enrollment.cycle_end_date, self.enrollment.cycle_start_date)
+        roll_group_cycles()
+        cycle = GroupCycle.objects.get(group=self.group, closed_on__isnull=True)
+        self.assertEqual(cycle.sessions_planned, 2)
+        # No session has happened yet — the cycle is reserved, not started.
+        self.assertIsNone(cycle.started_on)
 
-    def test_completed_cycle_rolls_forward(self):
-        from apps.attendance.tasks import check_billing_cycles
+    def test_completed_cycle_closes_and_rolls_forward(self):
+        from apps.attendance.tasks import roll_group_cycles
 
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=2,
+            started_on=self.current_month,
+        )
         payment = Payment.objects.create(
-            student=self.student, group=self.group, month=self.current_month,
+            student=self.student, group=self.group, cycle=cycle,
+            month=self.current_month,
             amount_due=200, amount_paid=200, status='paid',
         )
         for i in range(2):
             session = Session.objects.create(
-                group=self.group, session_date=self.current_month + timedelta(days=i)
+                group=self.group, session_date=self.current_month + timedelta(days=i),
             )
-            Attendance.objects.create(
-                student=self.student, session=session, status='present',
-            )
+            assign_to_cycle(session)
+            Attendance.objects.create(student=self.student, session=session, status='present')
 
-        check_billing_cycles()
+        roll_group_cycles()
 
         payment.refresh_from_db()
         self.assertTrue(payment.billing_cycle_completed)
 
-        self.enrollment.refresh_from_db()
-        self.assertEqual(
-            self.enrollment.cycle_start_date,
-            self.current_month + timedelta(days=2),
-        )
+        cycle.refresh_from_db()
+        self.assertIsNotNone(cycle.closed_on)
 
-        next_month = (self.current_month.replace(day=28) + timedelta(days=4)).replace(day=1)
+        next_cycle = GroupCycle.objects.get(group=self.group, index=2)
+        self.assertIsNone(next_cycle.closed_on)
         self.assertTrue(
             Payment.objects.filter(
-                student=self.student, group=self.group, month=next_month
+                student=self.student, group=self.group, cycle=next_cycle,
+                amount_due=200,
             ).exists()
         )
+
+    def test_exempt_student_not_billed_on_rollover(self):
+        from apps.attendance.tasks import roll_group_cycles
+
+        self.enrollment.financial_status = 'exempt'
+        self.enrollment.save()
+
+        cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=2,
+            started_on=self.current_month,
+        )
+        for i in range(2):
+            session = Session.objects.create(
+                group=self.group, session_date=self.current_month + timedelta(days=i),
+            )
+            assign_to_cycle(session)
+            Attendance.objects.create(student=self.student, session=session, status='present')
+
+        roll_group_cycles()
+
+        next_cycle = GroupCycle.objects.get(group=self.group, index=2)
+        self.assertFalse(
+            Payment.objects.filter(student=self.student, cycle=next_cycle).exists()
+        )
+
+
+class EntitlementModuleTest(TestCase):
+    """
+    apps.attendance.entitlement.evaluate — the session-based decision ladder
+    that replaces the old 30-day global subscription check. Tested in
+    isolation with real GroupCycle/Session/Payment rows but without going
+    through the scanner, per the plan's "unit-test the ladder before wiring
+    it in" step.
+    """
+
+    def setUp(self):
+        self.room = Room.objects.create(name='قاعة استحقاق', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس استحقاق', phone='01099990000',
+            specialization='علوم', hire_date=timezone.now().date(),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة استحقاق', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(10, 0),
+            duration_minutes=90, standard_fee=Decimal('100.00'),
+            sessions_per_month=4,
+        )
+        self.student = Student.objects.create(
+            student_code='ENT001', full_name='طالب استحقاق',
+            gender='male', parent_phone='01099991111', student_phone='01099992222',
+        )
+        self.enrollment = StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+        self.cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4,
+            started_on=timezone.localdate(),
+        )
+
+    def _make_session(self, day_offset, cancelled=False):
+        session = Session.objects.create(
+            group=self.group,
+            session_date=timezone.localdate() + timedelta(days=day_offset),
+            is_cancelled=cancelled,
+        )
+        return assign_to_cycle(session)
+
+    def test_exempt_always_allowed(self):
+        self.enrollment.financial_status = 'exempt'
+        self.enrollment.save()
+        result = entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result.get('exempt'))
+
+    def test_no_cycle_group_is_unlimited(self):
+        result = entitlement.evaluate(self.enrollment, None)
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result.get('unlimited'))
+
+    def test_paid_within_entitlement_allowed(self):
+        payment = Payment.objects.create(
+            student=self.student, group=self.group, cycle=self.cycle,
+            month=timezone.localdate().replace(day=1),
+            amount_due=Decimal('100.00'), amount_paid=Decimal('100.00'),
+            status='paid', sessions_attended=1, sessions_total=4,
+        )
+        result = entitlement.evaluate(self.enrollment, self.cycle, payment=payment)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['sessions_consumed'], 1)
+
+    def test_paid_but_exhausted_rejected(self):
+        payment = Payment.objects.create(
+            student=self.student, group=self.group, cycle=self.cycle,
+            month=timezone.localdate().replace(day=1),
+            amount_due=Decimal('100.00'), amount_paid=Decimal('100.00'),
+            status='paid', sessions_attended=4, sessions_total=4,
+        )
+        result = entitlement.evaluate(self.enrollment, self.cycle, payment=payment)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'sessions_exhausted')
+
+    def test_unpaid_first_cycle_strict_no_grace(self):
+        """Never paid this group before + strict first cycle → 0 free sessions."""
+        result = entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'payment_required')
+        self.assertEqual(result['amount_due'], 100.00)
+
+    def test_unpaid_returning_student_gets_two_session_grace(self):
+        """Student has paid this group before → 2 free sessions on a new cycle."""
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=None,
+            month=timezone.localdate().replace(day=1, month=1),
+            amount_due=Decimal('100.00'), amount_paid=Decimal('100.00'),
+            status='paid', sessions_attended=4, sessions_total=4,
+        )
+        s1 = self._make_session(0)
+        Attendance.objects.create(student=self.student, session=s1, status='present')
+
+        result = entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result.get('grace_sessions'))
+        self.assertEqual(result['grace_sessions_left'], 1)
+
+        s2 = self._make_session(1)
+        Attendance.objects.create(student=self.student, session=s2, status='absent')
+        s3 = self._make_session(2)
+        Attendance.objects.create(student=self.student, session=s3, status='present')
+
+        result = entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'payment_required')
+
+    def test_cancelled_session_never_consumes_grace(self):
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=None,
+            month=timezone.localdate().replace(day=1, month=1),
+            amount_due=Decimal('100.00'), amount_paid=Decimal('100.00'),
+            status='paid', sessions_attended=4, sessions_total=4,
+        )
+        cancelled = self._make_session(0, cancelled=True)
+        self.assertIsNone(cancelled.sequence_in_cycle)
+        Attendance.objects.create(student=self.student, session=cancelled, status='present')
+
+        result = entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['grace_sessions_left'], 2)
+
+    def test_manual_grace_until_allows_entry(self):
+        self.enrollment.grace_until = timezone.localdate() + timedelta(days=3)
+        self.enrollment.save()
+        result = entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result.get('grace_period'))
+
+    def test_evaluate_never_creates_a_payment_row(self):
+        """Mirrors the historical constraint: a financial check must be read-only."""
+        entitlement.evaluate(self.enrollment, self.cycle)
+        self.assertEqual(
+            Payment.objects.filter(student=self.student, cycle=self.cycle).count(), 0
+        )
+
+    def test_not_enrolled_rejected(self):
+        other_student = Student.objects.create(
+            student_code='ENT002', full_name='طالب آخر',
+            gender='male', parent_phone='01099993333',
+        )
+        result = entitlement.evaluate(None, self.cycle)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'not_enrolled')
+
+
+class AttendanceGridTest(TestCase):
+    """apps.attendance.grids.build_group_attendance_grid — the students×sessions matrix."""
+
+    def setUp(self):
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الشبكة', phone='01088880000',
+            specialization='عربي', hire_date=timezone.localdate(),
+        )
+        self.room = Room.objects.create(name='قاعة الشبكة', capacity=20)
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الشبكة', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(9, 0), standard_fee=Decimal('100'),
+        )
+        self.today = timezone.localdate()
+
+        self.student_a = Student.objects.create(
+            student_code='GRD001', full_name='طالب أ', gender='male',
+            parent_phone='01088881111',
+        )
+        self.enr_a = StudentGroupEnrollment.objects.create(
+            student=self.student_a, group=self.group, financial_status='normal',
+        )
+
+        self.session1 = Session.objects.create(group=self.group, session_date=self.today)
+        self.session2 = Session.objects.create(group=self.group, session_date=self.today + timedelta(days=1))
+        Attendance.objects.create(student=self.student_a, session=self.session1, status='present')
+        Attendance.objects.create(student=self.student_a, session=self.session2, status='absent')
+
+    def test_grid_shape_and_query_count(self):
+        from apps.attendance.grids import build_group_attendance_grid
+
+        with self.assertNumQueries(4):
+            grid = build_group_attendance_grid(
+                self.group, self.today, self.today + timedelta(days=1),
+            )
+        self.assertEqual(len(grid['columns']), 2)
+        self.assertEqual(len(grid['rows']), 1)
+        self.assertEqual(grid['rows'][0]['cells'], ['present', 'absent'])
+
+    def test_pre_enrollment_sessions_are_masked(self):
+        """A session before the student joined must read 'not_enrolled', not 'no_record'."""
+        from apps.attendance.grids import build_group_attendance_grid
+
+        late_student = Student.objects.create(
+            student_code='GRD002', full_name='طالب متأخر', gender='male',
+            parent_phone='01088882222',
+        )
+        late_enr = StudentGroupEnrollment.objects.create(
+            student=late_student, group=self.group, financial_status='normal',
+        )
+        # enrolled_at is auto_now_add — force it to AFTER session1 so
+        # session1 is genuinely "before this student joined".
+        StudentGroupEnrollment.objects.filter(pk=late_enr.pk).update(
+            enrolled_at=timezone.make_aware(
+                timezone.datetime.combine(self.session2.session_date, time(0, 0))
+            )
+        )
+        Attendance.objects.create(student=late_student, session=self.session2, status='present')
+
+        grid = build_group_attendance_grid(
+            self.group, self.today, self.today + timedelta(days=1),
+        )
+        late_row = next(r for r in grid['rows'] if r['student'].pk == late_student.pk)
+        self.assertEqual(late_row['cells'][0], 'not_enrolled')
+        self.assertEqual(late_row['cells'][1], 'present')
+
+    def test_cancelled_session_marked(self):
+        from apps.attendance.grids import build_group_attendance_grid
+
+        self.session2.is_cancelled = True
+        self.session2.save(update_fields=['is_cancelled'])
+
+        grid = build_group_attendance_grid(
+            self.group, self.today, self.today + timedelta(days=1),
+        )
+        self.assertEqual(grid['rows'][0]['cells'][1], 'cancelled')
+
+    def test_include_expected_adds_unrecorded_column(self):
+        """A scheduled Saturday with no Session row shows up as 'unrecorded'."""
+        from apps.attendance.grids import build_group_attendance_grid
+
+        far_future = self.today + timedelta(days=14)  # next Saturday, no session created
+        grid = build_group_attendance_grid(
+            self.group, self.today, far_future, include_expected=True,
+        )
+        unrecorded_cols = [c for c in grid['columns'] if c['unrecorded']]
+        self.assertGreaterEqual(len(unrecorded_cols), 1)
+
+
+class ExportReportCsvTest(AuditFixturesMixin, TestCase):
+    """
+    attendance:export_report — now a plain GET returning a real CSV file
+    with a UTF-8 BOM (FE-06), instead of POST+JSON-wrapped text.
+    """
+
+    def setUp(self):
+        self.build_fixtures(day=AttendanceService.get_current_day_name())
+        self.client = Client()
+        self.client.login(username='aud_sup', password='testpass123')
+        session = Session.objects.create(group=self.group, session_date=timezone.localdate())
+        Attendance.objects.create(student=self.student, session=session, status='present')
+
+    def test_requires_date(self):
+        response = self.client.get(reverse('attendance:export_report'))
+        self.assertEqual(response.status_code, 400)
+
+    def test_get_returns_csv_file_with_bom(self):
+        response = self.client.get(reverse('attendance:export_report'), {
+            'date': timezone.localdate().isoformat(), 'type': 'detailed',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('text/csv', response['Content-Type'])
+        self.assertIn('attachment', response['Content-Disposition'])
+        self.assertTrue(response.content.startswith('﻿'.encode('utf-8')))
+        self.assertIn('طالب التدقيق'.encode('utf-8'), response.content)
+
+    def test_post_not_allowed(self):
+        response = self.client.post(reverse('attendance:export_report'), {
+            'date': timezone.localdate().isoformat(),
+        })
+        self.assertEqual(response.status_code, 405)
+
+    def test_teacher_role_forbidden(self):
+        teacher_client = Client()
+        teacher_client.login(username='aud_teacher', password='testpass123')
+        response = teacher_client.get(reverse('attendance:export_report'), {
+            'date': timezone.localdate().isoformat(),
+        })
+        self.assertEqual(response.status_code, 403)

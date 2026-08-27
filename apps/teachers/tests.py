@@ -938,3 +938,97 @@ class GroupAdminConflictOptInTest(TestCase):
         ))
         self.assertFalse(form.is_valid())
         self.assertIn('education_year', form.errors)
+
+
+class GroupDetailViewTest(TestCase):
+    """
+    teachers:group_detail — tightened from @login_required to
+    @supervisor_required (a teacher account used to see every student's
+    phone/payment data for any group), and now shows the students table +
+    attendance grid.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.supervisor = get_user_model().objects.create_user(
+            username='grpdet_sup', password='TestPass123!', role='supervisor',
+        )
+        self.teacher_user = get_user_model().objects.create_user(
+            username='grpdet_teacher', password='TestPass123!', role='teacher',
+        )
+        self.room = Room.objects.create(name='قاعة التفاصيل', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس التفاصيل', phone='01077770000',
+            specialization='فيزياء', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة التفاصيل', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(10, 0),
+            standard_fee=Decimal('150.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='GD001', full_name='طالب التفاصيل', gender='male',
+            parent_phone='01077771111', student_phone='01077772222',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, financial_status='normal', is_active=True,
+        )
+        self.url = reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id})
+
+    def test_teacher_role_forbidden(self):
+        self.client.login(username='grpdet_teacher', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 403)
+
+    def test_supervisor_sees_student_phone_and_payment_status(self):
+        self.client.login(username='grpdet_sup', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '01077772222')
+        self.assertEqual(len(response.context['students_rows']), 1)
+        self.assertEqual(response.context['students_rows'][0]['payment_status'], 'unpaid')
+
+    def test_custom_date_range(self):
+        self.client.login(username='grpdet_sup', password='TestPass123!')
+        response = self.client.get(self.url, {'from': '2026-01-01', 'to': '2026-01-31'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['grid_from'].isoformat(), '2026-01-01')
+
+
+class GroupRosterPrintTest(TestCase):
+    """attendance:group_roster_print — printable attendance sheet."""
+
+    def setUp(self):
+        self.client = Client()
+        self.supervisor = get_user_model().objects.create_user(
+            username='roster_sup', password='TestPass123!', role='supervisor',
+        )
+        self.room = Room.objects.create(name='قاعة الكشف', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الكشف', phone='01066660000',
+            specialization='كيمياء', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الكشف', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(9, 0),
+            standard_fee=Decimal('100.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='RP001', full_name='طالب الكشف', gender='male',
+            parent_phone='01066661111',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, financial_status='normal', is_active=True,
+        )
+        self.url = reverse('attendance:group_roster_print', kwargs={'group_id': self.group.group_id})
+
+    def test_requires_supervisor(self):
+        response = self.client.get(self.url)
+        self.assertIn(response.status_code, (302, 401))
+
+    def test_renders_with_student_name(self):
+        self.client.login(username='roster_sup', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'طالب الكشف')
+        self.assertContains(response, 'زائر / غير مسجَّل')

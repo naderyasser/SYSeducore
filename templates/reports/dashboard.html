@@ -576,6 +576,7 @@
             <div class="stat-label">حصص اليوم</div>
         </div>
     </div>
+    {% if show_financials %}
     <div class="col-6 col-lg">
         <div class="stat-card purple">
             <div class="stat-card-header">
@@ -587,6 +588,7 @@
             <div class="stat-label">نسبة التحصيل</div>
         </div>
     </div>
+    {% endif %}
 </div>
 
 <!-- Main Content Row -->
@@ -708,6 +710,7 @@
                 {% endif %}
             </div>
             <div class="content-card-body">
+                {% if show_financials %}
                 <div class="row text-center mb-4">
                     <div class="col-4">
                         <div class="text-muted mb-2">المستحق</div>
@@ -725,6 +728,7 @@
                         <small class="text-muted">ج.م</small>
                     </div>
                 </div>
+                {% endif %}
 
                 <h6 class="fw-bold mb-3 text-muted">آخر المدفوعات</h6>
                 <div style="max-height: 180px; overflow-y: auto;">
