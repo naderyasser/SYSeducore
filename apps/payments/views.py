@@ -9,6 +9,7 @@ from apps.accounts.decorators import admin_required, supervisor_required
 from apps.teachers.models import Group, Teacher
 
 from .models import Payment
+from .pricing import base_fee_parts
 from .services import SettlementService
 
 
@@ -58,12 +59,7 @@ def _ensure_monthly_payments(month_date):
 
     to_create = []
     for student_id, group_id, financial_status, custom_fee, standard_fee in missing:
-        if financial_status == 'exempt':
-            fee = 0
-        elif financial_status == 'symbolic':
-            fee = custom_fee or 0
-        else:  # normal
-            fee = standard_fee or 0
+        fee = base_fee_parts(financial_status, custom_fee, standard_fee)
 
         if fee <= 0:
             # Zero-fee row: still created so the scanner finds a record, but
@@ -140,31 +136,43 @@ def payment_list(request):
     # counts. Exempt (zero-fee) rows carry status='paid' so the scanner lets
     # them in, but they are *not* a collection: they are counted separately
     # and excluded from the collection rate.
+    #
+    # ``amount_due``/``amount_collected``/``collection_rate`` are cumulative
+    # money figures — admin only (``show_financials``). The status counts
+    # (paid/partial/unpaid/total) are per-payment desk data and stay visible
+    # to supervisors; ``templates/payments/list.html`` only ever renders
+    # those four keys, so gating the rest costs nothing today but stops a
+    # future template change from leaking them to a non-admin by accident.
+    show_financials = request.user.can_see_financials()
     billable = Q(is_exempt=False)
-    stats = Payment.objects.filter(
-        month=month_date, student__deleted_at__isnull=True,
-    ).aggregate(
+    agg_kwargs = dict(
         paid=Count('pk', filter=billable & Q(status='paid')),
         partial=Count('pk', filter=billable & Q(status='partial')),
         unpaid=Count('pk', filter=billable & Q(status='unpaid')),
         exempt=Count('pk', filter=Q(is_exempt=True)),
         billable_total=Count('pk', filter=billable),
         total=Count('pk'),
-        amount_due=Sum('amount_due', filter=billable),
-        amount_collected=Sum('amount_paid', filter=billable),
     )
-    for key in ('amount_due', 'amount_collected'):
-        stats[key] = stats[key] or 0
-    stats['collection_rate'] = (
-        round(stats['paid'] * 100 / stats['billable_total'], 1)
-        if stats['billable_total'] else 0
-    )
+    if show_financials:
+        agg_kwargs['amount_due'] = Sum('amount_due', filter=billable)
+        agg_kwargs['amount_collected'] = Sum('amount_paid', filter=billable)
+    stats = Payment.objects.filter(
+        month=month_date, student__deleted_at__isnull=True,
+    ).aggregate(**agg_kwargs)
+    if show_financials:
+        for key in ('amount_due', 'amount_collected'):
+            stats[key] = stats[key] or 0
+        stats['collection_rate'] = (
+            round(stats['paid'] * 100 / stats['billable_total'], 1)
+            if stats['billable_total'] else 0
+        )
 
     groups = Group.objects.filter(is_active=True).select_related('teacher')
 
     context = {
         'payments': payments,
         'stats': stats,
+        'show_financials': show_financials,
         'groups': groups,
         'current_month': month_date,
         'is_current_month': month_date == current_month,
@@ -213,3 +221,71 @@ def teacher_settlement(request, teacher_id):
         return JsonResponse(result, status=400)
 
     return render(request, 'payments/settlement.html', {'teacher': teacher})
+
+
+# ─────────────────────────────────────────────────────────────
+# Persisted, editable, approvable teacher settlement sheet
+# ─────────────────────────────────────────────────────────────
+
+@admin_required
+def settlement_index(request):
+    """
+    اختيار مدرس وفترة لبناء/فتح كشف تصفية، بجانب آخر الكشوفات المُنشأة.
+    """
+    from .models import TeacherSettlement
+
+    teachers = Teacher.objects.filter(is_active=True).order_by('full_name')
+    recent = (
+        TeacherSettlement.objects.select_related('teacher')
+        .order_by('-created_at')[:20]
+    )
+    return render(request, 'payments/settlement_index.html', {
+        'teachers': teachers,
+        'recent_settlements': recent,
+    })
+
+
+@admin_required
+def settlement_detail(request, settlement_id):
+    """عرض/تعديل كشف تصفية محدد."""
+    from .models import TeacherSettlement
+
+    settlement = get_object_or_404(
+        TeacherSettlement.objects.select_related('teacher'), pk=settlement_id,
+    )
+    lines = (
+        settlement.lines.select_related('group', 'student')
+        .order_by('group__group_name', 'student__full_name')
+    )
+
+    groups = {}
+    for line in lines:
+        groups.setdefault(line.group, []).append(line)
+
+    return render(request, 'payments/settlement_detail.html', {
+        'settlement': settlement,
+        'groups': groups,
+    })
+
+
+@admin_required
+def settlement_print(request, settlement_id):
+    """نسخة قابلة للطباعة من كشف التصفية."""
+    from .models import TeacherSettlement
+
+    settlement = get_object_or_404(
+        TeacherSettlement.objects.select_related('teacher'), pk=settlement_id,
+    )
+    lines = (
+        settlement.lines.select_related('group', 'student')
+        .order_by('group__group_name', 'student__full_name')
+    )
+    groups = {}
+    for line in lines:
+        groups.setdefault(line.group, []).append(line)
+
+    return render(request, 'payments/settlement_print.html', {
+        'settlement': settlement,
+        'groups': groups,
+        'printed_at': timezone.localtime(),
+    })

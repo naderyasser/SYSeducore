@@ -232,109 +232,44 @@ class RecordPaymentAPITest(APITestBase):
 # ============================================================
 #  Student Subscription API Tests
 # ============================================================
-class ActivateSubscriptionAPITest(APITestBase):
-    """Tests for /students/api/<id>/subscription/activate/"""
+class EntitlementStatusAPITest(APITestBase):
+    """
+    Tests for /students/api/<id>/entitlement/ — replaces the old global
+    subscription activate/status endpoints (session-based, per-group now).
+    """
 
     def setUp(self):
         super().setUp()
         self.url = reverse(
-            'students:api_activate_subscription',
+            'students:api_entitlement_status',
             kwargs={'student_id': self.student.pk},
         )
 
     def test_unauthenticated_returns_401(self):
-        response = self.client.post(self.url, {'days': 30})
+        response = self.client.get(self.url)
         self.assertEqual(response.status_code, 401)
 
-    def test_get_method_not_allowed(self):
+    def test_post_method_not_allowed(self):
         self.login()
-        response = self.client.get(self.url)
+        response = self.client.post(self.url)
         self.assertEqual(response.status_code, 405)
 
-    def test_activate_30_days(self):
-        """Should activate subscription for 30 days."""
-        self.login()
-        response = self.client.post(self.url, {'days': '30'})
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertTrue(data['success'])
-        self.assertIn(self.student.full_name, data['message'])
-
-        self.student.refresh_from_db()
-        self.assertTrue(self.student.is_subscription_active())
-        expected_expiry = date.today() + timedelta(days=30)
-        self.assertEqual(self.student.subscription_expiry_date, expected_expiry)
-
-    def test_activate_custom_days(self):
-        """Should activate subscription for custom number of days."""
-        self.login()
-        response = self.client.post(self.url, {'days': '7'})
-        self.assertEqual(response.status_code, 200)
-        self.student.refresh_from_db()
-        expected_expiry = date.today() + timedelta(days=7)
-        self.assertEqual(self.student.subscription_expiry_date, expected_expiry)
-
-    def test_activate_nonexistent_student(self):
-        self.login()
-        url = reverse(
-            'students:api_activate_subscription',
-            kwargs={'student_id': 99999},
-        )
-        response = self.client.post(url, {'days': '30'})
-        # get_object_or_404 raises Http404, caught by generic except → 500
-        self.assertIn(response.status_code, [404, 500])
-        data = response.json()
-        self.assertFalse(data['success'])
-
-    def test_activate_sets_payment_date(self):
-        """Activation should set last_payment_date."""
-        self.login()
-        self.client.post(self.url, {'days': '30'})
-        self.student.refresh_from_db()
-        self.assertEqual(self.student.last_payment_date, date.today())
-
-    def test_re_activate_extends(self):
-        """Re-activating should extend from today, not from old expiry."""
-        self.login()
-        self.client.post(self.url, {'days': '10'})
-        self.client.post(self.url, {'days': '30'})
-        self.student.refresh_from_db()
-        expected = date.today() + timedelta(days=30)
-        self.assertEqual(self.student.subscription_expiry_date, expected)
-
-
-class SubscriptionStatusAPITest(APITestBase):
-    """Tests for /students/api/<id>/subscription/status/"""
-
-    def setUp(self):
-        super().setUp()
-        self.url = reverse(
-            'students:api_subscription_status',
-            kwargs={'student_id': self.student.pk},
-        )
-
-    def test_unauthenticated_returns_401(self):
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, 401)
-
-    def test_no_subscription(self):
-        """Student with no subscription_expiry_date is treated as active (allowed entry)."""
+    def test_lists_the_default_enrollment(self):
+        """APITestBase already enrolls self.student in self.group."""
         self.login()
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['success'])
-        # No expiry date = subscription not configured = allowed
-        self.assertTrue(data['student']['is_active'])
-        self.assertIsNone(data['student']['subscription_expiry_date'])
+        self.assertEqual(len(data['groups']), 1)
+        self.assertEqual(data['groups'][0]['group_id'], self.group.group_id)
+        self.assertEqual(data['groups'][0]['payment_status'], 'unpaid')
 
-    def test_active_subscription(self):
-        """Student with active subscription should show active."""
-        self.student.activate_subscription(days=30)
+    def test_unknown_student_404(self):
         self.login()
-        response = self.client.get(self.url)
-        data = response.json()
-        self.assertTrue(data['student']['is_active'])
+        url = reverse('students:api_entitlement_status', kwargs={'student_id': 99999})
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
 
 
 # ============================================================

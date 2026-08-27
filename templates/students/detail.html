@@ -358,29 +358,11 @@
                     <a href="{% url 'students:qr_ticket_pdf' student_id=student.student_id %}" target="_blank" class="btn btn-outline-dark">
                         <i class="bi bi-qr-code me-1"></i>تذكرة QR
                     </a>
-                    <button onclick="openSubscriptionModal({{ student.student_id }})" class="btn btn-success">
-                        <i class="bi bi-check-circle me-1"></i>تفعيل الاشتراك
-                    </button>
                 </div>
-                
-                <!-- Subscription Status -->
-                <div class="mt-3" id="subscriptionStatus">
-                    {% if student.subscription_expiry_date %}
-                    <div class="alert alert-{% if student.is_subscription_active %}success{% else %}danger{% endif %} py-2">
-                        <small>
-                            <i class="bi bi-calendar-check me-1"></i>
-                            {% if student.is_subscription_active %}
-                                الاشتراك نشط حتى: {{ student.subscription_expiry_date }}
-                            {% else %}
-                                الاشتراك منتهي منذ: {{ student.subscription_expiry_date }}
-                            {% endif %}
-                        </small>
-                    </div>
-                    {% else %}
-                    <div class="alert alert-warning py-2">
-                        <small><i class="bi bi-exclamation-triangle me-1"></i>لم يتم تفعيل الاشتراك</small>
-                    </div>
-                    {% endif %}
+                <div class="mt-2">
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle me-1"></i>الدفع أصبح لكل مجموعة على حدة — سجّل الدفع من بطاقة كل مجموعة أدناه.
+                    </small>
                 </div>
             </div>
         </div>
@@ -417,6 +399,9 @@
                         </div>
                         <div class="text-start">
                             <span class="badge bg-info">{{ enrollment.get_financial_status_display }}</span>
+                            <button class="btn btn-sm btn-outline-success" onclick="collectPayment({{ enrollment.group.group_id }}, '{{ enrollment.group.group_name|escapejs }}')">
+                                <i class="bi bi-cash-coin me-1"></i>تسجيل دفع
+                            </button>
                             <button class="btn btn-sm btn-link text-danger" onclick="removeFromGroup({{ enrollment.id }})">
                                 <i class="bi bi-trash"></i>
                             </button>
@@ -655,77 +640,50 @@ function removeFromGroup(enrollmentId) {
     });
 }
 
-// Subscription Modal
-let _subscriptionStudentId = null;
-
-function openSubscriptionModal(studentId) {
-    _subscriptionStudentId = studentId;
-    document.getElementById('customDaysInput').value = '';
-    document.getElementById('subscriptionModal').style.display = 'flex';
-}
-
-function closeSubscriptionModal() {
-    document.getElementById('subscriptionModal').style.display = 'none';
-}
-
-function activateSubscription(days) {
-    if (!days || isNaN(days) || days <= 0) {
-        alert('عدد أيام غير صالح');
+// تسجيل دفع لمجموعة واحدة فقط — لا يُفعّل أي مجموعة أخرى للطالب.
+function collectPayment(groupId, groupName) {
+    const amount = prompt(`المبلغ المدفوع لمجموعة "${groupName}" (ج.م):`);
+    if (!amount) return;
+    if (isNaN(amount) || parseFloat(amount) <= 0) {
+        alert('مبلغ غير صالح');
         return;
     }
-    fetch(`/students/api/${_subscriptionStudentId}/subscription/activate/`, {
+
+    const paidOn = prompt('تاريخ الدفع (YYYY-MM-DD) — اتركه فارغاً لتاريخ اليوم:', '');
+    const cycles = prompt('عدد الدورات المدفوعة (اتركه فارغاً أو 1 لدفع دورة واحدة فقط):', '1');
+
+    const body = new URLSearchParams({
+        student_id: '{{ student.student_id }}',
+        group_id: groupId,
+        amount: amount,
+    });
+    if (paidOn) body.set('paid_on', paidOn);
+    if (cycles && parseInt(cycles) >= 2) body.set('package_cycles', cycles);
+
+    fetch('{% url "api_collect" %}', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-CSRFToken': '{{ csrf_token }}'
         },
-        body: `days=${days}`
+        body: body.toString()
     })
     .then(response => {
         if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
-        if (!response.ok) throw new Error('خطأ في الخادم');
         return response.json();
     })
     .then(data => {
-        closeSubscriptionModal();
         if (data.success) {
             alert(data.message);
             location.reload();
         } else {
-            alert(data.message || 'فشل التفعيل');
+            alert(data.message || 'فشل تسجيل الدفع');
         }
     })
     .catch(() => {
         alert('فشل الاتصال بالخادم');
     });
 }
-
-function activateCustomDays() {
-    const days = parseInt(document.getElementById('customDaysInput').value);
-    activateSubscription(days);
-}
 </script>
-
-<!-- Subscription Modal -->
-<div id="subscriptionModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:3000;align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:16px;padding:30px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-            <h5 style="margin:0;font-size:1.2rem;font-weight:600;"><i class="bi bi-calendar-check me-2 text-success"></i>تفعيل الاشتراك</h5>
-            <button onclick="closeSubscriptionModal()" style="background:none;border:none;font-size:1.4rem;color:#9ca3af;cursor:pointer;">&times;</button>
-        </div>
-        <p style="color:#6b7280;font-size:0.9rem;margin-bottom:20px;">اختر مدة الاشتراك أو أدخل عدداً مخصصاً من الأيام:</p>
-        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px;">
-            <button onclick="activateSubscription(1)" class="btn btn-outline-primary">1 يوم</button>
-            <button onclick="activateSubscription(2)" class="btn btn-outline-primary">2 يوم</button>
-            <button onclick="activateSubscription(7)" class="btn btn-outline-primary">7 أيام</button>
-            <button onclick="activateSubscription(30)" class="btn btn-success">30 يوم</button>
-        </div>
-        <div class="input-group">
-            <span class="input-group-text"><i class="bi bi-calendar3"></i></span>
-            <input type="number" id="customDaysInput" class="form-control" placeholder="عدد أيام مخصص" min="1" max="365">
-            <button onclick="activateCustomDays()" class="btn btn-primary">تفعيل</button>
-        </div>
-    </div>
-</div>
 
 {% endblock %}

@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load dict_filters %}
 
 {% block title %}{{ group.group_name }}{% endblock %}
 {% block page_title %}{{ group.group_name }}{% endblock %}
@@ -170,6 +171,85 @@
     .students-list {
         display: grid;
         gap: 12px;
+    }
+
+    .students-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+    }
+    .students-table th, .students-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #eef0f3;
+        text-align: right;
+        white-space: nowrap;
+    }
+    .students-table thead th {
+        color: #6b7280;
+        font-weight: 600;
+        font-size: 0.82rem;
+    }
+    .payment-badge {
+        display: inline-block;
+        padding: 2px 10px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+    }
+    .payment-badge.paid { background: #dcfce7; color: #15803d; }
+    .payment-badge.partial { background: #fef3c7; color: #b45309; }
+    .payment-badge.unpaid { background: #fee2e2; color: #b91c1c; }
+
+    .grid-wrap {
+        overflow-x: auto;
+        margin-top: 10px;
+    }
+    .attendance-grid {
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+    .attendance-grid th, .attendance-grid td {
+        border: 1px solid #eef0f3;
+        padding: 6px 10px;
+        text-align: center;
+        white-space: nowrap;
+    }
+    .attendance-grid .sticky-name {
+        position: sticky;
+        inset-inline-start: 0;
+        background: #fff;
+        z-index: 1;
+        text-align: right;
+        min-width: 140px;
+    }
+    .cell-present { background: #dcfce7; color: #15803d; }
+    .cell-late { background: #fef3c7; color: #b45309; }
+    .cell-absent { background: #fee2e2; color: #b91c1c; }
+    .cell-exception { background: #dbeafe; color: #1d4ed8; }
+    .cell-no_record { background: #f9fafb; color: #9ca3af; }
+    .cell-cancelled { background: repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6 4px,#e5e7eb 4px,#e5e7eb 8px); }
+    .cell-not_enrolled, .cell-unrecorded {
+        background: repeating-linear-gradient(45deg,#f3f4f6,#f3f4f6 4px,#e5e7eb 4px,#e5e7eb 8px);
+        color: #9ca3af;
+        text-decoration: line-through;
+    }
+    .grid-legend {
+        margin-top: 12px;
+        font-size: 0.82rem;
+        color: #6b7280;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 16px;
+        align-items: center;
+    }
+    .grid-legend .cell {
+        display: inline-block;
+        width: 22px;
+        height: 22px;
+        line-height: 22px;
+        border: 1px solid #eef0f3;
+        border-radius: 4px;
+        margin-inline-end: 4px;
     }
 
     .student-card {
@@ -410,36 +490,124 @@
             </div>
         </div>
 
-        {% if enrolled_students %}
-            <div class="students-list">
-                {% for enrollment in enrolled_students %}
-                <div class="student-card" id="enrollment-{{ enrollment.id }}">
-                    <div class="student-info">
-                        <div class="student-avatar">
-                            {{ enrollment.student.full_name|slice:":2"|upper }}
-                        </div>
-                        <div>
-                            <div class="student-name">{{ enrollment.student.full_name }}</div>
-                            <div class="student-code">{{ enrollment.student.student_code }}</div>
-                        </div>
-                    </div>
-                    <div class="student-actions">
-                        <div class="financial-badge {{ enrollment.financial_status }}">
-                            {{ enrollment.get_financial_status_display }}
-                        </div>
-                        <button type="button" class="btn-remove-student" 
-                            onclick="removeStudent({{ enrollment.id }}, '{{ enrollment.student.full_name|escapejs }}')">
-                            <i class="bi bi-person-x"></i> إزالة
-                        </button>
-                    </div>
-                </div>
-                {% endfor %}
+        {% if students_rows %}
+            <div class="table-responsive">
+                <table class="students-table">
+                    <thead>
+                        <tr>
+                            <th>الطالب</th>
+                            <th>الكود</th>
+                            <th>هاتف الطالب</th>
+                            <th>هاتف ولي الأمر</th>
+                            <th>تاريخ الانضمام</th>
+                            <th>أول حضور</th>
+                            <th>الحالة المالية</th>
+                            <th>حالة الدفع</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in students_rows %}
+                        <tr id="enrollment-{{ row.enrollment.id }}">
+                            <td>
+                                <div class="student-name">{{ row.student.full_name }}</div>
+                            </td>
+                            <td>{{ row.student.student_code }}</td>
+                            <td dir="ltr">
+                                {% if row.student.student_phone %}
+                                    <a href="https://wa.me/{{ row.student.student_phone }}" target="_blank">{{ row.student.student_phone }}</a>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td dir="ltr">
+                                {% if row.student.parent_phone %}
+                                    <a href="https://wa.me/{{ row.student.parent_phone }}" target="_blank">{{ row.student.parent_phone }}</a>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>{{ row.enrolled_date|date:"Y-m-d" }}</td>
+                            <td>{{ row.first_attended|date:"Y-m-d"|default:"لم يحضر بعد" }}</td>
+                            <td>
+                                <div class="financial-badge {{ row.enrollment.financial_status }}">
+                                    {{ row.enrollment.get_financial_status_display }}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="payment-badge {{ row.payment_status }}">
+                                    {% if row.payment_status == 'paid' %}مدفوع
+                                    {% elif row.payment_status == 'partial' %}جزئي
+                                    {% else %}غير مدفوع{% endif %}
+                                </span>
+                                {% if row.payment_amount_due %}<small class="text-muted d-block">{{ row.payment_amount_due }} ج.م</small>{% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn-remove-student"
+                                    onclick="removeStudent({{ row.enrollment.id }}, '{{ row.student.full_name|escapejs }}')">
+                                    <i class="bi bi-person-x"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         {% else %}
             <div class="empty-state">
                 <i class="bi bi-person-x"></i>
                 <p>لا يوجد طلاب مسجلين في هذه المجموعة</p>
             </div>
+        {% endif %}
+    </div>
+
+    <!-- Attendance Grid -->
+    <div class="detail-container">
+        <div class="detail-header">
+            <h5 class="mb-0"><i class="bi bi-grid-3x3 me-2"></i>جدول الحضور التاريخي</h5>
+            <form method="get" class="d-flex gap-2 align-items-center">
+                <input type="date" name="from" value="{{ grid_from|date:'Y-m-d' }}" class="form-control form-control-sm">
+                <span>إلى</span>
+                <input type="date" name="to" value="{{ grid_to|date:'Y-m-d' }}" class="form-control form-control-sm">
+                <button type="submit" class="btn btn-sm btn-outline-primary">تحديث</button>
+                <a href="{% url 'attendance:group_roster_print' group.group_id %}?from={{ grid_from|date:'Y-m-d' }}&to={{ grid_to|date:'Y-m-d' }}" target="_blank" class="btn btn-sm btn-outline-dark">
+                    <i class="bi bi-printer me-1"></i>طباعة كشف الحضور
+                </a>
+            </form>
+        </div>
+        {% if session_columns %}
+        <div class="grid-wrap">
+            <table class="attendance-grid">
+                <thead>
+                    <tr>
+                        <th class="sticky-name">الطالب</th>
+                        {% for col in session_columns %}
+                        <th>{{ col.date|date:"d/m" }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in students_rows %}
+                    <tr>
+                        <th class="sticky-name">{{ row.student.full_name }}</th>
+                        {% for cell in row.cells %}
+                        <td class="cell cell-{{ cell }}">{{ cell|cell_glyph }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="grid-legend">
+            <span class="cell cell-present">✓</span> حاضر
+            <span class="cell cell-late">م</span> متأخر
+            <span class="cell cell-absent">✗</span> غائب
+            <span class="cell cell-exception">س</span> استثناء
+            <span class="cell cell-no_record">—</span> بلا سجل
+            <span class="cell cell-cancelled">//</span> ملغاة
+            <span class="cell cell-not_enrolled"></span> لم يكن مسجلاً بعد
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-calendar-x"></i>
+            <p>لا توجد حصص مسجلة في هذا النطاق</p>
+        </div>
         {% endif %}
     </div>
 </div>

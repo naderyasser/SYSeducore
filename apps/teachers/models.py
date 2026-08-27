@@ -574,6 +574,69 @@ class Group(SoftDeleteModel):
         return self
 
 
+class GroupCycle(models.Model):
+    """
+    دورة فوترة على مستوى المجموعة — كل الطلاب المسجَّلين يتجددون معًا.
+
+    تحل محل الاشتراك الزمني (30 يوم) بمفهوم "دورة بعدد حصص ثابت" (عادة 4 أو
+    8 حسب ``Group.sessions_per_month``). ``started_on``/``closed_on`` هما
+    ``None`` لدورة لم تبدأ بعد — تُستخدم هذه الحالة لحجز دورات مستقبلية عند
+    شراء باقة (``PaymentPackage``) قبل أن تُحصى أي حصة فيها فعليًا.
+    """
+    cycle_id = models.AutoField(primary_key=True)
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.PROTECT,
+        related_name='cycles',
+        verbose_name="المجموعة",
+    )
+    index = models.PositiveIntegerField(
+        verbose_name="رقم الدورة",
+        help_text="ترقيم تسلسلي لكل مجموعة (1، 2، 3، ...)",
+    )
+    sessions_planned = models.PositiveIntegerField(
+        verbose_name="عدد الحصص المخطط لها",
+        help_text="نسخة من sessions_per_month وقت فتح الدورة",
+    )
+    started_on = models.DateField(
+        null=True, blank=True,
+        verbose_name="تاريخ بداية الدورة",
+        help_text="تاريخ أول حصة في الدورة — فارغ يعني دورة محجوزة لم تبدأ بعد",
+    )
+    closed_on = models.DateField(
+        null=True, blank=True,
+        verbose_name="تاريخ إغلاق الدورة",
+        help_text="تاريخ آخر حصة مُحتسَبة — فارغ يعني الدورة مفتوحة حاليًا",
+    )
+    is_legacy = models.BooleanField(
+        default=False,
+        verbose_name="دورة قديمة مُرحَّلة",
+        help_text="أُنشئت بأثر رجعي من بيانات الاشتراك الزمني القديم",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'group_cycles'
+        verbose_name = 'دورة مجموعة'
+        verbose_name_plural = 'دورات المجموعات'
+        unique_together = ('group', 'index')
+        ordering = ['group_id', 'index']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['group'],
+                condition=models.Q(closed_on__isnull=True, started_on__isnull=False),
+                name='one_open_cycle_per_group',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.group.group_name} - دورة {self.index}"
+
+    @property
+    def is_open(self):
+        return self.started_on is not None and self.closed_on is None
+
+
 class GroupSchedule(models.Model):
     """
     جدول المجموعة - يوم بيوم مع وقت مستقل لكل يوم

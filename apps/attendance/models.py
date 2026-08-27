@@ -13,13 +13,26 @@ class Session(models.Model):
         related_name='sessions'
     )
     session_date = models.DateField(default=timezone.now)
-    
+
+    cycle = models.ForeignKey(
+        'teachers.GroupCycle',
+        on_delete=models.PROTECT,
+        null=True, blank=True,
+        related_name='sessions',
+        verbose_name="دورة الفوترة",
+    )
+    sequence_in_cycle = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        verbose_name="ترتيب الحصة في الدورة",
+        help_text="فارغ للحصص الملغاة — لا تُحتسب على أي طالب",
+    )
+
     teacher_attended = models.BooleanField(default=False)
     teacher_checkin_time = models.DateTimeField(null=True, blank=True)
-    
+
     is_cancelled = models.BooleanField(default=False)
     cancellation_reason = models.TextField(blank=True)
-    
+
     notification_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     
@@ -132,6 +145,10 @@ class ActivityLog(models.Model):
         ('override_time', 'تجاوز قيود الوقت'),
         ('exception_grant', 'منح استثناء'),
         ('exception_revoke', 'إلغاء استثناء'),
+        ('settlement_create', 'إنشاء كشف تسوية'),
+        ('settlement_update', 'تعديل كشف تسوية'),
+        ('settlement_approve', 'اعتماد كشف تسوية'),
+        ('settlement_reopen', 'إعادة فتح كشف تسوية'),
         # Recycle-bin actions (apps.reports) — they used to be written as the
         # generic 'update'/'delete', which are not valid choices, so
         # get_action_display() echoed the raw string and the filter dropdown

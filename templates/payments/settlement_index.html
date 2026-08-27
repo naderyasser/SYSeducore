@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+
+{% block title %}تسويات المدرسين{% endblock %}
+{% block page_title %}تسويات المدرسين{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-3">
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">بناء كشف تصفية جديد</h5></div>
+        <div class="card-body">
+            <form id="buildForm" class="row g-3 align-items-end">
+                <div class="col-md-4">
+                    <label class="form-label">المدرس</label>
+                    <select name="teacher_id" class="form-select" required>
+                        <option value="">اختر مدرسًا</option>
+                        {% for teacher in teachers %}
+                        <option value="{{ teacher.teacher_id }}">{{ teacher.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="period_start" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="period_end" class="form-control" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-calculator me-1"></i>بناء الكشف
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0">آخر الكشوفات</h5></div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>المدرس</th>
+                        <th>الفترة</th>
+                        <th>الحالة</th>
+                        <th>إجمالي بعد التعديل</th>
+                        <th>نصيب المدرس</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in recent_settlements %}
+                    <tr>
+                        <td>{{ s.teacher.full_name }}</td>
+                        <td>{{ s.period_start|date:"Y-m-d" }} — {{ s.period_end|date:"Y-m-d" }}</td>
+                        <td>
+                            {% if s.status == 'approved' %}
+                                <span class="badge bg-success">معتمد</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark">مسودة</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ s.adjusted_gross }} ج.م</td>
+                        <td>{{ s.teacher_share }} ج.م</td>
+                        <td>
+                            <a href="{% url 'payments:settlement_detail' s.settlement_id %}" class="btn btn-sm btn-outline-primary">فتح</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="6" class="text-center text-muted py-4">لا توجد كشوفات بعد</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('buildForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const formData = new FormData(this);
+    fetch('{% url "api_settlement_build" %}', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        body: formData,
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location = `/payments/settlements/${data.settlement.settlement_id}/`;
+        } else {
+            alert(data.message || 'فشل بناء الكشف');
+        }
+    })
+    .catch(() => alert('فشل الاتصال بالخادم'));
+});
+</script>
+{% endblock %}

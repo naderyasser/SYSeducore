@@ -475,11 +475,20 @@ def group_create(request):
     return render(request, 'teachers/groups/form.html', {'form': form, 'rooms': rooms})
 
 
-@login_required
+@supervisor_required
 def group_detail(request, group_id):
     """
-    عرض تفاصيل المجموعة
+    عرض تفاصيل المجموعة: بيانات الطلاب (هواتف، تاريخ انضمام، حالة دفع) +
+    شبكة حضور تاريخية.
+
+    كان ``@login_required`` — أي حساب مدرس يمكنه فتح أي مجموعة ويرى هواتف
+    الطلاب ومبالغهم؛ رُفع إلى ``@supervisor_required``.
     """
+    from datetime import timedelta
+    from apps.attendance.grids import build_group_attendance_grid
+    from apps.payments.models import Payment
+    from apps.teachers.models import GroupCycle
+
     group = get_object_or_404(
         Group.objects.select_related('teacher').prefetch_related('schedules__room'),
         pk=group_id,
@@ -489,6 +498,47 @@ def group_detail(request, group_id):
     ).select_related('student')
     schedules = group.get_schedules()
 
+    # نطاق الشبكة الافتراضي: الدورة الحالية إن وُجدت، وإلا آخر 30 يومًا.
+    today = timezone.localdate()
+    open_cycle = GroupCycle.objects.filter(group=group, closed_on__isnull=True).first()
+    if open_cycle and open_cycle.started_on:
+        grid_from = open_cycle.started_on
+    else:
+        grid_from = today - timedelta(days=30)
+    grid_to = today
+
+    raw_from = request.GET.get('from')
+    raw_to = request.GET.get('to')
+    if raw_from:
+        try:
+            grid_from = timezone.datetime.fromisoformat(raw_from).date()
+        except ValueError:
+            pass
+    if raw_to:
+        try:
+            grid_to = timezone.datetime.fromisoformat(raw_to).date()
+        except ValueError:
+            pass
+
+    grid = build_group_attendance_grid(group, grid_from, grid_to)
+
+    payments_by_student = {
+        p.student_id: p
+        for p in Payment.objects.filter(
+            student_id__in=[r['student'].pk for r in grid['rows']],
+            cycle=open_cycle,
+        )
+    } if open_cycle else {}
+
+    students_rows = []
+    for row in grid['rows']:
+        payment = payments_by_student.get(row['student'].pk)
+        students_rows.append({
+            **row,
+            'payment_status': payment.status if payment else 'unpaid',
+            'payment_amount_due': payment.amount_due if payment else None,
+        })
+
     context = {
         'group': group,
         'enrolled_students': enrolled_students,
@@ -496,6 +546,11 @@ def group_detail(request, group_id):
         'capacity': group.get_capacity(),
         'schedules': schedules,
         'schedule_entries': group.get_schedule_entries(),
+        'students_rows': students_rows,
+        'session_columns': grid['columns'],
+        'grid_from': grid_from,
+        'grid_to': grid_to,
+        'open_cycle': open_cycle,
     }
     return render(request, 'teachers/groups/detail.html', context)
 

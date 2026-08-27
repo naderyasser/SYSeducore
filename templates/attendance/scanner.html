@@ -2172,39 +2172,17 @@ function closeExportModal() {
     document.getElementById('exportModal').classList.remove('show');
 }
 
-async function performExport() {
+function performExport() {
     const date = document.getElementById('exportDate').value;
     const type = document.getElementById('exportType').value;
+    if (!date) { alert('التاريخ مطلوب'); return; }
 
-    try {
-        const response = await fetch('{% url "attendance:export_report" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({ date, type })
-        });
-
-        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
-        if (!response.ok) throw new Error('خطأ في الخادم');
-        const data = await response.json();
-
-        if (data.success) {
-            // Download file
-            const blob = new Blob([data.content], { type: 'text/csv;charset=utf-8;' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `attendance_${date}.csv`;
-            link.click();
-
-            closeExportModal();
-        } else {
-            alert(data.message || 'فشل التصدير');
-        }
-    } catch (error) {
-        alert('خطأ في الاتصال');
-    }
+    // A plain GET download — the endpoint now returns a real CSV file
+    // (with a UTF-8 BOM so Excel shows Arabic correctly), so no fetch/Blob
+    // dance or CSRF token is needed for what is a read-only export.
+    const url = `{% url "attendance:export_report" %}?date=${encodeURIComponent(date)}&type=${encodeURIComponent(type)}`;
+    window.location = url;
+    closeExportModal();
 }
 </script>
 {% endblock %}

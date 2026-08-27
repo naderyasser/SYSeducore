@@ -11,9 +11,11 @@ immediately for any authenticated user, and every view it decorated was also
 hardcoded ``888888`` default and the three views that served it have been
 removed; these reports are now protected by the real role decorators:
 
-* ``dashboard`` / ``attendance_report`` — any authenticated user.
-* ``payment_report`` / ``tsfya`` — supervisor or admin (desk collection work).
-* ``financial_report`` — admin only (centre revenue + teacher settlements).
+* ``dashboard`` / ``attendance_report`` — any authenticated user; cumulative
+  money figures (``show_financials``) are computed and shown to admins only.
+* ``payment_report`` — supervisor or admin (desk collection work); the same
+  ``show_financials`` gate hides its aggregate totals from non-admins.
+* ``tsfya`` / ``financial_report`` — admin only (centre-wide revenue).
 * ``activity_log`` — admin only (it holds usernames and IP addresses).
 * recycle bin: view + restore are supervisor, permanent delete + empty are
   admin.
@@ -232,18 +234,24 @@ def dashboard(request):
     ).select_related('student', 'session__group')[:5]
 
     # ====== FINANCIAL SUMMARY ======
-    # Half-open [this_month, next_month) range — a plain ``month__gte`` also
-    # swept in every future-dated row that ``check_billing_cycles`` bulk
-    # creates for enrollments whose cycle already closed, so "this month"
-    # kept growing by every upcoming month's dues (dashboard-month-gte-future-payments).
-    month_totals = _month_filter(Payment.objects.all(), this_month_start).aggregate(
-        total_due=Sum('amount_due'),
-        total_paid=Sum('amount_paid'),
-    )
-    month_total_due = month_totals['total_due'] or 0
-    month_total_paid = month_totals['total_paid'] or 0
-    month_remaining = month_total_due - month_total_paid
-    collection_rate = _rate(month_total_paid, month_total_due)
+    # Cumulative centre-wide totals — admin only (AUTH-09). The aggregate
+    # must not even be computed for a non-admin: removing the template
+    # block alone would still leak the numbers into the page context.
+    show_financials = request.user.can_see_financials()
+    month_total_due = month_total_paid = month_remaining = collection_rate = None
+    if show_financials:
+        # Half-open [this_month, next_month) range — a plain ``month__gte`` also
+        # swept in every future-dated row that ``roll_group_cycles`` bulk
+        # creates for groups whose cycle already closed, so "this month"
+        # kept growing by every upcoming month's dues (dashboard-month-gte-future-payments).
+        month_totals = _month_filter(Payment.objects.all(), this_month_start).aggregate(
+            total_due=Sum('amount_due'),
+            total_paid=Sum('amount_paid'),
+        )
+        month_total_due = month_totals['total_due'] or 0
+        month_total_paid = month_totals['total_paid'] or 0
+        month_remaining = month_total_due - month_total_paid
+        collection_rate = _rate(month_total_paid, month_total_due)
 
     # Soft-deleted students/groups are excluded from both the count and the
     # list below them — they used to share nothing, so a student who had
@@ -379,14 +387,11 @@ def dashboard(request):
         'today_attendance_rate': round(today_attendance_rate, 1),
         'absent_today': absent_today,
 
-        # Financial
-        'month_total_due': month_total_due,
-        'month_total_paid': month_total_paid,
-        'month_remaining': month_remaining,
-        'collection_rate': round(collection_rate, 1),
+        # Financial — per-payment desk data, visible to supervisors too.
         'pending_payments_count': pending_payments_count,
         'pending_payments_list': pending_payments_list,
         'recent_payments': recent_payments,
+        'show_financials': show_financials,
 
         # Schedule
         'today_schedule': today_schedule,
@@ -402,6 +407,17 @@ def dashboard(request):
         'groups_low_enrollment': groups_low_enrollment[:3],
         'groups_high_enrollment': groups_high_enrollment[:3],
     }
+
+    # Cumulative aggregates only ever reach the context for an admin — a
+    # non-admin's response has no ``month_total_due`` key at all, not just a
+    # hidden template block.
+    if show_financials:
+        context.update({
+            'month_total_due': month_total_due,
+            'month_total_paid': month_total_paid,
+            'month_remaining': month_remaining,
+            'collection_rate': round(collection_rate, 1),
+        })
 
     return render(request, 'reports/dashboard.html', context)
 
@@ -490,8 +506,11 @@ def payment_report(request):
     """
     Comprehensive Payment Report with filters and statistics.
 
-    Money report — supervisor or admin only (AUTH-09).
+    A per-payment list (desk collection work) is supervisor-or-admin, but
+    the cumulative totals (``total_due``/``total_paid``/``total_remaining``)
+    are admin-only via ``show_financials`` — see the module docstring.
     """
+    show_financials = request.user.can_see_financials()
     # Get filter parameters
     month = request.GET.get('month')
     status = request.GET.get('status')
@@ -530,16 +549,19 @@ def payment_report(request):
             if teacher_id_parsed is not None else payments.none()
         )
 
-    # Statistics — one aggregate instead of five round-trips.
-    stats = payments.aggregate(
-        total_due=Sum('amount_due'),
-        total_paid=Sum('amount_paid'),
-        paid=Count('payment_id', filter=Q(status='paid')),
-        partial=Count('payment_id', filter=Q(status='partial')),
-        unpaid=Count('payment_id', filter=Q(status='unpaid')),
-    )
-    total_due = stats['total_due'] or 0
-    total_paid = stats['total_paid'] or 0
+    # Statistics — one aggregate instead of five round-trips. The money sums
+    # are only requested (and only ever reach the template) for an admin.
+    agg_kwargs = {
+        'paid': Count('payment_id', filter=Q(status='paid')),
+        'partial': Count('payment_id', filter=Q(status='partial')),
+        'unpaid': Count('payment_id', filter=Q(status='unpaid')),
+    }
+    if show_financials:
+        agg_kwargs['total_due'] = Sum('amount_due')
+        agg_kwargs['total_paid'] = Sum('amount_paid')
+    stats = payments.aggregate(**agg_kwargs)
+    total_due = stats.get('total_due') or 0
+    total_paid = stats.get('total_paid') or 0
 
     # Group and teacher filter options
     groups = Group.objects.filter(is_active=True)
@@ -552,9 +574,7 @@ def payment_report(request):
 
     context = {
         'page_obj': page_obj,
-        'total_due': total_due,
-        'total_paid': total_paid,
-        'total_remaining': total_due - total_paid,
+        'show_financials': show_financials,
         'paid_count': stats['paid'] or 0,
         'partial_count': stats['partial'] or 0,
         'unpaid_count': stats['unpaid'] or 0,
@@ -565,6 +585,12 @@ def payment_report(request):
         'selected_group': group_id,
         'selected_teacher': teacher_id,
     }
+    if show_financials:
+        context.update({
+            'total_due': total_due,
+            'total_paid': total_paid,
+            'total_remaining': total_due - total_paid,
+        })
 
     return render(request, 'reports/payments.html', context)
 
@@ -1042,7 +1068,7 @@ def recycle_empty(request):
 
 # ==================== Tsfya — monthly financial summary ====================
 
-@supervisor_required
+@admin_required
 def monthly_financial_summary(request):
     """
     Tsfya (تصفية) — Monthly Financial Summary dashboard.
@@ -1054,7 +1080,10 @@ def monthly_financial_summary(request):
     - Collection rates
     - Payment status distribution
 
-    Money report — supervisor or admin only (AUTH-09).
+    Every figure here is a cumulative, centre-wide total — admin only.
+    It used to be supervisor-or-admin (AUTH-09); nothing on this page is
+    desk-collection work (that's ``payment_report``), so there is nothing
+    for a supervisor to legitimately need here.
     """
     # Determine month
     report_month = parse_month_param(request.GET.get('month')) or \
