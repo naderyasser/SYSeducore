@@ -402,7 +402,13 @@
                 <div class="group-card">
                     <div class="d-flex justify-content-between align-items-start">
                         <div>
-                            <div class="group-name">{{ enrollment.group.group_name }}</div>
+                            <div class="group-name">
+                                <a href="{% url 'teachers:group_detail' group_id=enrollment.group.group_id %}"
+                                   class="text-decoration-none text-reset">
+                                    {{ enrollment.group.group_name }}
+                                    <i class="bi bi-box-arrow-up-left ms-1 small text-primary"></i>
+                                </a>
+                            </div>
                             <div class="group-info">
                                 <i class="bi bi-person me-1"></i>{{ enrollment.group.teacher.full_name|default:"-" }}
                                 <span class="mx-2">|</span>

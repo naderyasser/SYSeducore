@@ -52,7 +52,10 @@
                     {% for group in groups %}
                     <tr>
                         <td>
-                            <span class="fw-semibold">{{ group.group_name }}</span>
+                            <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
+                               class="fw-semibold text-decoration-none">
+                                <i class="bi bi-box-arrow-up-left me-1 small"></i>{{ group.group_name }}
+                            </a>
                         </td>
                         <td>{{ group.teacher.full_name }}</td>
                         <td>
@@ -68,7 +71,10 @@
                             {% endif %}
                         </td>
                         <td>
-                            <a href="{% url 'teachers:group_update' group_id=group.group_id %}" class="btn btn-sm btn-outline-primary">
+                            <a href="{% url 'teachers:group_detail' group_id=group.group_id %}" class="btn btn-sm btn-outline-info" title="فتح المجموعة">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{% url 'teachers:group_update' group_id=group.group_id %}" class="btn btn-sm btn-outline-primary" title="تعديل">
                                 <i class="bi bi-pencil"></i>
                             </a>
                             <form method="post" action="{% url 'teachers:group_delete' group_id=group.group_id %}" class="d-inline">

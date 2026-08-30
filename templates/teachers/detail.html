@@ -75,7 +75,10 @@
                             {% for group in groups %}
                             <tr>
                                 <td>
-                                    <span class="fw-semibold">{{ group.group_name }}</span>
+                                    <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
+                                       class="fw-semibold text-decoration-none">
+                                        <i class="bi bi-box-arrow-up-left me-1 small"></i>{{ group.group_name }}
+                                    </a>
                                 </td>
                                 <td>
                                     <span class="badge bg-secondary">{{ group.get_rooms_display }}</span>
@@ -110,7 +113,10 @@
                     {% for session in upcoming_sessions %}
                     <div class="list-group-item d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="mb-1">{{ session.group.group_name }}</h6>
+                            <h6 class="mb-1">
+                                <a href="{% url 'teachers:group_detail' group_id=session.group.group_id %}"
+                                   class="text-decoration-none">{{ session.group.group_name }}</a>
+                            </h6>
                             <small class="text-muted">
                                 <i class="bi bi-door-open me-1"></i>{{ session.get_room.name|default:"-" }}
                             </small>

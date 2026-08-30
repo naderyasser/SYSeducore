@@ -494,8 +494,12 @@ def group_detail(request, group_id):
         Group.objects.select_related('teacher').prefetch_related('schedules__room'),
         pk=group_id,
     )
+    # ``student__deleted_at__isnull=True`` keeps this count in step with the
+    # roster below it: ``build_group_attendance_grid`` already excludes
+    # soft-deleted students, so without the same filter the header said
+    # "12 طالب" over a table listing 10.
     enrolled_students = StudentGroupEnrollment.objects.filter(
-        group=group, is_active=True
+        group=group, is_active=True, student__deleted_at__isnull=True,
     ).select_related('student')
     schedules = group.get_schedules()
 

@@ -762,7 +762,8 @@
                 <td class="groups-cell">
                     {% if student.active_enrollments %}
                         {% for enrollment in student.active_enrollments %}
-                        <span class="group-tag">{{ enrollment.group.group_name }}</span>
+                        <a href="{% url 'teachers:group_detail' group_id=enrollment.group.group_id %}"
+                           class="group-tag text-decoration-none">{{ enrollment.group.group_name }}</a>
                         {% endfor %}
                     {% else %}
                         <span class="group-tag empty">غير مسجل</span>

@@ -1152,3 +1152,58 @@ class CycleSequencingTest(TestCase):
 
         with self.assertRaises(ValueError):
             renumber_cycle(cycle)
+
+
+
+class GroupNameIsClickableTest(TestCase):
+    """
+    The client's top complaint: a group was a text label everywhere it
+    appeared. Every list that names a group must offer a way into it.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.supervisor = get_user_model().objects.create_user(
+            username='clk_sup', password='TestPass123!', role='supervisor',
+        )
+        self.room = Room.objects.create(name='قاعة الروابط', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الروابط', phone='01099990000',
+            specialization='لغات', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الروابط', teacher=self.teacher, room=self.room,
+            schedule_day='Wednesday', schedule_time=time(9, 0),
+            standard_fee=Decimal('120.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='CK001', full_name='طالب الروابط', gender='male',
+            parent_phone='01099991111',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, is_active=True,
+        )
+        self.target = reverse(
+            'teachers:group_detail', kwargs={'group_id': self.group.group_id},
+        )
+        self.client.login(username='clk_sup', password='TestPass123!')
+
+    def test_groups_list_links_to_the_group(self):
+        response = self.client.get(reverse('teachers:group_list'))
+        self.assertContains(response, self.target)
+
+    def test_student_detail_links_to_the_group(self):
+        response = self.client.get(
+            reverse('students:detail', kwargs={'student_id': self.student.student_id}),
+        )
+        self.assertContains(response, self.target)
+
+    def test_students_list_links_to_the_group(self):
+        response = self.client.get(reverse('students:list'))
+        self.assertContains(response, self.target)
+
+    def test_room_detail_links_to_the_group(self):
+        response = self.client.get(
+            reverse('teachers:room_detail', kwargs={'room_id': self.room.room_id}),
+        )
+        self.assertContains(response, self.target)
