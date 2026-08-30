@@ -4,6 +4,7 @@ Unit Tests for Teachers App - Educore V2
 """
 
 import json
+import re
 from datetime import date, time
 from decimal import Decimal
 
@@ -1434,3 +1435,154 @@ class SessionsPerCycleCapTest(TestCase):
         )
         with self.assertRaises(ValidationError):
             group.full_clean()
+
+class FrontendActionLinksSmokeTest(TestCase):
+    """
+    Walk every screen the client actually uses and follow every link on it.
+
+    The complaint behind this suite was never "the feature is missing" — the
+    group page existed, the settlement sheet existed — it was that nothing on
+    screen led to them. A view with no route to it is, to the person at the
+    desk, a view that does not exist. So this asserts two things: every screen
+    renders, and every internal link on it resolves to a real page rather than
+    a 404 or a crash.
+
+    Companion to the rule the previous authz pass established (no button may
+    lead to a 403): no button may lead to a dead end either.
+    """
+
+    #: Followed with GET. Destructive endpoints are all POST-guarded (their GET
+    #: renders a confirmation page), so crawling is safe — with two exceptions.
+    SKIP = (
+        '/accounts/logout/',   # would end the crawl's own session
+        '/static/', '/media/',
+    )
+
+    #: 405 is a correct answer from a POST-only endpoint reached by GET
+    #: (student toggle-status); 302 is a redirect, which is a live route.
+    OK_STATUS = {200, 302, 405}
+
+    def setUp(self):
+        self.client = Client()
+        self.admin = get_user_model().objects.create_user(
+            username='smoke_admin', password='TestPass123!', role='admin',
+        )
+        self.room = Room.objects.create(name='قاعة الفحص', capacity=20)
+        self.subject = Subject.objects.create(name='مادة الفحص')
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الفحص', phone='01011110000',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+        self.teacher.subjects.add(self.subject)
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الفحص', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(14, 0),
+            standard_fee=Decimal('300.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='SMK001', full_name='طالب الفحص', gender='male',
+            parent_phone='01011111111', student_phone='01011112222',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, is_active=True,
+        )
+        self.client.login(username='smoke_admin', password='TestPass123!')
+
+    # ── the screens reachable from the sidebar, plus every detail page ──
+    def screens(self):
+        return [
+            reverse('reports:dashboard'),
+            reverse('students:list'),
+            reverse('students:detail', kwargs={'student_id': self.student.student_id}),
+            reverse('students:create'),
+            reverse('students:update', kwargs={'student_id': self.student.student_id}),
+            reverse('teachers:list'),
+            reverse('teachers:detail', kwargs={'teacher_id': self.teacher.teacher_id}),
+            reverse('teachers:group_list'),
+            reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id}),
+            reverse('teachers:room_list'),
+            reverse('teachers:room_detail', kwargs={'room_id': self.room.room_id}),
+            reverse('teachers:subject_list'),
+            reverse('teachers:booking_search'),
+            reverse('teachers:booking_create_for_teacher', args=[self.teacher.teacher_id]),
+            reverse('teachers:booking_calendar'),
+            reverse('payments:list'),
+            reverse('payments:settlement_index'),
+            reverse('reports:attendance'),
+            reverse('reports:financial'),
+            reverse('reports:payments'),
+            reverse('reports:comprehensive'),
+            reverse('reports:tsfya'),
+            reverse('reports:recycle_bin'),
+            reverse('reports:activity_log'),
+            reverse('accounts:user_list'),
+            reverse('attendance:scanner'),
+        ]
+
+    def test_every_screen_renders(self):
+        for url in self.screens():
+            with self.subTest(screen=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_no_link_on_any_screen_is_a_dead_end(self):
+        """Follow every internal href rendered on every screen."""
+        seen = set()
+        for screen in self.screens():
+            page = self.client.get(screen)
+            self.assertEqual(page.status_code, 200, screen)
+            html = page.content.decode('utf-8')
+
+            for href in re.findall(r'href="([^"#][^"]*)"', html):
+                if not href.startswith('/') or href.startswith(self.SKIP):
+                    continue
+                if (screen, href) in seen:
+                    continue
+                seen.add((screen, href))
+                with self.subTest(screen=screen, link=href):
+                    status = self.client.get(href).status_code
+                    self.assertIn(
+                        status, self.OK_STATUS,
+                        f'{href} (linked from {screen}) returned {status}',
+                    )
+
+        # A crawl that found nothing would pass vacuously.
+        self.assertGreater(len(seen), 40, 'crawler found suspiciously few links')
+
+    # ── the specific buttons this round of work was asked for ──
+    def test_group_is_openable_from_every_screen_that_names_it(self):
+        target = reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id})
+        for screen in (
+            reverse('teachers:group_list'),
+            reverse('teachers:detail', kwargs={'teacher_id': self.teacher.teacher_id}),
+            reverse('students:detail', kwargs={'student_id': self.student.student_id}),
+            reverse('students:list'),
+            reverse('teachers:room_detail', kwargs={'room_id': self.room.room_id}),
+        ):
+            with self.subTest(screen=screen):
+                self.assertContains(self.client.get(screen), target)
+
+    def test_teacher_page_shows_students_and_settlement_button(self):
+        page = self.client.get(
+            reverse('teachers:detail', kwargs={'teacher_id': self.teacher.teacher_id}),
+        )
+        self.assertContains(page, 'طلاب المدرس')
+        self.assertContains(page, 'طالب الفحص')
+        self.assertContains(page, 'تصفية حساب المدرس')
+        self.assertContains(
+            page, f"{reverse('payments:settlement_index')}?teacher={self.teacher.teacher_id}",
+        )
+
+    def test_settlement_button_lands_on_a_preselected_sheet(self):
+        page = self.client.get(
+            reverse('payments:settlement_index'), {'teacher': self.teacher.teacher_id},
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.context['selected_teacher'], self.teacher.teacher_id)
+
+    def test_booking_screen_offers_enrolling_into_an_existing_group(self):
+        page = self.client.get(
+            reverse('teachers:booking_create_for_teacher', args=[self.teacher.teacher_id]),
+        )
+        self.assertContains(page, 'تسجيل هنا')
+        self.assertContains(page, 'مجموعة الفحص')
+        self.assertContains(page, reverse('teachers:booking_student_enroll'))
