@@ -337,13 +337,29 @@ def settlement_index(request):
     from .models import TeacherSettlement
 
     teachers = Teacher.objects.filter(is_active=True).order_by('full_name')
-    recent = (
-        TeacherSettlement.objects.select_related('teacher')
-        .order_by('-created_at')[:20]
-    )
+
+    # ``?teacher=<id>`` arrives from the "تصفية حساب المدرس" button on a
+    # teacher's own page: preselect that teacher (and show only their previous
+    # sheets) so settling one teacher is one click from their file instead of
+    # landing on a blank picker and hunting for the name again.
+    selected_teacher = None
+    raw_teacher = request.GET.get('teacher')
+    if raw_teacher:
+        try:
+            selected_teacher = int(raw_teacher)
+        except (TypeError, ValueError):
+            selected_teacher = None
+
+    recent = TeacherSettlement.objects.select_related('teacher')
+    if selected_teacher is not None:
+        recent = recent.filter(teacher_id=selected_teacher)
+    # Sliced last — a queryset cannot be filtered once a slice has been taken.
+    recent = recent.order_by('-created_at')[:20]
+
     return render(request, 'payments/settlement_index.html', {
         'teachers': teachers,
         'recent_settlements': recent,
+        'selected_teacher': selected_teacher,
     })
 
 

@@ -8,8 +8,8 @@
         <i class="bi bi-arrow-right me-2"></i>العودة للقائمة
     </a>
     {% if user.can_see_financials %}
-    <a href="{% url 'payments:settlement_index' %}" class="btn btn-outline-primary">
-        <i class="bi bi-calculator me-2"></i>كشف التصفية
+    <a href="{% url 'payments:settlement_index' %}?teacher={{ teacher.teacher_id }}" class="btn btn-primary">
+        <i class="bi bi-calculator me-2"></i>تصفية حساب المدرس
     </a>
     {% endif %}
 </div>

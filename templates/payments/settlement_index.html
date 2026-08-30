@@ -14,7 +14,8 @@
                     <select name="teacher_id" class="form-select" required>
                         <option value="">اختر مدرسًا</option>
                         {% for teacher in teachers %}
-                        <option value="{{ teacher.teacher_id }}">{{ teacher.full_name }}</option>
+                        <option value="{{ teacher.teacher_id }}"
+                                {% if selected_teacher == teacher.teacher_id %}selected{% endif %}>{{ teacher.full_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -36,7 +37,9 @@
     </div>
 
     <div class="card">
-        <div class="card-header"><h5 class="mb-0">آخر الكشوفات</h5></div>
+        <div class="card-header"><h5 class="mb-0">
+            {% if selected_teacher %}كشوفات هذا المدرس{% else %}آخر الكشوفات{% endif %}
+        </h5></div>
         <div class="card-body p-0">
             <table class="table table-hover mb-0">
                 <thead>

@@ -1152,6 +1152,41 @@ class TeacherSettlementViewsTest(LedgerTestBase):
             200,
         )
 
+    def test_settlement_index_preselects_teacher_from_query(self):
+        """
+        ``?teacher=<id>`` arrives from the "تصفية حساب المدرس" button on the
+        teacher's own page, so settling one teacher is one click from their
+        file instead of landing on a blank picker.
+        """
+        from apps.payments.services import SettlementService
+
+        other_teacher = Teacher.objects.create(
+            full_name='مدرس بلا تصفية', phone='01234500077',
+            specialization='تاريخ', hire_date=timezone.localdate(),
+        )
+        mine = SettlementService.build_or_refresh(self.teacher, self.month_start, self.month_start)
+
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        response = self.client.get(
+            reverse('payments:settlement_index'), {'teacher': self.teacher.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_teacher'], self.teacher.pk)
+        self.assertIn(mine, list(response.context['recent_settlements']))
+
+        # A sheet belonging to someone else must not be listed under this filter.
+        theirs = SettlementService.build_or_refresh(other_teacher, self.month_start, self.month_start)
+        response = self.client.get(
+            reverse('payments:settlement_index'), {'teacher': self.teacher.pk},
+        )
+        self.assertNotIn(theirs, list(response.context['recent_settlements']))
+
+    def test_settlement_index_ignores_a_junk_teacher_param(self):
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        response = self.client.get(reverse('payments:settlement_index'), {'teacher': 'abc'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['selected_teacher'])
+
     def test_line_edit_excludes_and_updates_totals(self):
         from apps.payments.services import SettlementService
 
