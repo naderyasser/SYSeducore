@@ -165,8 +165,9 @@ def _get_or_create_open_cycle_payment(student, group):
     at all (``sessions_per_month == 0``).
     """
     from django.utils import timezone
+    from apps.attendance.entitlement import billing_start_sequence
     from apps.teachers.cycles import open_cycle_for
-    from apps.payments.pricing import prorated_fee
+    from apps.payments.pricing import entitled_sessions, prorated_fee
     from apps.students.models import StudentGroupEnrollment
 
     if not group.sessions_per_month:
@@ -177,13 +178,25 @@ def _get_or_create_open_cycle_payment(student, group):
         return payment
 
     enrollment = StudentGroupEnrollment.objects.filter(student=student, group=group).first()
+    # This is the desk's collection dialog, so it is the path a mid-cycle
+    # joiner actually walks up and pays through — it must pro-rate. It used to
+    # pass ``first_sequence=1`` (full cycle fee for everyone), which is exactly
+    # the "charge a full month, refund the difference on paper" the session
+    # billing was meant to end.
+    start_seq = billing_start_sequence(student, cycle)
     fee = prorated_fee(
-        enrollment, cycle_size=cycle.sessions_planned, first_sequence=1, group=group,
+        enrollment, cycle_size=cycle.sessions_planned,
+        first_sequence=start_seq, group=group,
     ) if enrollment else 0
     return Payment.objects.create(
         student=student, group=group, cycle=cycle,
         month=(cycle.started_on or timezone.localdate()).replace(day=1),
-        amount_due=fee, status='unpaid', sessions_total=cycle.sessions_planned,
+        amount_due=fee, status='unpaid',
+        # The row must promise only what was paid for, or entitlement would
+        # hand a half-cycle payer a full cycle of lessons.
+        sessions_total=entitled_sessions(
+            cycle_size=cycle.sessions_planned, first_sequence=start_seq,
+        ),
     )
 
 

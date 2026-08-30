@@ -1,7 +1,15 @@
 from django.db import models
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
+from django.core.validators import MaxValueValidator
 from datetime import datetime, timedelta
 from apps.core.models import SoftDeleteModel
+
+#: Hard ceiling on a group's billing cycle length, in lessons. The accounting
+#: "month" is a fixed number of lessons, never a span of days, and it closes at
+#: eight — a group meeting twice a week. Shorter cycles (a weekly group runs 4)
+#: stay valid; anything above 8 is rejected at the model, so the admin site and
+#: any future API are bound by it too, not just the group form.
+MAX_SESSIONS_PER_CYCLE = 8
 
 
 #: Week days in the order the centre uses them (Saturday is the first school day).
@@ -347,7 +355,12 @@ class Group(SoftDeleteModel):
     )
     sessions_per_month = models.PositiveIntegerField(
         default=4,
-        verbose_name="عدد الحصص في الشهر"
+        validators=[MaxValueValidator(MAX_SESSIONS_PER_CYCLE)],
+        verbose_name="عدد الحصص في الشهر",
+        help_text=(
+            "طول الدورة المحاسبية بالحصص — 8 حصص كحد أقصى. "
+            "0 يعني أن المجموعة غير مفوترة بالدورات."
+        ),
     )
 
     is_active = models.BooleanField(default=True)

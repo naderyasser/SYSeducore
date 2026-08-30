@@ -4,7 +4,7 @@ from django import forms
 from django.db import transaction
 from django.db.models import Q
 
-from .models import Teacher, Group, Room, Subject, GroupSchedule
+from .models import MAX_SESSIONS_PER_CYCLE, Teacher, Group, Room, Subject, GroupSchedule
 
 
 class TeacherForm(forms.ModelForm):
@@ -149,7 +149,10 @@ class GroupForm(forms.ModelForm):
                 'class': 'form-control', 'placeholder': '30',
                 'min': '0', 'max': '100', 'step': '0.01',
             }),
-            'sessions_per_month': forms.NumberInput(attrs={'class': 'form-control', 'placeholder': '4', 'min': '1'}),
+            'sessions_per_month': forms.NumberInput(attrs={
+                'class': 'form-control', 'placeholder': '8',
+                'min': '1', 'max': str(MAX_SESSIONS_PER_CYCLE),
+            }),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -189,10 +192,19 @@ class GroupForm(forms.ModelForm):
         return duration
 
     def clean_sessions_per_month(self):
-        """عدد الحصص في الشهر يجب أن يكون حصة واحدة على الأقل"""
+        """
+        طول الدورة المحاسبية: من حصة واحدة إلى ``MAX_SESSIONS_PER_CYCLE``.
+
+        الحد الأعلى مفروض على مستوى الموديل أيضًا؛ يُكرَّر هنا لتظهر الرسالة
+        بالعربية داخل النموذج بدل خطأ التحقق العام.
+        """
         sessions = self.cleaned_data.get('sessions_per_month')
         if sessions is not None and sessions < 1:
             raise forms.ValidationError('عدد الحصص في الشهر يجب أن يكون 1 على الأقل')
+        if sessions is not None and sessions > MAX_SESSIONS_PER_CYCLE:
+            raise forms.ValidationError(
+                f'الدورة المحاسبية {MAX_SESSIONS_PER_CYCLE} حصص كحد أقصى'
+            )
         return sessions
 
     @transaction.atomic

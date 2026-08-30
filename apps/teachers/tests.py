@@ -1382,3 +1382,55 @@ class TeacherStudentsOnDetailTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['can_see_student_details'])
         self.assertNotContains(response, '01088882222')
+
+
+class SessionsPerCycleCapTest(TestCase):
+    """
+    The accounting cycle is a fixed number of lessons and closes at eight.
+    Shorter cycles stay valid (a weekly group runs 4); anything above 8 is
+    rejected at the model, so the admin site is bound by it too — not just
+    the group form.
+    """
+
+    def setUp(self):
+        self.room = Room.objects.create(name='قاعة الحد', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الحد', phone='01055550000',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+
+    def _form_data(self, sessions):
+        return {
+            'group_name': 'مجموعة الحد',
+            'teacher': self.teacher.teacher_id,
+            'schedule_day': 'Saturday',
+            'schedule_time': '10:00',
+            'duration_minutes': 120,
+            'max_students': 20,
+            'standard_fee': '300.00',
+            'center_percentage': '30.00',
+            'sessions_per_month': sessions,
+            'is_active': True,
+        }
+
+    def test_form_rejects_more_than_eight(self):
+        form = GroupForm(data=self._form_data(9))
+        self.assertFalse(form.is_valid())
+        self.assertIn('sessions_per_month', form.errors)
+
+    def test_form_accepts_eight(self):
+        form = GroupForm(data=self._form_data(8))
+        self.assertNotIn('sessions_per_month', form.errors)
+
+    def test_form_accepts_four(self):
+        form = GroupForm(data=self._form_data(4))
+        self.assertNotIn('sessions_per_month', form.errors)
+
+    def test_model_validation_rejects_more_than_eight(self):
+        group = Group(
+            group_name='مجموعة زائدة', teacher=self.teacher,
+            schedule_day='Saturday', schedule_time=time(10, 0),
+            standard_fee=Decimal('300.00'), sessions_per_month=12,
+        )
+        with self.assertRaises(ValidationError):
+            group.full_clean()

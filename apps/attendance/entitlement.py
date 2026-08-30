@@ -75,6 +75,47 @@ def first_consumed_session(student, cycle):
     return first.session if first else None
 
 
+def billing_start_sequence(student, cycle):
+    """
+    The cycle session number (1-based) this student's billing starts at —
+    the single answer to "which lesson of the 8 is this student joining at",
+    used to pro-rate their invoice.
+
+    Two cases, in order:
+
+    * **Already attended** — counting starts at their first real attendance
+      (:func:`first_consumed_session`), the same anchor entitlement uses, so
+      what they were charged for and what they may consume agree.
+    * **Not attended yet** (the desk collecting money from a student who
+      registered mid-cycle, before their first lesson) — they join at the
+      *next* session the group will hold, i.e. one past the sessions already
+      held. ``Session`` rows are only materialized on the day, after the
+      scheduled start time (see ``apps.attendance.tasks``), so a
+      non-cancelled session in the cycle is always a lesson that has already
+      happened — never a future one.
+
+    Callers used to hardcode ``first_sequence=1`` here, which made
+    :func:`~apps.payments.pricing.prorated_fee` return the *full* cycle fee
+    for everyone: a student joining at lesson 3 of 8 was invoiced for all 8
+    and the difference had to be settled by hand.
+
+    Clamped to ``[1, sessions_planned]``: a cycle that has already run its
+    full count (a roll-over that has not fired yet) bills the last session
+    rather than falling through to a zero invoice.
+    """
+    anchor = first_consumed_session(student, cycle)
+    if anchor is not None and anchor.sequence_in_cycle:
+        return anchor.sequence_in_cycle
+
+    from .models import Session
+
+    size = cycle.sessions_planned or 0
+    if size <= 0:
+        return 1
+    held = Session.objects.filter(cycle=cycle, is_cancelled=False).count()
+    return max(1, min(held + 1, size))
+
+
 def _consumed_sessions(student, cycle, anchor_session=None):
     """
     Count of non-cancelled sessions in ``cycle`` this student has consumed

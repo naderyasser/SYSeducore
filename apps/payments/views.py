@@ -13,10 +13,95 @@ from .pricing import base_fee_parts
 from .services import SettlementService
 
 
+def _ensure_cycle_payments():
+    """
+    Fill in the missing ``Payment`` row for anyone enrolled in a **cycle-billed**
+    group (``sessions_per_month > 0``) who has none on that group's open cycle
+    — priced for the lesson they are actually joining at.
+
+    Rows for a cycle are normally created in bulk by
+    ``apps.attendance.tasks.roll_group_cycles`` the moment the cycle opens, so
+    the gap this fills is the student who enrolled *after* it opened: exactly
+    the late joiner whose invoice must be pro-rated. The set is therefore small
+    (new enrollments only), which is what makes the per-student
+    ``billing_start_sequence`` lookup here affordable.
+
+    This replaces what ``_ensure_monthly_payments`` used to do for these
+    groups. That function billed by calendar month at the full fee and left
+    ``cycle`` null — and since the uniqueness constraint is on
+    ``(student, cycle)`` and NULL never collides, it happily added a second,
+    full-price, month-shaped invoice next to the correct pro-rated cycle one
+    every time a cycle had started in an earlier month. Money owed on screen
+    then had to be reconciled against the cycle by hand.
+    """
+    from apps.attendance.entitlement import billing_start_sequence
+    from apps.payments.pricing import entitled_sessions, prorated_fee
+    from apps.students.models import StudentGroupEnrollment
+    from apps.teachers.cycles import open_cycle_for
+
+    enrollments = (
+        StudentGroupEnrollment.objects
+        .filter(
+            is_active=True,
+            student__deleted_at__isnull=True,
+            group__deleted_at__isnull=True,
+            group__is_active=True,
+            group__sessions_per_month__gt=0,
+        )
+        .select_related('student', 'group')
+    )
+
+    by_group = {}
+    for enrollment in enrollments:
+        by_group.setdefault(enrollment.group, []).append(enrollment)
+
+    created = 0
+    for group, group_enrollments in by_group.items():
+        cycle = open_cycle_for(group)
+        already = set(
+            Payment.objects.filter(
+                cycle=cycle,
+                student_id__in=[e.student_id for e in group_enrollments],
+            ).values_list('student_id', flat=True)
+        )
+        for enrollment in group_enrollments:
+            if enrollment.student_id in already:
+                continue
+            start_seq = billing_start_sequence(enrollment.student, cycle)
+            fee = prorated_fee(
+                enrollment, cycle_size=cycle.sessions_planned,
+                first_sequence=start_seq, group=group,
+            )
+            Payment.objects.create(
+                student=enrollment.student,
+                group=group,
+                cycle=cycle,
+                month=(cycle.started_on or timezone.localdate()).replace(day=1),
+                amount_due=fee,
+                amount_paid=0,
+                # A zero fee is an exemption, not a collection — the same rule
+                # ``Payment.save()`` enforces for the monthly rows below.
+                status='paid' if fee <= 0 else 'unpaid',
+                is_exempt=fee <= 0,
+                sessions_total=entitled_sessions(
+                    cycle_size=cycle.sessions_planned, first_sequence=start_seq,
+                ),
+            )
+            created += 1
+
+    return created
+
+
 def _ensure_monthly_payments(month_date):
     """
-    Auto-generate Payment rows for every active enrollment that does not
-    already have one for *month_date*.
+    Auto-generate Payment rows for every active enrollment in a group that is
+    **not** cycle-billed (``sessions_per_month == 0``) and does not already
+    have one for *month_date*.
+
+    Cycle-billed groups are deliberately excluded and handled by
+    :func:`_ensure_cycle_payments` instead: billing them by calendar month is
+    the "charge a full month, refund the difference on paper" behaviour that
+    session billing exists to replace.
 
     **Current month only.** Callers must never pass a historical month: the
     fees used here are today's fees, so back-filling an old month would
@@ -48,6 +133,8 @@ def _ensure_monthly_payments(month_date):
             student__deleted_at__isnull=True,
             group__deleted_at__isnull=True,
             group__is_active=True,
+            # Cycle-billed groups are billed per cycle, never per month.
+            group__sessions_per_month=0,
         )
         .annotate(has_payment=Exists(already_billed))
         .filter(has_payment=False)
@@ -113,11 +200,28 @@ def payment_list(request):
     # ── Auto-generate missing payment rows — current month only ──
     # Browsing an archived month must never write to it.
     if month_date == current_month:
+        _ensure_cycle_payments()
         _ensure_monthly_payments(month_date)
 
-    payments = Payment.objects.select_related(
-        'student', 'group', 'group__teacher'
-    ).filter(month=month_date, student__deleted_at__isnull=True)
+    scope = Payment.objects.filter(student__deleted_at__isnull=True)
+
+    if month_date == current_month:
+        # A cycle is 8 lessons, not a calendar month, so one routinely starts
+        # in one month and is still being collected in the next. Filtering the
+        # live screen on ``month`` alone would drop those students off it —
+        # the desk would stop seeing real, unpaid dues the moment the month
+        # rolled over. The current month therefore shows this month's rows
+        # *plus* every still-open cycle.
+        scope = scope.filter(
+            Q(month=month_date) | Q(cycle__isnull=False, cycle__closed_on__isnull=True)
+        )
+    else:
+        # An archived month is read as it stood: only its own rows.
+        scope = scope.filter(month=month_date)
+
+    # The list and the stat tiles must be built from the same ``scope``, or
+    # the totals describe a different set of rows than the table under them.
+    payments = scope.select_related('student', 'group', 'group__teacher')
 
     if status_filter:
         payments = payments.filter(status=status_filter)
@@ -156,9 +260,7 @@ def payment_list(request):
     if show_financials:
         agg_kwargs['amount_due'] = Sum('amount_due', filter=billable)
         agg_kwargs['amount_collected'] = Sum('amount_paid', filter=billable)
-    stats = Payment.objects.filter(
-        month=month_date, student__deleted_at__isnull=True,
-    ).aggregate(**agg_kwargs)
+    stats = scope.aggregate(**agg_kwargs)
     if show_financials:
         for key in ('amount_due', 'amount_collected'):
             stats[key] = stats[key] or 0

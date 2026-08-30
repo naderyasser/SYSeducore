@@ -410,9 +410,10 @@ def _resolve_scanner_payment(student, group_id=None):
     Returns ``(payment, error_message)``.
     """
     from apps.payments.models import Payment
-    from apps.payments.pricing import prorated_fee
+    from apps.payments.pricing import entitled_sessions, prorated_fee
     from apps.students.models import StudentGroupEnrollment
     from apps.teachers.cycles import open_cycle_for
+    from .entitlement import billing_start_sequence
 
     enrollments = list(
         StudentGroupEnrollment.objects.filter(
@@ -449,15 +450,22 @@ def _resolve_scanner_payment(student, group_id=None):
             cycle = cycles_by_group.get(enr.group_id)
             if cycle is None:
                 continue  # group is not cycle-billed at all — nothing to collect
+            # Pro-rated to the lesson this student is actually joining at —
+            # ``first_sequence=1`` (what this used to pass) invoiced a late
+            # joiner for the whole cycle.
+            start_seq = billing_start_sequence(student, cycle)
             fee = prorated_fee(
-                enr, cycle_size=cycle.sessions_planned, first_sequence=1, group=enr.group,
+                enr, cycle_size=cycle.sessions_planned,
+                first_sequence=start_seq, group=enr.group,
             )
             payment, _ = Payment.objects.get_or_create(
                 student=student, group=enr.group, cycle=cycle,
                 defaults={
                     'amount_due': fee, 'status': 'unpaid',
                     'month': (cycle.started_on or timezone.localdate()).replace(day=1),
-                    'sessions_total': cycle.sessions_planned,
+                    'sessions_total': entitled_sessions(
+                        cycle_size=cycle.sessions_planned, first_sequence=start_seq,
+                    ),
                 },
             )
             return payment, None

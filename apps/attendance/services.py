@@ -900,7 +900,9 @@ class AttendanceService:
         """
         from apps.teachers.cycles import open_cycle_for
         from apps.payments.pricing import prorated_fee, entitled_sessions
-        from .entitlement import first_consumed_session, _consumed_sessions
+        from .entitlement import (
+            billing_start_sequence, first_consumed_session, _consumed_sessions,
+        )
 
         if not group.sessions_per_month:
             return
@@ -926,8 +928,20 @@ class AttendanceService:
         )
         sessions_count = _consumed_sessions(student, cycle, anchor_session=anchor)
 
-        # The sequence is the *pricing* snapshot, frozen at billing time.
+        # Two different sequences, deliberately not merged:
+        #
+        # ``anchor_seq`` is the *entitlement* anchor — it stays ``None`` until
+        # the student actually attends. Stamping a speculative number here
+        # would tell the system counting had begun for someone who has never
+        # walked in, and their absences would start burning entitlement.
+        #
+        # ``pricing_seq`` is what the invoice is computed from, and it cannot
+        # wait: a student billed before their first lesson still joins the
+        # cycle at a specific lesson. It used to fall back to ``1`` — a full
+        # cycle's fee for every late joiner, which is the manual-refund
+        # problem session billing exists to remove.
         anchor_seq = anchor.sequence_in_cycle if anchor else None
+        pricing_seq = anchor_seq or billing_start_sequence(student, cycle)
 
         if payment is None:
             Payment.objects.create(
@@ -937,11 +951,11 @@ class AttendanceService:
                 month=cycle.started_on.replace(day=1) if cycle.started_on else timezone.localdate().replace(day=1),
                 amount_due=prorated_fee(
                     enrollment, cycle_size=cycle.sessions_planned,
-                    first_sequence=anchor_seq or 1, group=group,
+                    first_sequence=pricing_seq, group=group,
                 ) if enrollment else 0,
                 sessions_attended=sessions_count,
                 sessions_total=entitled_sessions(
-                    cycle_size=cycle.sessions_planned, first_sequence=anchor_seq or 1,
+                    cycle_size=cycle.sessions_planned, first_sequence=pricing_seq,
                 ),
                 entitlement_start_session=anchor,
                 entitlement_start_seq=anchor_seq,

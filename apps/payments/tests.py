@@ -20,7 +20,7 @@ from apps.attendance.models import ActivityLog, Session, Attendance
 from apps.payments.admin import PaymentAdmin
 from apps.payments.models import Payment, PaymentAmountError, PaymentTransaction
 from apps.payments.services import SettlementService
-from apps.payments.views import _ensure_monthly_payments
+from apps.payments.views import _ensure_cycle_payments, _ensure_monthly_payments
 
 User = get_user_model()
 
@@ -564,7 +564,7 @@ class MonthlyGenerationTest(LedgerTestBase):
         StudentGroupEnrollment.objects.create(
             student=exempt_student, group=self.group, financial_status='exempt',
         )
-        _ensure_monthly_payments(self.month)
+        _ensure_cycle_payments()
 
         row = Payment.objects.get(student=exempt_student, month=self.month)
         self.assertTrue(row.is_exempt)
@@ -586,6 +586,7 @@ class MonthlyGenerationTest(LedgerTestBase):
         )
         gone.soft_delete()
 
+        _ensure_cycle_payments()
         _ensure_monthly_payments(self.month)
         self.assertFalse(
             Payment.objects.filter(student=gone, month=self.month).exists()
@@ -604,10 +605,70 @@ class MonthlyGenerationTest(LedgerTestBase):
         self.group.is_active = False
         self.group.save(update_fields=['is_active'])
 
+        _ensure_cycle_payments()
         _ensure_monthly_payments(self.month)
         self.assertFalse(
             Payment.objects.filter(student=third, month=self.month).exists()
         )
+
+    def test_cycle_billed_group_is_not_also_billed_by_month(self):
+        """
+        The two generators must not both bill the same enrollment.
+
+        ``Payment``'s uniqueness constraint is ``(student, cycle)`` and the
+        monthly generator left ``cycle`` null — and NULL never collides — so
+        it used to be able to add a second, full-price, month-shaped invoice
+        beside the correct pro-rated cycle one.
+        """
+        newcomer = Student.objects.create(
+            student_code='LDG006', full_name='طالب دورة',
+            parent_phone='01234500006',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=newcomer, group=self.group, financial_status='normal',
+        )
+
+        _ensure_cycle_payments()
+        _ensure_monthly_payments(self.month)
+        _ensure_monthly_payments(self.month)
+
+        rows = Payment.objects.filter(student=newcomer, group=self.group)
+        self.assertEqual(rows.count(), 1)
+        self.assertIsNotNone(rows.first().cycle)
+
+    def test_late_joiner_is_billed_only_for_remaining_sessions(self):
+        """
+        The client's rule: joining at lesson X of an N-lesson cycle costs
+        (N - X + 1) lessons, not the whole cycle.
+        """
+        from apps.attendance.models import Session
+        from apps.teachers.cycles import assign_to_cycle, open_cycle_for
+
+        self.group.sessions_per_month = 8
+        self.group.save(update_fields=['sessions_per_month'])
+
+        # Two lessons have already been held in the open cycle.
+        cycle = open_cycle_for(self.group)
+        for offset in (14, 7):
+            assign_to_cycle(Session.objects.create(
+                group=self.group,
+                session_date=timezone.localdate() - timedelta(days=offset),
+            ))
+
+        latecomer = Student.objects.create(
+            student_code='LDG007', full_name='طالب متأخر',
+            parent_phone='01234500007',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=latecomer, group=self.group, financial_status='normal',
+        )
+
+        _ensure_cycle_payments()
+
+        row = Payment.objects.get(student=latecomer, cycle=cycle)
+        # Joins at lesson 3 of 8 → 6 lessons → 6/8 of 300.00
+        self.assertEqual(row.sessions_total, 6)
+        self.assertEqual(row.amount_due, Decimal('225.00'))
 
 
 class PaymentListVisibilityTest(LedgerTestBase):
@@ -762,6 +823,74 @@ class CollectPaymentApiTest(LedgerTestBase):
         payment = Payment.objects.get(student=self.student, cycle=cycle)
         self.assertEqual(payment.amount_paid, Decimal('300.00'))
         self.assertEqual(payment.status, 'paid')
+
+    def test_collect_from_a_late_joiner_bills_only_remaining_sessions(self):
+        """
+        The desk dialog is the path a mid-cycle joiner actually pays through,
+        so it is the one that has to pro-rate.
+
+        It used to price the new row with ``first_sequence=1`` — the full
+        cycle fee for everyone — which is exactly the "pay a full month, get
+        the difference back on paper" the client asked to be rid of.
+        """
+        from apps.attendance.models import Session
+        from apps.teachers.cycles import assign_to_cycle, open_cycle_for
+
+        self.group.sessions_per_month = 8
+        self.group.save(update_fields=['sessions_per_month'])
+
+        cycle = open_cycle_for(self.group)
+        for offset in (21, 14, 7):
+            assign_to_cycle(Session.objects.create(
+                group=self.group,
+                session_date=timezone.localdate() - timedelta(days=offset),
+            ))
+
+        latecomer = Student.objects.create(
+            student_code='LDG100', full_name='طالب انضم متأخرًا',
+            parent_phone='01234500100',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=latecomer, group=self.group, financial_status='normal',
+        )
+
+        # Joins at lesson 4 of 8 → owes 5 lessons → 5/8 of 300.00
+        response = self.client.post(self.url, {
+            'student_id': latecomer.pk, 'group_id': self.group.pk,
+            'amount': '187.50',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+
+        payment = Payment.objects.get(student=latecomer, cycle=cycle)
+        self.assertEqual(payment.amount_due, Decimal('187.50'))
+        self.assertEqual(payment.sessions_total, 5)
+        self.assertEqual(payment.status, 'paid')
+
+    def test_collect_at_cycle_start_still_bills_the_full_fee(self):
+        """Pro-ration must not shave anything off an on-time joiner."""
+        from apps.teachers.cycles import open_cycle_for
+
+        self.group.sessions_per_month = 8
+        self.group.save(update_fields=['sessions_per_month'])
+        cycle = open_cycle_for(self.group)
+
+        newcomer = Student.objects.create(
+            student_code='LDG101', full_name='طالب من البداية',
+            parent_phone='01234500101',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=newcomer, group=self.group, financial_status='normal',
+        )
+
+        self.client.post(self.url, {
+            'student_id': newcomer.pk, 'group_id': self.group.pk,
+            'amount': '300.00',
+        })
+
+        payment = Payment.objects.get(student=newcomer, cycle=cycle)
+        self.assertEqual(payment.amount_due, Decimal('300.00'))
+        self.assertEqual(payment.sessions_total, 8)
 
     def test_collect_reactivates_inactive_enrollment(self):
         self.enrollment.is_active = False
