@@ -1274,3 +1274,111 @@ class BookingOffersExistingGroupsTest(TestCase):
         response = self.client.get(reverse('teachers:booking_create'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(list(response.context['teacher_groups']), [])
+
+
+class TeacherStudentsOnDetailTest(TestCase):
+    """
+    teachers:detail — the teacher's own students, and groups that can be
+    opened.
+
+    The page used to show group *names* and a head-count only: there was no
+    way, anywhere in a teacher's file, to see who those students actually
+    were, and a group name was inert text rather than a way into the group.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.supervisor = get_user_model().objects.create_user(
+            username='tdet_sup', password='TestPass123!', role='supervisor',
+        )
+        self.teacher_user = get_user_model().objects.create_user(
+            username='tdet_teacher', password='TestPass123!', role='teacher',
+        )
+        self.room = Room.objects.create(name='قاعة المدرس', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الطلاب', phone='01088880000',
+            specialization='كيمياء', hire_date=date(2024, 1, 1),
+        )
+        self.other_teacher = Teacher.objects.create(
+            full_name='مدرس آخر', phone='01088880001',
+            specialization='أحياء', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة المدرس', teacher=self.teacher, room=self.room,
+            schedule_day='Sunday', schedule_time=time(11, 0),
+            standard_fee=Decimal('200.00'),
+        )
+        self.other_group = create_group_with_schedule(
+            group_name='مجموعة الآخر', teacher=self.other_teacher, room=self.room,
+            schedule_day='Monday', schedule_time=time(11, 0),
+            standard_fee=Decimal('200.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='TD001', full_name='طالب المدرس', gender='male',
+            parent_phone='01088881111', student_phone='01088882222',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group, is_active=True,
+        )
+        self.outsider = Student.objects.create(
+            student_code='TD002', full_name='طالب مدرس آخر', gender='male',
+            parent_phone='01088883333',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.outsider, group=self.other_group, is_active=True,
+        )
+        self.url = reverse('teachers:detail', kwargs={'teacher_id': self.teacher.teacher_id})
+
+    def test_lists_only_this_teachers_students(self):
+        self.client.login(username='tdet_sup', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['teacher_enrollments']), 1)
+        self.assertEqual(response.context['teacher_students_count'], 1)
+        self.assertContains(response, 'طالب المدرس')
+        self.assertNotContains(response, 'طالب مدرس آخر')
+
+    def test_group_name_links_to_group_detail(self):
+        self.client.login(username='tdet_sup', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertContains(
+            response,
+            reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id}),
+        )
+
+    def test_soft_deleted_student_is_excluded_from_list_and_count(self):
+        """
+        Enrollment rows survive a student's soft delete, so traversing the
+        relation without filtering resurrects deleted students here — and
+        makes the table disagree with the group's head-count badge.
+        """
+        self.student.soft_delete()
+        self.client.login(username='tdet_sup', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['teacher_students_count'], 0)
+        self.assertEqual(response.context['groups'][0].students_count, 0)
+
+    def test_second_group_is_a_second_row_but_one_student(self):
+        second_group = create_group_with_schedule(
+            group_name='مجموعة ثانية', teacher=self.teacher, room=self.room,
+            schedule_day='Tuesday', schedule_time=time(13, 0),
+            standard_fee=Decimal('200.00'),
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=second_group, is_active=True,
+        )
+        self.client.login(username='tdet_sup', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(len(response.context['teacher_enrollments']), 2)
+        self.assertEqual(response.context['teacher_students_count'], 1)
+
+    def test_teacher_account_does_not_see_phones_or_fees(self):
+        """
+        The page is only ``@login_required``, so the sensitive columns are
+        gated rather than the whole screen.
+        """
+        self.client.login(username='tdet_teacher', password='TestPass123!')
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context['can_see_student_details'])
+        self.assertNotContains(response, '01088882222')

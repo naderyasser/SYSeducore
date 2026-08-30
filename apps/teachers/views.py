@@ -216,9 +216,41 @@ def teacher_detail(request, teacher_id):
     groups = teacher.groups.filter(is_active=True).annotate(
         students_count=Count(
             'studentgroupenrollment',
-            filter=Q(studentgroupenrollment__is_active=True),
+            filter=Q(
+                studentgroupenrollment__is_active=True,
+                studentgroupenrollment__student__deleted_at__isnull=True,
+            ),
         )
     )
+
+    # The teacher's own students, reached through the enrollment relation.
+    # Until now this page could only say *how many* students a group had: the
+    # names existed in the database but had no screen anywhere in the teacher's
+    # file, so "who does this teacher actually teach" was unanswerable from the
+    # UI.
+    #
+    # One row per (student, group). A student taking two of this teacher's
+    # groups is two separate enrollments with two separate financial statuses,
+    # and collapsing them to one row would hide one of them.
+    #
+    # ``student__deleted_at__isnull=True`` is not optional: enrollment rows
+    # survive a student's soft delete, so traversing the relation without it
+    # resurrects deleted students here — and would disagree with the
+    # ``students_count`` annotation above, which now filters the same way.
+    teacher_enrollments = list(
+        StudentGroupEnrollment.objects
+        .filter(
+            group__teacher=teacher,
+            group__is_active=True,
+            is_active=True,
+            student__deleted_at__isnull=True,
+        )
+        .select_related('student', 'group')
+        .order_by('group__group_name', 'student__full_name')
+    )
+    # Distinct head-count — the row count double-counts a student enrolled in
+    # more than one of this teacher's groups.
+    teacher_students_count = len({e.student_id for e in teacher_enrollments})
     
     # Get upcoming sessions for this teacher (next 7 days)
     today = timezone.now().date()
@@ -234,7 +266,16 @@ def teacher_detail(request, teacher_id):
     return render(request, 'teachers/detail.html', {
         'teacher': teacher,
         'groups': groups,
-        'upcoming_sessions': upcoming_sessions
+        'upcoming_sessions': upcoming_sessions,
+        'teacher_enrollments': teacher_enrollments,
+        'teacher_students_count': teacher_students_count,
+        # Phones and per-student fees are desk material — this view is only
+        # ``@login_required`` (a teacher account can open it), so the sensitive
+        # columns are gated instead of the whole page. ``can_collect_payments``
+        # (supervisor) is the right gate, not ``can_see_financials`` (admin,
+        # cumulative money); note both are *methods*, so they must be called
+        # here — passing the bound method would make the flag always truthy.
+        'can_see_student_details': request.user.can_collect_payments(),
     })
 
 

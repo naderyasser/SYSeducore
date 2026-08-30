@@ -103,6 +103,76 @@
             </div>
         </div>
 
+        <div class="card mt-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-people me-2"></i>طلاب المدرس</h5>
+                <span class="badge bg-primary">{{ teacher_students_count }} طالب</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0 align-middle">
+                        <thead>
+                            <tr>
+                                <th>الطالب</th>
+                                <th>الكود</th>
+                                <th>المجموعة</th>
+                                {% if can_see_student_details %}
+                                <th>هاتف الطالب</th>
+                                <th>هاتف ولي الأمر</th>
+                                <th>الحالة المالية</th>
+                                {% endif %}
+                                <th>تاريخ الانضمام</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for enrollment in teacher_enrollments %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'students:detail' student_id=enrollment.student.student_id %}"
+                                       class="fw-semibold text-decoration-none">{{ enrollment.student.full_name }}</a>
+                                </td>
+                                <td><span class="badge bg-light text-dark">{{ enrollment.student.student_code }}</span></td>
+                                <td>
+                                    <a href="{% url 'teachers:group_detail' group_id=enrollment.group.group_id %}"
+                                       class="text-decoration-none">{{ enrollment.group.group_name }}</a>
+                                </td>
+                                {% if can_see_student_details %}
+                                <td>
+                                    {% if enrollment.student.student_phone %}
+                                    <a href="tel:{{ enrollment.student.student_phone }}" class="text-decoration-none">{{ enrollment.student.student_phone }}</a>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td>
+                                    {% if enrollment.student.parent_phone %}
+                                    <a href="tel:{{ enrollment.student.parent_phone }}" class="text-decoration-none">{{ enrollment.student.parent_phone }}</a>
+                                    {% else %}-{% endif %}
+                                </td>
+                                <td>
+                                    {% if enrollment.financial_status == 'exempt' %}
+                                    <span class="badge bg-info">{{ enrollment.get_financial_status_display }}</span>
+                                    {% elif enrollment.financial_status == 'symbolic' %}
+                                    <span class="badge bg-warning text-dark">{{ enrollment.get_financial_status_display }}</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ enrollment.get_financial_status_display }}</span>
+                                    {% endif %}
+                                </td>
+                                {% endif %}
+                                <td>{{ enrollment.enrolled_at|date:"Y-m-d" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="{% if can_see_student_details %}7{% else %}4{% endif %}" class="text-center py-5 text-muted">
+                                    <i class="bi bi-person-x" style="font-size: 2rem;"></i>
+                                    <p class="mt-2 mb-0">لا يوجد طلاب مسجلون لدى هذا المدرس</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         {% if upcoming_sessions %}
         <div class="card mt-4">
             <div class="card-header">
