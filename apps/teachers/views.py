@@ -882,9 +882,36 @@ def booking_search(request):
 
 
 def _booking_create_context(teacher, form_data=None):
-    """Context for the booking form (also used to re-render it after an error)."""
+    """
+    Context for the booking form (also used to re-render it after an error).
+
+    ``teacher_groups`` is what stops this screen from being a group factory.
+    Reaching it from a teacher's card used to leave exactly one way to attach a
+    student to that teacher — fill in the form, which always creates a *new*
+    group. Registering three students against one teacher therefore produced
+    three groups. The teacher's existing groups are now offered first, and
+    enrolling into one of them goes through ``booking_student_enroll`` and
+    creates nothing.
+    """
+    teacher_groups = []
+    if teacher is not None:
+        teacher_groups = (
+            Group.objects.filter(teacher=teacher, is_active=True)
+            .prefetch_related('schedules__room')
+            .annotate(
+                students_count=Count(
+                    'studentgroupenrollment',
+                    filter=Q(
+                        studentgroupenrollment__is_active=True,
+                        studentgroupenrollment__student__deleted_at__isnull=True,
+                    ),
+                )
+            )
+            .order_by('group_name')
+        )
     return {
         'teacher': teacher,
+        'teacher_groups': teacher_groups,
         'teachers': Teacher.objects.filter(is_active=True).order_by('full_name'),
         'subjects': Subject.objects.all().order_by('name'),
         'rooms': Room.objects.filter(is_active=True).order_by('name'),

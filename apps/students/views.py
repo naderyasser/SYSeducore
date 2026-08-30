@@ -237,6 +237,25 @@ def student_detail(request, student_id):
     return render(request, 'students/detail.html', context)
 
 
+def _teachers_of(groups):
+    """
+    The distinct teachers behind ``groups``, for the registration form's
+    "المدرس" filter.
+
+    The template used to build that dropdown by looping over the groups
+    themselves, so a teacher with three groups was listed three times — on the
+    very screen where a teacher is picked before their group is.
+
+    Takes the already-evaluated ``groups`` list rather than issuing its own
+    query: the caller has just selected them with ``select_related('teacher')``.
+    """
+    seen = {}
+    for group in groups:
+        if group.teacher_id and group.teacher_id not in seen:
+            seen[group.teacher_id] = group.teacher
+    return sorted(seen.values(), key=lambda t: t.full_name)
+
+
 @supervisor_required
 def student_create(request):
     """
@@ -345,6 +364,7 @@ def student_create(request):
                 return render(request, 'students/form.html', {
                     'form': form,
                     'groups': groups,
+                    'teachers': _teachers_of(groups),
                     'is_create': True
                 })
 
@@ -379,6 +399,7 @@ def student_create(request):
     return render(request, 'students/form.html', {
         'form': form,
         'groups': groups,
+        'teachers': _teachers_of(groups),
         'is_create': True
     })
 
@@ -489,6 +510,7 @@ def student_update(request, student_id):
         'form': form,
         'student': student,
         'groups': groups,
+        'teachers': _teachers_of(groups),
         'current_group_ids': current_group_ids,
         'enrollment_data_json': json.dumps(enrollment_data),
         'is_create': False

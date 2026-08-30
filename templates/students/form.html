@@ -474,10 +474,8 @@
                             <label for="filter_teacher" class="form-label">المدرس</label>
                             <select id="filter_teacher" class="form-select">
                                 <option value="">-- الكل --</option>
-                                {% for group in groups %}
-                                {% if group.teacher %}
-                                <option value="{{ group.teacher.teacher_id }}" data-teacher="{{ group.teacher.full_name }}">{{ group.teacher.full_name }}</option>
-                                {% endif %}
+                                {% for teacher in teachers %}
+                                <option value="{{ teacher.teacher_id }}" data-teacher="{{ teacher.full_name }}">{{ teacher.full_name }}</option>
                                 {% endfor %}
                             </select>
                         </div>

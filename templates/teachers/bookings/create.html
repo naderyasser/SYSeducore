@@ -143,6 +143,84 @@
         color: #fff;
     }
 
+    .existing-groups {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 24px;
+    }
+
+    .existing-groups h3 {
+        font-size: 1.05rem;
+        margin: 0 0 4px;
+        color: #1e293b;
+    }
+
+    .existing-groups-hint {
+        color: #64748b;
+        font-size: 0.85rem;
+        margin: 0 0 16px;
+    }
+
+    .existing-group-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 12px 16px;
+        margin-bottom: 8px;
+    }
+
+    .existing-group-name {
+        font-weight: 600;
+        color: #1e293b;
+        text-decoration: none;
+    }
+
+    .existing-group-name:hover {
+        color: #667eea;
+        text-decoration: underline;
+    }
+
+    .existing-group-meta {
+        color: #64748b;
+        font-size: 0.82rem;
+        margin-top: 4px;
+    }
+
+    .btn-enrol {
+        background: #10b981;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 9px 16px;
+        font-size: 0.88rem;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .btn-enrol:hover { background: #059669; }
+    .btn-enrol:disabled { opacity: .6; cursor: not-allowed; }
+
+    .new-group-divider {
+        text-align: center;
+        border-top: 1px solid #e2e8f0;
+        margin: 0 0 24px;
+    }
+
+    .new-group-divider span {
+        position: relative;
+        top: -12px;
+        background: #fff;
+        padding: 0 14px;
+        color: #94a3b8;
+        font-size: 0.85rem;
+    }
+
     .student-selector {
         background: #f0fdf4;
         border-radius: 16px;
@@ -264,6 +342,66 @@
         <h2><i class="bi bi-calendar-plus me-2"></i>إنشاء موعد جديد</h2>
         <p>قم بملء البيانات لإنشاء موعد جديد وتسجيل الطلاب</p>
     </div>
+
+    {% if teacher_groups %}
+    <!-- Enrol into one of this teacher's existing groups — no new group created. -->
+    <div class="existing-groups">
+        <h3>
+            <i class="bi bi-collection me-2"></i>
+            مجموعات {{ teacher.full_name }} الحالية
+        </h3>
+        <p class="existing-groups-hint">
+            سجّل الطالب في مجموعة قائمة بدلاً من فتح مجموعة جديدة. لا تُنشئ مجموعة
+            جديدة إلا إذا كان الموعد نفسه جديدًا.
+        </p>
+
+        <div class="form-grid" style="margin-bottom: 16px;">
+            <div class="form-group">
+                <label for="existing_student_id">الطالب</label>
+                <select id="existing_student_id" class="form-control">
+                    <option value="">اختر طالب</option>
+                    {% for student in students %}
+                    <option value="{{ student.student_id }}">{{ student.full_name }} - {{ student.student_code }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="existing_financial_status">الحالة المالية</label>
+                <select id="existing_financial_status" class="form-control">
+                    {% for value, label in financial_statuses %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="existing-groups-list">
+            {% for group in teacher_groups %}
+            <div class="existing-group-row">
+                <div>
+                    <a href="{% url 'teachers:group_detail' group_id=group.group_id %}" class="existing-group-name">
+                        {{ group.group_name }}
+                    </a>
+                    <div class="existing-group-meta">
+                        <i class="bi bi-calendar3 me-1"></i>{{ group.get_schedule_display }}
+                        <span class="mx-1">|</span>
+                        <i class="bi bi-people me-1"></i>{{ group.students_count }} طالب
+                        <span class="mx-1">|</span>
+                        <i class="bi bi-cash me-1"></i>{{ group.standard_fee }} ج.م
+                    </div>
+                </div>
+                <button type="button" class="btn-enrol"
+                        data-group-id="{{ group.group_id }}"
+                        onclick="enrolInExistingGroup(this)">
+                    <i class="bi bi-person-plus me-1"></i>تسجيل هنا
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="new-group-divider"><span>أو أنشئ موعدًا (مجموعة) جديدًا</span></div>
+    {% endif %}
 
     <form method="post" id="bookingForm">
         {% csrf_token %}
@@ -446,6 +584,43 @@
 <script>
 let schedules = [];
 let isSubmitting = false;
+
+// Enrol a student into one of the teacher's *existing* groups. Posts to
+// booking_student_enroll, which only attaches — it never creates a group.
+function enrolInExistingGroup(button) {
+    const studentId = document.getElementById('existing_student_id').value;
+    if (!studentId) {
+        alert('يرجى اختيار طالب أولاً');
+        return;
+    }
+
+    button.disabled = true;
+    fetch('{% url "teachers:booking_student_enroll" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}',
+        },
+        body: JSON.stringify({
+            group_id: Number(button.dataset.groupId),
+            student_id: Number(studentId),
+            financial_status: document.getElementById('existing_financial_status').value,
+        }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message || (data.success ? 'تم التسجيل' : 'تعذر التسجيل'));
+        if (data.success) {
+            window.location.reload();
+        } else {
+            button.disabled = false;
+        }
+    })
+    .catch(() => {
+        alert('فشل الاتصال بالخادم');
+        button.disabled = false;
+    });
+}
 
 // Room id -> name, for display in the schedules list
 const ROOMS_BY_ID = {

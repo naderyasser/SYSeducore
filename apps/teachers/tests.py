@@ -1207,3 +1207,70 @@ class GroupNameIsClickableTest(TestCase):
             reverse('teachers:room_detail', kwargs={'room_id': self.room.room_id}),
         )
         self.assertContains(response, self.target)
+
+
+class BookingOffersExistingGroupsTest(TestCase):
+    """
+    The registration complaint: reaching this screen from a teacher's card
+    left exactly one way to attach a student to that teacher — fill in the
+    form, which always creates a *new* group. Three students against one
+    teacher meant three groups.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.supervisor = get_user_model().objects.create_user(
+            username='bkg_sup', password='TestPass123!', role='supervisor',
+        )
+        self.room = Room.objects.create(name='قاعة الحجز', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الحجز', phone='01066660000',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة قائمة', teacher=self.teacher, room=self.room,
+            schedule_day='Thursday', schedule_time=time(16, 0),
+            standard_fee=Decimal('180.00'),
+        )
+        self.student = Student.objects.create(
+            student_code='BK001', full_name='طالب الحجز', gender='male',
+            parent_phone='01066661111',
+        )
+        self.client.login(username='bkg_sup', password='TestPass123!')
+
+    def test_existing_groups_are_offered_for_the_chosen_teacher(self):
+        response = self.client.get(
+            reverse('teachers:booking_create_for_teacher', args=[self.teacher.teacher_id]),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['teacher_groups']), 1)
+        self.assertContains(response, 'مجموعة قائمة')
+        self.assertContains(
+            response,
+            reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id}),
+        )
+
+    def test_enrolling_into_an_existing_group_creates_no_group(self):
+        before = Group.objects.count()
+        response = self.client.post(
+            reverse('teachers:booking_student_enroll'),
+            data=json.dumps({
+                'group_id': self.group.group_id,
+                'student_id': self.student.student_id,
+                'financial_status': 'normal',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(Group.objects.count(), before)
+        self.assertTrue(
+            StudentGroupEnrollment.objects.filter(
+                student=self.student, group=self.group, is_active=True,
+            ).exists()
+        )
+
+    def test_no_teacher_chosen_offers_no_groups(self):
+        response = self.client.get(reverse('teachers:booking_create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['teacher_groups']), [])
