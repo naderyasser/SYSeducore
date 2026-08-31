@@ -395,6 +395,22 @@ class TestGroupDetailContent(TestCase):
             started_on=timezone.localdate() - timedelta(days=5),
         )
 
+    def test_reserved_cycle_says_it_has_not_started(self):
+        """
+        A cycle carries no start date until its first lesson is held, so a
+        freshly opened one has ``started_on = None``. The page used to drop the
+        line entirely, which read as "the start date is missing" rather than
+        "this cycle has not begun" — and right after a rollover that is every
+        group at once.
+        """
+        self.cycle.started_on = None
+        self.cycle.save(update_fields=['started_on'])
+        response = self.client.get(
+            reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id})
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'لم تبدأ بعد')
+
     def test_detail_shows_roster_count_schedule_fee_and_start_date(self):
         response = self.client.get(
             reverse('teachers:group_detail', kwargs={'group_id': self.group.group_id})
