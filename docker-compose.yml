@@ -105,6 +105,19 @@ services:
   # ==========================================
   # Celery Beat (Scheduler)
   # ==========================================
+    healthcheck:
+      # The image-level HEALTHCHECK in the Dockerfile asks an HTTP endpoint on
+      # localhost:8000, which only the web container serves. Celery inherited
+      # it and could therefore never report healthy — it sat "unhealthy" for
+      # weeks while working perfectly, which is worse than no healthcheck at
+      # all: a real worker outage looked exactly like the false alarm.
+      # ``inspect ping`` asks the worker itself and is the honest signal.
+      test: ["CMD-SHELL", "celery -A config inspect ping 2>/dev/null | grep -q pong"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 60s
+
   celery_beat:
     build:
       context: .
@@ -131,6 +144,17 @@ services:
   # ==========================================
   # Nginx Reverse Proxy (Production)
   # ==========================================
+    healthcheck:
+      # Beat answers no ping (it dispatches, it does not consume), and the
+      # image has neither ps nor pgrep, so a process check is not available.
+      # This asks the question that actually matters — is the schedule still
+      # being dispatched? — which also catches a beat that is alive but stuck.
+      test: ["CMD-SHELL", "python -c \"import os,django;os.environ.setdefault('DJANGO_SETTINGS_MODULE','config.settings');django.setup();from datetime import timedelta;from django.utils import timezone;from django_celery_beat.models import PeriodicTask;raise SystemExit(0 if PeriodicTask.objects.filter(enabled=True, last_run_at__gte=timezone.now()-timedelta(minutes=15)).exists() else 1)\" 2>/dev/null"]
+      interval: 60s
+      timeout: 20s
+      retries: 3
+      start_period: 120s
+
   nginx:
     image: nginx:alpine
     container_name: educore_nginx
