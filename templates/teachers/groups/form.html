@@ -198,7 +198,7 @@
                             {{ form.education_stage }}
                         </div>
 
-                        <div class="col-md-4">
+                        <div class="col-md-4" id="education_year_wrapper">
                             <label class="form-label">السنة الدراسية</label>
                             {{ form.education_year }}
                         </div>
@@ -374,36 +374,30 @@ form.addEventListener('submit', function(e) {
 })();
 {% endif %}
 
-// Stage/Year filtering
-const STAGE_YEAR_MAP = {
-    'primary': ['1', '2', '3', '4', '5', '6'],
-    'preparatory': ['1', '2', '3'],
-    'secondary': ['1', '2', '3'],
-};
-
-function filterYearsByStage() {
-    const stageSelect = document.getElementById('id_education_stage');
+// Stage → academic year.
+//
+// The local STAGE_YEAR_MAP that used to live here was correct (إعدادي = 3
+// years) while students/form.html was not, which is how the same question got
+// two different answers on two screens. Both now read one map, served from
+// apps/core/education.py, and both rebuild the <select> rather than hiding
+// options with style.display — a rule Safari ignores on <option>.
+document.addEventListener('DOMContentLoaded', function () {
     const yearSelect = document.getElementById('id_education_year');
-    if (!stageSelect || !yearSelect) return;
-
-    const stage = stageSelect.value;
-    const currentYear = yearSelect.value;
-    const validYears = STAGE_YEAR_MAP[stage] || [];
-
-    Array.from(yearSelect.options).forEach(opt => {
-        if (!opt.value) return;
-        if (!stage || validYears.includes(opt.value)) {
-            opt.style.display = '';
-            opt.disabled = false;
-        } else {
-            opt.style.display = 'none';
-            opt.disabled = true;
-            if (opt.selected) yearSelect.value = '';
+    EducationStageYear.link(
+        document.getElementById('id_education_stage'),
+        yearSelect,
+        {
+            labelSet: 'grade',
+            wrapper: document.getElementById('education_year_wrapper'),
+            placeholder: yearSelect ? (yearSelect.querySelector('option[value=""]')?.textContent || '---------') : '---------',
+            noYearLabel: '{{ EDUCATION_NO_YEAR_LABEL }}'
         }
-    });
-}
-
-document.getElementById('id_education_stage')?.addEventListener('change', filterYearsByStage);
-document.addEventListener('DOMContentLoaded', filterYearsByStage);
+    );
+    // Long teacher lists: type to find instead of scrolling.
+    const teacherSelect = document.getElementById('id_teacher');
+    if (teacherSelect) {
+        SearchableSelect.enhance(teacherSelect, { placeholder: 'اكتب اسم المدرس...' });
+    }
+});
 </script>
 {% endblock %}

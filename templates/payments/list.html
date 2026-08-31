@@ -183,6 +183,22 @@
     .badge-unpaid  { background: #fee2e2; color: #991b1b; }
     .badge-partial { background: #fef3c7; color: #92400e; }
 
+    /* Partial collection block — sits above the full-settlement button so
+       "take what the student brought" is the first thing the desk sees, and
+       settling in full stays the deliberate second option. */
+    .partial-pay {
+        margin-bottom: 8px;
+        padding: 8px;
+        border: 1px dashed #d1d5db;
+        border-radius: 8px;
+        background: #fafafa;
+    }
+
+    .partial-pay .btn-partial {
+        white-space: nowrap;
+        font-weight: 600;
+    }
+
     /* Pay Button */
     .btn-pay {
         width: 100%;
@@ -392,8 +408,33 @@
                 </div>
             </div>
 
-            <!-- Action Button -->
+            <!-- Action Buttons -->
             {% if payment.status != 'paid' %}
+            {# Partial collection. The record endpoint has always accepted an
+               arbitrary amount; this screen simply never exposed a field for
+               one, so a student paying 50 of 100 could not be recorded here at
+               all — the desk either took the full amount or nothing. #}
+            <div class="partial-pay" data-payment="{{ payment.payment_id }}">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text"><i class="bi bi-cash"></i></span>
+                    <input type="number" class="form-control partial-amount"
+                           min="0" step="0.01"
+                           max="{% localize off %}{{ payment.remaining }}{% endlocalize %}"
+                           placeholder="مبلغ جزئي (المتبقي {% localize off %}{{ payment.remaining }}{% endlocalize %})"
+                           aria-label="مبلغ الدفعة الجزئية">
+                    <span class="input-group-text">ج.م</span>
+                    <button type="button" class="btn btn-outline-primary btn-partial"
+                            onclick="recordPartial({{ payment.payment_id }}, '{{ payment.student.full_name|escapejs }}')">
+                        تسجيل دفعة
+                    </button>
+                </div>
+                <div class="input-group input-group-sm mt-1">
+                    <span class="input-group-text"><i class="bi bi-calendar3"></i></span>
+                    <input type="date" class="form-control partial-date"
+                           aria-label="تاريخ الدفع (اختياري)">
+                    <span class="input-group-text">اختياري</span>
+                </div>
+            </div>
             <button class="btn-pay full"
                     onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name|escapejs }}', {% localize off %}{{ payment.amount_due }}{% endlocalize %})">
                 <i class="bi bi-check-circle-fill"></i>
@@ -436,6 +477,130 @@ function showLoading() {
 
 function hideLoading() {
     document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+/**
+ * تسجيل دفعة جزئية.
+ *
+ * Posts form-encoded, not JSON: apps/payments/api_views.record_payment reads
+ * request.POST, so a JSON body would arrive as an empty amount and silently
+ * record nothing.
+ *
+ * The server is the authority on what is acceptable (it rejects a total above
+ * amount_due, and locks the row so two cashiers cannot both slip past that
+ * check). The client-side checks below only save a round trip on obvious
+ * mistakes; they are not the validation.
+ */
+function recordPartial(paymentId, studentName) {
+    const box = document.querySelector(`.partial-pay[data-payment="${paymentId}"]`);
+    if (!box) return;
+    const amountInput = box.querySelector('.partial-amount');
+    const dateInput = box.querySelector('.partial-date');
+    const raw = (amountInput.value || '').trim();
+
+    if (!raw) {
+        showToast('أدخل المبلغ المدفوع أولاً', 'warning');
+        amountInput.focus();
+        return;
+    }
+    const amount = Number(raw);
+    if (!isFinite(amount) || amount <= 0) {
+        showToast('قيمة المبلغ غير صالحة', 'danger');
+        amountInput.focus();
+        return;
+    }
+
+    if (!confirm(`تسجيل دفعة ${amount} ج.م للطالب "${studentName}"؟`)) return;
+
+    const body = new URLSearchParams();
+    body.set('amount', raw);
+    // Blank date → the server stamps today. Never sent as an empty string,
+    // which _parse_paid_on would have to special-case.
+    if (dateInput && dateInput.value) body.set('paid_on', dateInput.value);
+
+    showLoading();
+    fetch(`/api/payments/${paymentId}/record/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin',
+        body: body.toString()
+    })
+    .then(response => {
+        if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        return response.json().then(data => {
+            // A 400 here is a real business rule (over-payment, bad amount)
+            // and its Arabic message is worth showing verbatim.
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || data.error || 'تعذر تسجيل الدفعة');
+            }
+            return data;
+        });
+    })
+    .then(data => {
+        hideLoading();
+        updateCardAmounts(paymentId, data);
+        amountInput.value = '';
+        showToast(
+            data.status === 'paid'
+                ? 'اكتمل سداد المبلغ وتم تفعيل الاشتراك'
+                : `تم تسجيل الدفعة — المتبقي ${data.remaining} ج.م`,
+            'success'
+        );
+    })
+    .catch(error => {
+        hideLoading();
+        showToast(error.message, 'danger');
+    });
+}
+
+/** Re-render one card's amounts from the API response (no page reload). */
+function updateCardAmounts(paymentId, data) {
+    const card = document.getElementById(`card-${paymentId}`);
+    if (!card) return;
+
+    card.className = `pay-card status-${data.status}`;
+
+    const vals = card.querySelectorAll('.amount-block .val');
+    if (vals.length >= 2) {
+        vals[1].innerHTML = `${data.amount_paid} <small>ج.م</small>`;
+    }
+    const rem = card.querySelector('[data-field="remaining"]');
+    if (rem) rem.innerHTML = `${data.remaining} <small>ج.م</small>`;
+
+    const badge = card.querySelector('.status-badge');
+    if (badge) {
+        if (data.status === 'paid') {
+            badge.className = 'status-badge badge-paid';
+            badge.innerHTML = '<i class="bi bi-check-circle-fill"></i> مدفوع';
+        } else if (data.status === 'partial') {
+            badge.className = 'status-badge badge-partial';
+            badge.innerHTML = '<i class="bi bi-dash-circle-fill"></i> جزئي';
+        }
+    }
+
+    if (data.status === 'paid') {
+        // Nothing left to collect: retire both controls rather than leaving a
+        // "تسديد كامل" button that would now be a no-op.
+        const box = card.querySelector('.partial-pay');
+        if (box) box.remove();
+        const btn = card.querySelector('.btn-pay');
+        if (btn) {
+            btn.className = 'btn-pay done';
+            btn.innerHTML = '<i class="bi bi-check-circle-fill"></i> تم التسديد والتفعيل';
+            btn.disabled = true;
+        }
+    } else {
+        // Keep the "المتبقي" hint on the input honest after a partial payment.
+        const input = card.querySelector('.partial-amount');
+        if (input) {
+            input.max = data.remaining;
+            input.placeholder = `مبلغ جزئي (المتبقي ${data.remaining})`;
+        }
+    }
 }
 
 function payAndActivate(paymentId, studentId, studentName, amountDue) {

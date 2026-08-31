@@ -1,0 +1,41 @@
+{% comment %}
+Live search bar for a directory list screen.
+
+Context expected:
+  search_placeholder  placeholder text
+  search_term         current ?q= (echoed so a reload keeps the term)
+  search_hint         optional muted line under the box
+
+It is a real <form method="get">, so the screen works with JavaScript disabled
+or still loading: pressing Enter submits and the server renders the filtered,
+unpaginated list. ``directory-search.js`` then upgrades it to fetch-as-you-type.
+{% endcomment %}
+<form method="get" class="directory-search-form mb-3" role="search"
+      data-results="#directory-results" data-meta="#directory-meta">
+    <div class="row g-2 align-items-center">
+        <div class="col-md-6">
+            <div class="directory-search">
+                <i class="bi bi-search"></i>
+                <input type="search" name="q" class="form-control"
+                       value="{{ search_term }}"
+                       autocomplete="off"
+                       aria-label="{{ search_placeholder }}"
+                       placeholder="{{ search_placeholder }}">
+                <button type="button" class="directory-search-clear"
+                        title="مسح البحث" aria-label="مسح البحث"
+                        {% if not search_term %}hidden{% endif %}>
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div id="directory-meta" class="directory-hint">
+                {% include 'includes/_directory_meta.html' %}
+            </div>
+        </div>
+    </div>
+    {# Submit button for keyboard/no-JS users; the JS path never uses it. #}
+    <noscript>
+        <button type="submit" class="btn btn-primary btn-sm mt-2">بحث</button>
+    </noscript>
+</form>

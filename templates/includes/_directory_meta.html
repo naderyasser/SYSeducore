@@ -1,0 +1,20 @@
+{% comment %}
+The "showing N results" line. Rendered inside the search bar on a full page
+load and swapped in by the live-search JS from the partial response, which is
+why it is its own file rather than inline markup.
+{% endcomment %}
+{% if is_search %}
+    {% if search_truncated %}
+    <span class="text-warning">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        عدد النتائج {{ total_count }} — يتم عرض أول {{ search_limit }} فقط، حدِّد البحث أكثر
+    </span>
+    {% else %}
+    <span>
+        <i class="bi bi-funnel me-1"></i>
+        {{ total_count }} نتيجة مطابقة لـ "{{ search_term }}"
+    </span>
+    {% endif %}
+{% else %}
+    <span><i class="bi bi-list-ul me-1"></i>الإجمالي {{ total_count }}</span>
+{% endif %}

@@ -329,9 +329,9 @@
             <label>المرحلة الدراسية</label>
             <select name="education_stage" class="search-input">
                 <option value="">الكل المراحل</option>
-                <option value="primary" {% if education_stage == 'primary' %}selected{% endif %}>ابتدائي</option>
-                <option value="preparatory" {% if education_stage == 'preparatory' %}selected{% endif %}>اعدادي</option>
-                <option value="secondary" {% if education_stage == 'secondary' %}selected{% endif %}>ثانوي</option>
+                {% for value, label in EDUCATION_STAGE_CHOICES %}
+                <option value="{{ value }}" {% if education_stage == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
             </select>
         </div>
 

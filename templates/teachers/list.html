@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}المدرسين{% endblock %}
 
@@ -33,6 +34,8 @@
     {% endif %}
 </div>
 
+{% include 'includes/_directory_search.html' with search_placeholder='ابحث باسم المدرس أو المادة أو رقم الهاتف...' %}
+
 <div class="card">
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -47,67 +50,8 @@
                         <th>الإجراءات</th>
                     </tr>
                 </thead>
-                <tbody>
-                    {% for teacher in teachers %}
-                    <tr>
-                        <td>
-                            <div class="d-flex align-items-center">
-                                <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
-                                    <i class="bi bi-person-fill text-white"></i>
-                                </div>
-                                <div>
-                                    <div class="fw-semibold">{{ teacher.full_name }}</div>
-                                </div>
-                            </div>
-                        </td>
-                        <td>
-                            <span class="badge bg-info">{{ teacher.get_subjects_display }}</span>
-                        </td>
-                        <td>
-                            {% if teacher.phone %}
-                            <a href="tel:{{ teacher.phone }}" class="text-decoration-none">{{ teacher.phone }}</a>
-                            {% else %}
-                            -
-                            {% endif %}
-                        </td>
-                        <td>
-                            <span class="badge bg-primary">{{ teacher.groups_count }} مجموعات</span>
-                        </td>
-                        <td>
-                            {% if teacher.is_active %}
-                            <span class="badge bg-success">نشط</span>
-                            {% else %}
-                            <span class="badge bg-secondary">غير نشط</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{% url 'teachers:detail' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-primary">
-                                <i class="bi bi-eye"></i>
-                            </a>
-                            <a href="{% url 'teachers:update' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-warning">
-                                <i class="bi bi-pencil"></i>
-                            </a>
-                            {% if user.can_see_financials %}
-                            <a href="{% url 'payments:settlement_index' %}" class="btn btn-sm btn-outline-success" title="كشف التصفية">
-                                <i class="bi bi-calculator"></i>
-                            </a>
-                            {% endif %}
-                            <form method="post" action="{% url 'teachers:delete' teacher_id=teacher.teacher_id %}" class="d-inline">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذا المدرس؟')">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </form>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="6" class="text-center py-5 text-muted">
-                            <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                            <p class="mt-2 mb-0">لا يوجد مدرسين</p>
-                        </td>
-                    </tr>
-                    {% endfor %}
+                <tbody id="directory-results" class="directory-results">
+                    {% include 'teachers/_list_rows.html' %}
                 </tbody>
             </table>
         </div>
@@ -115,7 +59,7 @@
 </div>
 
 {% if is_paginated %}
-<nav class="mt-3" aria-label="ترقيم صفحات المدرسين">
+<nav class="mt-3" aria-label="ترقيم صفحات المدرسين" data-directory-pagination>
     <ul class="pagination justify-content-center mb-0">
         {% if page_obj.has_previous %}
         <li class="page-item">
@@ -143,4 +87,8 @@
     </ul>
 </nav>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/utils/directory-search.js' %}"></script>
 {% endblock %}

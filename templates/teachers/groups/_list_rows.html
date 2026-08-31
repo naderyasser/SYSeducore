@@ -1,0 +1,63 @@
+{% comment %}
+Rows of the groups directory — rendered standalone for the live-search
+``?partial=1`` fetch and included by ``list.html`` on a normal page load.
+{% endcomment %}
+{% for group in groups %}
+<tr>
+    <td>
+        <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
+           class="fw-semibold text-decoration-none">
+            <i class="bi bi-box-arrow-up-left me-1 small"></i>{{ group.group_name }}
+        </a>
+    </td>
+    <td>
+        {# Clicking a teacher re-runs the search for them: the fastest path from
+           "this group" to "everything this teacher runs". #}
+        <a href="{% url 'teachers:group_list' %}?q={{ group.teacher.full_name|urlencode }}"
+           class="text-decoration-none text-body">{{ group.teacher.full_name }}</a>
+    </td>
+    <td>
+        <span class="badge bg-secondary">{{ group.get_rooms_display }}</span>
+    </td>
+    <td>{{ group.get_schedule_display }}</td>
+    <td>
+        <span class="badge bg-light text-dark">{{ group.students_count }} طالب</span>
+    </td>
+    <td>{{ group.standard_fee }} ج.م</td>
+    <td>
+        {% if group.is_active %}
+        <span class="badge bg-success">نشط</span>
+        {% else %}
+        <span class="badge bg-secondary">غير نشط</span>
+        {% endif %}
+    </td>
+    <td>
+        <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
+           class="btn btn-sm btn-outline-info" title="عرض تفاصيل المجموعة">
+            <i class="bi bi-eye me-1"></i>عرض
+        </a>
+        {% if user.is_supervisor %}
+        <a href="{% url 'teachers:group_update' group_id=group.group_id %}" class="btn btn-sm btn-outline-primary" title="تعديل">
+            <i class="bi bi-pencil"></i>
+        </a>
+        <form method="post" action="{% url 'teachers:group_delete' group_id=group.group_id %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذه المجموعة؟')">
+                <i class="bi bi-trash"></i>
+            </button>
+        </form>
+        {% endif %}
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="8" class="text-center py-5 text-muted">
+        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+        {% if is_search %}
+        <p class="mt-2 mb-0">لا توجد مجموعات مطابقة لـ "{{ search_term }}"</p>
+        {% else %}
+        <p class="mt-2 mb-0">لا توجد مجموعات</p>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}

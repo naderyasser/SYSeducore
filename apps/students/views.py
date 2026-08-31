@@ -315,6 +315,12 @@ def student_create(request):
                                 from apps.payments.activation import activate_payment
                                 from apps.teachers.cycles import open_cycle_for
 
+                                # تاريخ الاشتراك: optional. A blank (or
+                                # unparseable) value must never block the
+                                # registration — the desk very often registers a
+                                # student without being told the exact date, and
+                                # a required field there just gets filled with a
+                                # wrong date to get past it.
                                 paid_on = None
                                 raw_paid_on = request.POST.get(f'paid_on_{group_id}')
                                 if raw_paid_on:
@@ -328,6 +334,23 @@ def student_create(request):
                                     financial_status, custom_fee, group.standard_fee,
                                 )
                                 cycle = open_cycle_for(group) if group.sessions_per_month else None
+                                if paid_on is None:
+                                    # Fall back to the cycle the money is
+                                    # actually buying — a student registered on
+                                    # the 5th for a cycle that opened on the 1st
+                                    # belongs to that cycle's period on the
+                                    # teacher's settlement, not to today's.
+                                    # A future-dated cycle (or no cycle at all)
+                                    # falls through to today, so the ledger can
+                                    # never be stamped with a date that has not
+                                    # happened yet.
+                                    today = timezone.localdate()
+                                    cycle_start = cycle.started_on if cycle else None
+                                    paid_on = (
+                                        cycle_start
+                                        if cycle_start and cycle_start <= today
+                                        else today
+                                    )
                                 payment = Payment.objects.create(
                                     student=student,
                                     group=group,

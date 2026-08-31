@@ -470,22 +470,21 @@
                 <label for="education_stage">المرحلة الدراسية</label>
                 <select name="education_stage" id="education_stage" class="form-control">
                     <option value="">اختر المرحلة</option>
-                    <option value="primary">ابتدائي</option>
-                    <option value="preparatory">اعدادي</option>
-                    <option value="secondary">ثانوي</option>
+                    {% for value, label in EDUCATION_STAGE_CHOICES %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
                 </select>
             </div>
 
-            <div class="form-group">
+            {# Rebuilt per stage by education-stage-year.js; the options below
+               are the no-JS fallback. Hidden entirely for تأسيس/كورسات. #}
+            <div class="form-group" id="education_year_wrapper">
                 <label for="education_year">الصف الدراسي</label>
                 <select name="education_year" id="education_year" class="form-control">
                     <option value="">اختر الصف</option>
-                    <option value="1">الصف الأول</option>
-                    <option value="2">الصف الثاني</option>
-                    <option value="3">الصف الثالث</option>
-                    <option value="4">الصف الرابع</option>
-                    <option value="5">الصف الخامس</option>
-                    <option value="6">الصف السادس</option>
+                    {% for value, label in EDUCATION_YEAR_CHOICES_GRADE %}
+                    <option value="{{ value }}">{{ label }}</option>
+                    {% endfor %}
                 </select>
             </div>
         </div>
@@ -738,6 +737,23 @@ document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('bookingForm');
     const submitBtn = document.getElementById('submitBtn');
     const addScheduleBtn = document.getElementById('addScheduleBtn');
+
+    // Stage → صف: same shared map as every other form (apps/core/education.py).
+    EducationStageYear.link(
+        document.getElementById('education_stage'),
+        document.getElementById('education_year'),
+        {
+            labelSet: 'grade',
+            wrapper: document.getElementById('education_year_wrapper'),
+            placeholder: 'اختر الصف',
+            noYearLabel: '{{ EDUCATION_NO_YEAR_LABEL }}'
+        }
+    );
+    // Teacher and subject pickers get type-to-find.
+    ['teacher', 'subject'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) SearchableSelect.enhance(el, { placeholder: 'اكتب للبحث...' });
+    });
     
     // Add schedule button event listener
     if (addScheduleBtn) {

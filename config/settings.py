@@ -125,6 +125,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'config.context_processors.notification_settings',
+                'config.context_processors.education_taxonomy',
             ],
         },
     },

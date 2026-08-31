@@ -1,0 +1,111 @@
+{% comment %}
+Rows of the teachers directory. Rendered standalone by ``teacher_list`` when
+the live-search JS asks for ``?partial=1``, and included by ``list.html`` on a
+normal page load — so a search result and a first paint can never disagree.
+
+While searching, each teacher's groups are listed inline: typing a teacher's
+name is a question about their groups, and making the user click through to
+find out defeats the point.
+{% endcomment %}
+{% for teacher in teachers %}
+<tr>
+    <td>
+        <div class="d-flex align-items-center">
+            <div class="rounded-circle bg-primary d-flex align-items-center justify-content-center me-3" style="width: 40px; height: 40px;">
+                <i class="bi bi-person-fill text-white"></i>
+            </div>
+            <div>
+                <div class="fw-semibold">{{ teacher.full_name }}</div>
+            </div>
+        </div>
+    </td>
+    <td>
+        <span class="badge bg-info">{{ teacher.get_subjects_display }}</span>
+    </td>
+    <td>
+        {% if teacher.phone %}
+        <a href="tel:{{ teacher.phone }}" class="text-decoration-none">{{ teacher.phone }}</a>
+        {% else %}
+        -
+        {% endif %}
+    </td>
+    <td>
+        {# The count is the natural way into "which groups?", so it links there. #}
+        <a href="{% url 'teachers:group_list' %}?q={{ teacher.full_name|urlencode }}"
+           class="text-decoration-none" title="عرض مجموعات هذا المدرس">
+            <span class="badge bg-primary">{{ teacher.groups_count }} مجموعات</span>
+        </a>
+    </td>
+    <td>
+        {% if teacher.is_active %}
+        <span class="badge bg-success">نشط</span>
+        {% else %}
+        <span class="badge bg-secondary">غير نشط</span>
+        {% endif %}
+    </td>
+    <td>
+        <a href="{% url 'teachers:detail' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-primary" title="عرض">
+            <i class="bi bi-eye"></i>
+        </a>
+        <a href="{% url 'teachers:update' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-warning" title="تعديل">
+            <i class="bi bi-pencil"></i>
+        </a>
+        {% if user.can_see_financials %}
+        <a href="{% url 'payments:settlement_index' %}" class="btn btn-sm btn-outline-success" title="كشف التصفية">
+            <i class="bi bi-calculator"></i>
+        </a>
+        {% endif %}
+        <form method="post" action="{% url 'teachers:delete' teacher_id=teacher.teacher_id %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذا المدرس؟')">
+                <i class="bi bi-trash"></i>
+            </button>
+        </form>
+    </td>
+</tr>
+{% if is_search %}
+<tr class="teacher-groups">
+    <td colspan="6">
+        {% if teacher.visible_groups %}
+        <div class="small text-muted mb-2">
+            <i class="bi bi-collection me-1"></i>مجموعات {{ teacher.full_name }}
+        </div>
+        {% for group in teacher.visible_groups %}
+        <div class="teacher-group-row">
+            <span class="teacher-group-name">{{ group.group_name }}</span>
+            <span class="teacher-group-meta">
+                <i class="bi bi-calendar3 me-1"></i>{{ group.get_schedule_display }}
+            </span>
+            <span class="teacher-group-meta">
+                <i class="bi bi-door-open me-1"></i>{{ group.get_rooms_display }}
+            </span>
+            <span class="teacher-group-meta">
+                <i class="bi bi-people me-1"></i>{{ group.students_count }} طالب
+            </span>
+            <span class="teacher-group-meta">
+                <i class="bi bi-cash me-1"></i>{{ group.standard_fee }} ج.م
+            </span>
+            <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
+               class="btn btn-sm btn-outline-info ms-auto">
+                <i class="bi bi-eye me-1"></i>عرض
+            </a>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="small text-muted">لا توجد مجموعات لهذا المدرس</div>
+        {% endif %}
+    </td>
+</tr>
+{% endif %}
+{% empty %}
+<tr>
+    <td colspan="6" class="text-center py-5 text-muted">
+        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+        {% if is_search %}
+        <p class="mt-2 mb-0">لا يوجد مدرسين مطابقين لـ "{{ search_term }}"</p>
+        {% else %}
+        <p class="mt-2 mb-0">لا يوجد مدرسين</p>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}

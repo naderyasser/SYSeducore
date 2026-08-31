@@ -1,5 +1,7 @@
 from django import forms
 
+from apps.core import education
+
 from .models import Student, StudentGroupEnrollment
 from .utils import enrollment_compatibility_errors, normalize_phone
 
@@ -84,6 +86,24 @@ class StudentForm(forms.ModelForm):
                 self.initial['student_phone'] = self._clean_phone(self.instance.student_phone)
             if self.instance.parent_phone:
                 self.initial['parent_phone'] = self._clean_phone(self.instance.parent_phone)
+
+    def clean(self):
+        """
+        Keep ``education_year`` consistent with ``education_stage``.
+
+        The dropdown is rebuilt client-side per stage, but a stale value can
+        still be posted — the user picks ابتدائي/السادس, switches to إعدادي,
+        and a browser that ignored the rebuild (or a form replayed from the
+        back button) sends "6" for a stage that only has three years. تأسيس
+        and كورسات have no year at all. Both cases blank the year rather than
+        rejecting the form: the field is optional, and a validation error over
+        a dropdown the user can no longer see is a dead end.
+        """
+        cleaned = super().clean()
+        cleaned['education_year'] = education.normalize_stage_year(
+            cleaned.get('education_stage'), cleaned.get('education_year'),
+        )
+        return cleaned
 
     def clean_student_code(self):
         code = self.cleaned_data.get('student_code')

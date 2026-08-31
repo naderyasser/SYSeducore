@@ -1,0 +1,144 @@
+/*
+ * Shared widget styles for the directory search bar and the searchable
+ * dropdown. Kept in its own file and linked from base.html — note that
+ * static/css/base.css predates this and is not linked by any template, so
+ * adding to it would have had no effect.
+ */
+
+/* ── Searchable select (static/js/utils/searchable-select.js) ───────────── */
+
+.searchable-select {
+    position: relative;
+}
+
+/* The native <select> keeps submitting the value; it is simply not shown.
+   `display: none` would drop it from some form-reset paths, so it is kept in
+   the layout at zero size instead. */
+.searchable-select-native {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+}
+
+.searchable-select-menu {
+    position: absolute;
+    z-index: 1056; /* above Bootstrap modals (1055) */
+    top: calc(100% + 2px);
+    right: 0;
+    left: 0;
+    max-height: 260px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    padding: 0.25rem;
+}
+
+.searchable-select-item {
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    font-size: 0.925rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.searchable-select-item:hover,
+.searchable-select-item.is-active {
+    background: #eef2ff;
+}
+
+.searchable-select-item.is-selected {
+    font-weight: 600;
+    color: #4054b2;
+}
+
+.searchable-select-empty {
+    padding: 0.6rem 0.65rem;
+    color: #8b8f98;
+    font-size: 0.875rem;
+    text-align: center;
+}
+
+/* ── Directory live search (teachers / groups index) ────────────────────── */
+
+.directory-search {
+    position: relative;
+}
+
+.directory-search .bi-search {
+    position: absolute;
+    top: 50%;
+    inset-inline-start: 0.85rem;
+    transform: translateY(-50%);
+    color: #8b8f98;
+    pointer-events: none;
+}
+
+.directory-search input {
+    padding-inline-start: 2.35rem;
+}
+
+.directory-search .directory-search-clear {
+    position: absolute;
+    top: 50%;
+    inset-inline-end: 0.6rem;
+    transform: translateY(-50%);
+    border: 0;
+    background: transparent;
+    color: #8b8f98;
+    line-height: 1;
+    padding: 0.25rem;
+    cursor: pointer;
+}
+
+.directory-search .directory-search-clear:hover {
+    color: #22252a;
+}
+
+/* Dimmed while a fetch is in flight, so a slow network reads as "working"
+   rather than "the search is broken". */
+.directory-results.is-loading {
+    opacity: 0.55;
+    transition: opacity 0.12s ease-in;
+}
+
+.directory-hint {
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* Groups nested under a teacher row on the teachers index. */
+.teacher-groups {
+    background: #f8f9fb;
+}
+
+.teacher-groups .teacher-group-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.9rem;
+    padding: 0.5rem 0.25rem;
+    border-bottom: 1px dashed #e3e6ec;
+    font-size: 0.9rem;
+}
+
+.teacher-groups .teacher-group-row:last-child {
+    border-bottom: 0;
+}
+
+.teacher-groups .teacher-group-name {
+    font-weight: 600;
+    min-width: 11rem;
+}
+
+.teacher-groups .teacher-group-meta {
+    color: #6c757d;
+}

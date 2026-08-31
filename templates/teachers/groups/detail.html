@@ -476,6 +476,28 @@
             </div>
         </div>
 
+        {# Cumulative cycle money is admin-only, like every other total in the
+           system (see User.can_see_financials): group_detail is open to
+           supervisors, and per-student amounts have always been visible to
+           them, but the group-wide sums have not. #}
+        {% if open_cycle and user.can_see_financials %}
+        <div class="info-card">
+            <div class="info-card-header">
+                <i class="bi bi-wallet2"></i>
+                المُحصَّل في الدورة
+            </div>
+            <div class="info-card-value">{{ collected_total }} ج.م</div>
+        </div>
+
+        <div class="info-card">
+            <div class="info-card-header">
+                <i class="bi bi-hourglass-split"></i>
+                المتبقي على الطلاب
+            </div>
+            <div class="info-card-value">{{ outstanding_total }} ج.م</div>
+        </div>
+        {% endif %}
+
         {% if open_cycle %}
         <div class="info-card">
             <div class="info-card-header">
@@ -584,7 +606,17 @@
                                     {% elif row.payment_status == 'partial' %}جزئي
                                     {% else %}غير مدفوع{% endif %}
                                 </span>
-                                {% if row.payment_amount_due %}<small class="text-muted d-block">{{ row.payment_amount_due }} ج.م</small>{% endif %}
+                                {% if row.payment_amount_due is not None %}
+                                <small class="text-muted d-block">
+                                    {# "دفع 50 من 100، باقي 50" — the whole point
+                                       of the partial-collection flow is legible
+                                       here, not just the price. #}
+                                    {{ row.payment_amount_paid }} / {{ row.payment_amount_due }} ج.م
+                                </small>
+                                {% if row.payment_remaining and row.payment_remaining > 0 %}
+                                <small class="text-danger d-block">باقي {{ row.payment_remaining }} ج.م</small>
+                                {% endif %}
+                                {% endif %}
                             </td>
                             <td>
                                 <button type="button" class="btn-remove-student"

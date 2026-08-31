@@ -2,6 +2,7 @@ from django.db import models
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.core.validators import MaxValueValidator
 from datetime import datetime, timedelta
+from apps.core import education
 from apps.core.models import SoftDeleteModel
 
 #: Hard ceiling on a group's billing cycle length, in lessons. The accounting
@@ -61,11 +62,7 @@ class Subject(SoftDeleteModel):
     used to be a hard ``DELETE`` that silently dropped the ``Teacher.subjects``
     rows of every teacher that taught it, with no way back (DATA-26).
     """
-    EDUCATION_STAGE_CHOICES = [
-        ('primary', 'ابتدائي'),
-        ('preparatory', 'إعدادي'),
-        ('secondary', 'ثانوي'),
-    ]
+    EDUCATION_STAGE_CHOICES = education.EDUCATION_STAGE_CHOICES
 
     name = models.CharField(max_length=100, verbose_name="اسم المادة")
     education_stage = models.CharField(
@@ -283,20 +280,11 @@ class Group(SoftDeleteModel):
         ('mixed', 'مختلط'),
     ]
 
-    EDUCATION_STAGE_CHOICES = [
-        ('primary', 'ابتدائي'),
-        ('preparatory', 'إعدادي'),
-        ('secondary', 'ثانوي'),
-    ]
-
-    EDUCATION_YEAR_CHOICES = [
-        ('1', 'الصف الأول'),
-        ('2', 'الصف الثاني'),
-        ('3', 'الصف الثالث'),
-        ('4', 'الصف الرابع'),
-        ('5', 'الصف الخامس'),
-        ('6', 'الصف السادس'),
-    ]
+    # Shared with ``students.Student`` and ``Subject`` via
+    # ``apps.core.education`` — see that module for why these are no longer
+    # three independent copies.
+    EDUCATION_STAGE_CHOICES = education.EDUCATION_STAGE_CHOICES
+    EDUCATION_YEAR_CHOICES = education.YEAR_CHOICES_GRADE
 
     group_id = models.AutoField(primary_key=True)
     group_name = models.CharField(max_length=100, verbose_name="اسم المجموعة")

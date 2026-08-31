@@ -4,6 +4,8 @@ from django import forms
 from django.db import transaction
 from django.db.models import Q
 
+from apps.core import education
+
 from .models import MAX_SESSIONS_PER_CYCLE, Teacher, Group, Room, Subject, GroupSchedule
 
 
@@ -169,6 +171,19 @@ class GroupForm(forms.ModelForm):
         )
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
+
+    def clean(self):
+        """
+        Keep ``education_year`` consistent with ``education_stage`` — same rule
+        and same reasoning as ``apps.students.forms.StudentForm.clean``: a year
+        that does not belong to the chosen stage, or any year at all under a
+        year-less stage (تأسيس / كورسات), is blanked rather than rejected.
+        """
+        cleaned = super().clean()
+        cleaned['education_year'] = education.normalize_stage_year(
+            cleaned.get('education_stage'), cleaned.get('education_year'),
+        )
+        return cleaned
 
     def clean_standard_fee(self):
         """السعر القياسي لا يمكن أن يكون بالسالب"""

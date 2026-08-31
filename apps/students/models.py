@@ -10,6 +10,7 @@ import qrcode
 from barcode import Code128
 from barcode.writer import ImageWriter
 from PIL import Image
+from apps.core import education
 from apps.core.models import SoftDeleteModel
 
 logger = logging.getLogger(__name__)
@@ -31,20 +32,12 @@ class Student(SoftDeleteModel):
         ('female', 'أنثى'),
     ]
 
-    EDUCATION_STAGE_CHOICES = [
-        ('primary', 'ابتدائي'),
-        ('preparatory', 'إعدادي'),
-        ('secondary', 'ثانوي'),
-    ]
-
-    EDUCATION_YEAR_CHOICES = [
-        ('1', 'الأول'),
-        ('2', 'الثاني'),
-        ('3', 'الثالث'),
-        ('4', 'الرابع'),
-        ('5', 'الخامس'),
-        ('6', 'السادس'),
-    ]
+    # Both lists come from ``apps.core.education`` — the single source of
+    # truth shared with ``teachers.Group``/``teachers.Subject``, the forms and
+    # the templates. Kept as class attributes because admin, templates and
+    # ``get_education_display`` below all reference them by name.
+    EDUCATION_STAGE_CHOICES = education.EDUCATION_STAGE_CHOICES
+    EDUCATION_YEAR_CHOICES = education.YEAR_CHOICES_SHORT
 
     EDUCATION_TYPE_CHOICES = [
         ('general', 'عام'),

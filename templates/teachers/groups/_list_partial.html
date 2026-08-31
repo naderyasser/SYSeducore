@@ -1,0 +1,6 @@
+{% comment %}
+Live-search response for the groups directory — see
+``teachers/_list_partial.html`` for why the rows carry a table wrapper.
+{% endcomment %}
+<table hidden><tbody data-part="rows">{% include 'teachers/groups/_list_rows.html' %}</tbody></table>
+<div data-part="meta">{% include 'includes/_directory_meta.html' %}</div>

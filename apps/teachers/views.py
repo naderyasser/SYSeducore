@@ -7,11 +7,12 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 
+from apps.core import education
 from apps.accounts.decorators import (
     admin_required,
     ajax_supervisor_required,
@@ -38,6 +39,11 @@ logger = logging.getLogger(__name__)
 #: Rows per page on the teacher / room / group list screens.
 LIST_PAGE_SIZE = 25
 
+#: Hard cap on an unpaginated search result set. A search bypasses pagination
+#: on purpose (see :func:`_search_results`); this keeps that from turning into
+#: an unbounded render on a centre with thousands of rows.
+SEARCH_RESULT_LIMIT = 300
+
 #: Generic message used instead of echoing an exception back to the browser.
 GENERIC_ERROR_MESSAGE = 'حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى'
 
@@ -56,6 +62,59 @@ def _page_context(page_obj, object_name):
         'is_paginated': page_obj.has_other_pages(),
         'total_count': page_obj.paginator.count,
     }
+
+
+def _search_term(request):
+    """The directory search box's ``?q=``, trimmed. ``''`` when not searching."""
+    return (request.GET.get('q') or '').strip()
+
+
+def _search_results(request, queryset, object_name):
+    """
+    Context for a list screen that may or may not be filtered by ``?q=``.
+
+    A search deliberately **bypasses pagination**: someone who types a
+    teacher's name wants that teacher's groups, all of them, not "the first 25
+    matches, page 1 of 2". Paging a live-filtered list is also actively
+    misleading — the page-2 link carries the term but the row you saw a
+    keystroke ago has already moved.
+
+    Unbounded output is still a footgun on a large centre, so a search is
+    capped at :data:`SEARCH_RESULT_LIMIT` and the template is told when the cap
+    bit, instead of the server quietly rendering ten thousand rows.
+    """
+    term = _search_term(request)
+    if not term:
+        context = _page_context(_paginate(request, queryset), object_name)
+        context.update({'search_term': '', 'is_search': False, 'search_truncated': False})
+        return context
+
+    total = queryset.count()
+    results = list(queryset[:SEARCH_RESULT_LIMIT])
+    return {
+        object_name: results,
+        'page_obj': None,
+        'paginator': None,
+        'is_paginated': False,
+        'total_count': total,
+        'search_term': term,
+        'is_search': True,
+        'search_truncated': total > SEARCH_RESULT_LIMIT,
+        'search_limit': SEARCH_RESULT_LIMIT,
+    }
+
+
+def _wants_partial(request):
+    """
+    True when the live-search JS asked for just the rows, not the whole page.
+
+    Both conditions are required: ``partial=1`` alone would let a stray link
+    hand a logged-in user a bare fragment with no chrome.
+    """
+    return (
+        request.GET.get('partial') == '1'
+        and request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+    )
 
 
 def _enrollment_count_annotation():
@@ -197,6 +256,14 @@ def _parse_schedule_data(post_data, default_duration=120):
 
 @login_required
 def teacher_list(request):
+    """
+    دليل المدرسين مع بحث فوري بالاسم.
+
+    البحث يعرض كل مجموعات المدرس المطابق مباشرة تحت اسمه (بدون ترقيم صفحات)،
+    لأن السؤال الحقيقي عند كتابة اسم مدرس هو "ما هي مجموعاته؟" لا "هل هو
+    مسجَّل؟".
+    """
+    term = _search_term(request)
     teachers = (
         Teacher.objects.filter(is_active=True)
         .prefetch_related('subjects')
@@ -207,7 +274,37 @@ def teacher_list(request):
         ))
         .order_by('full_name')
     )
-    return render(request, 'teachers/list.html', _page_context(_paginate(request, teachers), 'teachers'))
+    if term:
+        # Matching on the subject name too means "رياضيات" finds every maths
+        # teacher, which is how the desk actually looks a colleague up when
+        # they know the subject but not the spelling of the name.
+        teachers = teachers.filter(
+            Q(full_name__icontains=term)
+            | Q(phone__icontains=term)
+            | Q(subjects__name__icontains=term)
+            | Q(groups__group_name__icontains=term)
+        ).distinct()
+        # Only fetch the nested group rows when they will actually be shown —
+        # an unfiltered directory would pull every group in the centre.
+        teachers = teachers.prefetch_related(
+            Prefetch(
+                'groups',
+                queryset=(
+                    Group.objects.filter(is_active=True, deleted_at__isnull=True)
+                    .prefetch_related('schedules__room')
+                    .annotate(students_count=_enrollment_count_annotation())
+                    .order_by('group_name')
+                ),
+                to_attr='visible_groups',
+            )
+        )
+
+    context = _search_results(request, teachers, 'teachers')
+    template = (
+        'teachers/_list_partial.html' if _wants_partial(request)
+        else 'teachers/list.html'
+    )
+    return render(request, template, context)
 
 
 @login_required
@@ -467,6 +564,13 @@ def room_delete(request, room_id):
 
 @login_required
 def group_list(request):
+    """
+    دليل المجموعات مع بحث فوري.
+
+    كتابة اسم مدرس تعرض كل مجموعاته دفعةً واحدة (انظر ``_search_results``
+    لسبب تخطّي ترقيم الصفحات أثناء البحث).
+    """
+    term = _search_term(request)
     groups = (
         Group.objects.filter(is_active=True)
         .select_related('teacher')
@@ -474,7 +578,19 @@ def group_list(request):
         .annotate(students_count=_enrollment_count_annotation())
         .order_by('group_name')
     )
-    return render(request, 'teachers/groups/list.html', _page_context(_paginate(request, groups), 'groups'))
+    if term:
+        groups = groups.filter(
+            Q(teacher__full_name__icontains=term)
+            | Q(group_name__icontains=term)
+            | Q(teacher__subjects__name__icontains=term)
+        ).distinct()
+
+    context = _search_results(request, groups, 'groups')
+    template = (
+        'teachers/groups/_list_partial.html' if _wants_partial(request)
+        else 'teachers/groups/list.html'
+    )
+    return render(request, template, context)
 
 
 @supervisor_required
@@ -577,12 +693,27 @@ def group_detail(request, group_id):
     } if open_cycle else {}
 
     students_rows = []
+    collected_total = to_money(0)
+    outstanding_total = to_money(0)
     for row in grid['rows']:
         payment = payments_by_student.get(row['student'].pk)
+        # ``amount_due`` alone was all this table showed, which since partial
+        # collection became possible from the payments screen no longer answers
+        # the question the desk is actually asking: a student on "جزئي" needs
+        # the amount *taken* and the amount still owed, not the price list.
+        paid = payment.amount_paid if payment else None
+        remaining = (payment.amount_due - payment.amount_paid) if payment else None
+        if payment:
+            collected_total += payment.amount_paid
+            # A credit (over-collection reversed later) must not subtract from
+            # what the group is still owed.
+            outstanding_total += max(remaining, to_money(0))
         students_rows.append({
             **row,
             'payment_status': payment.status if payment else 'unpaid',
             'payment_amount_due': payment.amount_due if payment else None,
+            'payment_amount_paid': paid,
+            'payment_remaining': remaining,
         })
 
     # قيمة الحصة الواحدة = مصروف الدورة ÷ عدد حصصها. المجموعات تختلف
@@ -612,6 +743,10 @@ def group_detail(request, group_id):
         'open_cycle': open_cycle,
         'per_session_fee': per_session_fee,
         'cycle_sessions_done': cycle_sessions_done,
+        # Cycle money, for the header cards. Only meaningful while a cycle is
+        # open — with no cycle there are no Payment rows to add up.
+        'collected_total': collected_total if open_cycle else None,
+        'outstanding_total': outstanding_total if open_cycle else None,
     }
     return render(request, 'teachers/groups/detail.html', context)
 
@@ -906,11 +1041,10 @@ def booking_search(request):
         'education_stage': education_stage,
         'gender': gender,
         'selected_subject': subject_id,
-        'education_stages': [
-            ('primary', 'ابتدائي'),
-            ('preparatory', 'اعدادي'),
-            ('secondary', 'ثانوي'),
-        ],
+        # Shared list — the local copy here also spelled إعدادي without its
+        # hamza ("اعدادي"), so the filter never matched what the group form
+        # stored.
+        'education_stages': education.EDUCATION_STAGE_CHOICES,
         'gender_types': [
             ('male', 'بنين'),
             ('female', 'بنات'),
@@ -959,19 +1093,8 @@ def _booking_create_context(teacher, form_data=None):
         'students': Student.objects.filter(is_active=True).order_by('full_name'),
         'submitted': form_data or {},
         'week_days': [(day, WEEK_DAYS_AR[day]) for day in WEEK_DAYS],
-        'education_stages': [
-            ('primary', 'ابتدائي'),
-            ('preparatory', 'اعدادي'),
-            ('secondary', 'ثانوي'),
-        ],
-        'education_years': [
-            ('1', 'الصف الأول'),
-            ('2', 'الصف الثاني'),
-            ('3', 'الصف الثالث'),
-            ('4', 'الصف الرابع'),
-            ('5', 'الصف الخامس'),
-            ('6', 'الصف السادس'),
-        ],
+        'education_stages': education.EDUCATION_STAGE_CHOICES,
+        'education_years': education.YEAR_CHOICES_GRADE,
         'gender_types': [
             ('male', 'بنين'),
             ('female', 'بنات'),

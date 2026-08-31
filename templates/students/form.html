@@ -340,26 +340,35 @@
                 <div class="form-section">
                     <h6><i class="bi bi-mortarboard me-2"></i>البيانات الدراسية</h6>
                     <div class="row g-3">
+                        {# Stages come from apps.core.education via the
+                           education_taxonomy context processor — never hard-coded
+                           here again, which is how تأسيس/كورسات reach every form
+                           at once. #}
                         <div class="col-md-4">
                             <label for="id_education_stage" class="form-label">المرحلة الدراسية</label>
                             <select name="education_stage" id="id_education_stage" class="form-select">
                                 <option value="">-- اختر المرحلة --</option>
-                                <option value="primary" {% if form.education_stage.value == 'primary' %}selected{% endif %}>ابتدائي</option>
-                                <option value="preparatory" {% if form.education_stage.value == 'preparatory' %}selected{% endif %}>إعدادي</option>
-                                <option value="secondary" {% if form.education_stage.value == 'secondary' %}selected{% endif %}>ثانوي</option>
+                                {% for value, label in EDUCATION_STAGE_CHOICES %}
+                                <option value="{{ value }}" {% if form.education_stage.value == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
                             </select>
                         </div>
 
-                        <div class="col-md-4">
+                        {# The year options below are the no-JS fallback only:
+                           education-stage-year.js rebuilds this select from the
+                           stage map on load and on every stage change, so a year
+                           the stage does not have is removed from the DOM rather
+                           than merely hidden (hiding an <option> is advisory and
+                           Safari ignores it — that is the six-years-for-إعدادي
+                           bug). data-selected survives the rebuild. #}
+                        <div class="col-md-4" id="education_year_wrapper">
                             <label for="id_education_year" class="form-label">السنة الدراسية</label>
-                            <select name="education_year" id="id_education_year" class="form-select">
+                            <select name="education_year" id="id_education_year" class="form-select"
+                                    data-selected="{{ form.education_year.value|default_if_none:'' }}">
                                 <option value="">-- اختر السنة --</option>
-                                <option value="1" {% if form.education_year.value == '1' or form.education_year.value == 1 %}selected{% endif %}>الأول</option>
-                                <option value="2" {% if form.education_year.value == '2' or form.education_year.value == 2 %}selected{% endif %}>الثاني</option>
-                                <option value="3" {% if form.education_year.value == '3' or form.education_year.value == 3 %}selected{% endif %}>الثالث</option>
-                                <option value="4" data-primary-only="true" {% if form.education_year.value == '4' or form.education_year.value == 4 %}selected{% endif %}>الرابع</option>
-                                <option value="5" data-primary-only="true" {% if form.education_year.value == '5' or form.education_year.value == 5 %}selected{% endif %}>الخامس</option>
-                                <option value="6" data-primary-only="true" {% if form.education_year.value == '6' or form.education_year.value == 6 %}selected{% endif %}>السادس</option>
+                                {% for value, label in EDUCATION_YEAR_CHOICES_SHORT %}
+                                <option value="{{ value }}" {% if form.education_year.value|stringformat:'s' == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -453,26 +462,28 @@
                             <label for="filter_stage" class="form-label">المرحلة الدراسية</label>
                             <select id="filter_stage" class="form-select">
                                 <option value="">-- الكل --</option>
-                                <option value="primary">ابتدائي</option>
-                                <option value="preparatory">إعدادي</option>
-                                <option value="secondary">ثانوي</option>
+                                {% for value, label in EDUCATION_STAGE_CHOICES %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-3" id="filter_grade_wrapper">
                             <label for="filter_grade" class="form-label">السنة الدراسية</label>
                             <select id="filter_grade" class="form-select">
                                 <option value="">-- الكل --</option>
-                                <option value="1">الأول</option>
-                                <option value="2">الثاني</option>
-                                <option value="3">الثالث</option>
-                                <option value="4">الرابع</option>
-                                <option value="5">الخامس</option>
-                                <option value="6">السادس</option>
+                                {% for value, label in EDUCATION_YEAR_CHOICES_SHORT %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-3">
                             <label for="filter_teacher" class="form-label">المدرس</label>
-                            <select id="filter_teacher" class="form-select">
+                            {# data-searchable turns this into a type-to-filter
+                               combobox (static/js/utils/searchable-select.js).
+                               The <select> itself still holds the value, so the
+                               existing filter JS below is untouched. #}
+                            <select id="filter_teacher" class="form-select" data-searchable
+                                    data-placeholder="اكتب اسم المدرس...">
                                 <option value="">-- الكل --</option>
                                 {% for teacher in teachers %}
                                 <option value="{{ teacher.teacher_id }}" data-teacher="{{ teacher.full_name }}">{{ teacher.full_name }}</option>
@@ -545,15 +556,23 @@
                                 </div>
                                 {% if is_create %}
                                 <div style="margin-top: 8px;">
+                                    {# Partial payments are supported: enter 50
+                                       against a 100 ج.م fee and the enrolment is
+                                       saved with status "جزئي". Only the leftover
+                                       is chased later. #}
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text"><i class="bi bi-cash me-1"></i> دفعة أولى</span>
                                         <input type="number" name="initial_payment_{{ group.group_id }}"
-                                            class="form-control" min="0" step="0.01" placeholder="اختياري">
+                                            class="form-control" min="0" step="0.01"
+                                            placeholder="اختياري — يمكن دفع جزء من المبلغ">
                                         <span class="input-group-text">ج.م</span>
                                     </div>
                                     <div class="input-group input-group-sm mt-1">
-                                        <span class="input-group-text"><i class="bi bi-calendar3 me-1"></i> تاريخ الدفع</span>
+                                        <span class="input-group-text"><i class="bi bi-calendar3 me-1"></i> تاريخ الاشتراك</span>
                                         <input type="date" name="paid_on_{{ group.group_id }}" class="form-control">
+                                    </div>
+                                    <div class="form-text" style="font-size: 0.75rem;">
+                                        اتركه فارغًا وسيُسجَّل تلقائيًا بتاريخ بداية دورة المجموعة أو تاريخ اليوم.
                                     </div>
                                 </div>
                                 {% endif %}
@@ -745,28 +764,38 @@ document.getElementById('id_gender').addEventListener('change', function() {
     }
 });
 
-// Dynamic education year options based on stage
-function updateEducationYears() {
-    const stage = document.getElementById('id_education_stage').value;
-    const yearSelect = document.getElementById('id_education_year');
-    const options = yearSelect.querySelectorAll('option[data-primary-only]');
-    
-    options.forEach(opt => {
-        if (stage === 'primary') {
-            opt.style.display = '';
-            opt.disabled = false;
-        } else {
-            opt.style.display = 'none';
-            opt.disabled = true;
-            if (opt.selected) {
-                yearSelect.value = '';
-            }
+// Stage → academic year. Handled by static/js/utils/education-stage-year.js,
+// which rebuilds the <select> from the stage map instead of hiding options
+// (the old approach: `option.style.display = 'none'`, which Safari ignores —
+// so "إعدادي" still listed six years there). تأسيس/كورسات hide the field.
+document.addEventListener('DOMContentLoaded', function () {
+    EducationStageYear.link(
+        document.getElementById('id_education_stage'),
+        document.getElementById('id_education_year'),
+        {
+            labelSet: 'short',
+            wrapper: document.getElementById('education_year_wrapper'),
+            placeholder: '-- اختر السنة --',
+            noYearLabel: '{{ EDUCATION_NO_YEAR_LABEL }}'
         }
-    });
-}
+    );
 
-document.getElementById('id_education_stage').addEventListener('change', updateEducationYears);
-document.addEventListener('DOMContentLoaded', updateEducationYears);
+    // Same rule on the group cascade filters below.
+    EducationStageYear.link(
+        document.getElementById('filter_stage'),
+        document.getElementById('filter_grade'),
+        {
+            labelSet: 'short',
+            wrapper: document.getElementById('filter_grade_wrapper'),
+            placeholder: '-- الكل --',
+            noYearLabel: '{{ EDUCATION_NO_YEAR_LABEL }}'
+        }
+    );
+
+    // Type-to-find on the teacher filter: a centre with forty teachers makes
+    // a plain <select> a scrolling exercise.
+    SearchableSelect.enhanceAll();
+});
 
 // Form validation
 document.getElementById('studentForm').addEventListener('submit', function(e) {

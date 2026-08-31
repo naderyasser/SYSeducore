@@ -681,9 +681,9 @@
             <label class="form-label">المرحلة</label>
             <select name="education_stage" class="form-select">
                 <option value="">جميع المراحل</option>
-                <option value="primary" {% if current_education_stage == 'primary' %}selected{% endif %}>ابتدائي</option>
-                <option value="preparatory" {% if current_education_stage == 'preparatory' %}selected{% endif %}>إعدادي</option>
-                <option value="secondary" {% if current_education_stage == 'secondary' %}selected{% endif %}>ثانوي</option>
+                {% for value, label in EDUCATION_STAGE_CHOICES %}
+                <option value="{{ value }}" {% if current_education_stage == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
             </select>
         </div>
         <div class="filter-actions">
