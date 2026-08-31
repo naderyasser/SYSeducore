@@ -124,9 +124,16 @@ jobs:
 
       - name: Create deployment package
         run: |
+          # The archive is written *into* the directory being archived, so tar
+          # read the file it was still writing and exited 1 with
+          # "file changed as we read it". Excluding the output directory is the
+          # fix; .env is excluded too, because the package is uploaded as a
+          # build artifact and the repository's .env holds real credentials.
           mkdir -p deploy_package
           tar -czf deploy_package/educore-${{ github.sha }}.tar.gz \
+            --exclude='./deploy_package' \
             --exclude='.git' \
+            --exclude='.env' \
             --exclude='venv' \
             --exclude='.venv' \
             --exclude='*.pyc' \

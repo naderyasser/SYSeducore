@@ -23,10 +23,23 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image: ${{ steps.image_name.outputs.image }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # A registry reference must be lowercase, and this repository is called
+      # "naderyasser/SYSeducore". docker/metadata-action lowercases it silently
+      # for the build, which is why the push worked while the Trivy step — which
+      # interpolated ${{ env.IMAGE_NAME }} verbatim — died on
+      # "could not parse reference: ghcr.io/naderyasser/SYSeducore:<sha>".
+      # Computed once here and shared, so the two can no longer disagree.
+      - name: Compute lowercase image name
+        id: image_name
+        run: |
+          echo "image=${REGISTRY}/${IMAGE_NAME,,}" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -39,11 +52,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # The full-SHA tag (type=sha,format=long,prefix=) exists for the scan job
+      # below, which addresses the image by ${{ github.sha }}. Without it the
+      # only sha tag was the short "master-<7 chars>" form, so the scan would
+      # have failed on a missing image even once the name was lowercase.
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.image_name.outputs.image }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -51,6 +68,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=sha,prefix={{branch}}-
+            type=sha,format=long,prefix=
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -74,12 +92,25 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
 
     steps:
+      # Pulling the image to scan it needs registry auth even when the package
+      # is public — the job had none.
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          image-ref: ${{ needs.build.outputs.image }}:${{ github.sha }}
           format: 'sarif'
           output: 'trivy-results.sarif'
 
