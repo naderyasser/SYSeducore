@@ -25,14 +25,22 @@ class Command(BaseCommand):
                 if model._meta.app_label in ['contenttypes', 'auth', 'admin', 'sessions']:
                     continue
                 
-                table = model._meta.db_table
-                
+                # ``db_table`` comes from Django's own model metadata, never
+                # from user input, so this cannot be an injection vector — but
+                # it is still interpolated, so it goes through the backend's
+                # identifier quoting rather than being pasted in bare. That
+                # also makes the command correct for a table whose name needs
+                # quoting in the first place.
+                table = connection.ops.quote_name(model._meta.db_table)
+
                 if model == User:
-                    cursor.execute(f"DELETE FROM {table} WHERE is_superuser = 0;")
+                    sql = f"DELETE FROM {table} WHERE is_superuser = 0;"  # nosec B608
+                    cursor.execute(sql)
                     count = cursor.rowcount
                     self.stdout.write(f'Deleted non-superadmin users: {count}')
                 else:
-                    cursor.execute(f"DELETE FROM {table};")
+                    sql = f"DELETE FROM {table};"  # nosec B608
+                    cursor.execute(sql)
                     count = cursor.rowcount
                     if count > 0:
                         self.stdout.write(f'Deleted {model._meta.app_label}.{model._meta.model_name}: {count}')

@@ -183,12 +183,16 @@ class TestStageYearRendering(TestCase):
 
     def test_emitted_map_says_preparatory_has_three_years(self):
         response = self.client.get(reverse('students:create'))
-        payload = response.context['EDUCATION_STAGE_YEARS_JSON']
-        import json
-        data = json.loads(payload)
+        data = response.context['EDUCATION_STAGE_YEARS']
         self.assertEqual(len(data['preparatory']['short']), 3)
         self.assertEqual(len(data['primary']['short']), 6)
         self.assertEqual(data['foundation']['short'], [])
+
+    def test_map_is_json_encoded_into_the_page(self):
+        """Rendered through Django's json_script, which owns the escaping."""
+        html = self.client.get(reverse('students:create')).content.decode()
+        self.assertIn('id="education-stage-years"', html)
+        self.assertIn('type="application/json"', html)
 
 
 # ═══════════════════════════════════════════════════════════════════════

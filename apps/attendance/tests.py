@@ -1532,9 +1532,16 @@ class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
 
     def setUp(self):
         self.build_fixtures(day=AttendanceService.get_current_day_name())
-        # The session started well before now so the 10-minute rule fires.
+        # The session must have started well before now so the 10-minute rule
+        # fires. Setting ``Group.schedule_time`` alone did not do that: since
+        # rooms were decoupled from groups the task reads the *schedule row*
+        # (``GroupSchedule.start_time``, still 09:00 from build_fixtures) and
+        # ignores the legacy field, so these tests only passed when the suite
+        # happened to run after 09:10 Cairo time and failed on any earlier run
+        # — a CI job at 00:11 local was enough to turn them red.
         self.group.schedule_time = time(0, 1)
         self.group.save()
+        self.group.schedules.update(start_time=time(0, 1))
         self.session = assign_to_cycle(Session.objects.create(
             group=self.group, session_date=timezone.localdate()
         ))

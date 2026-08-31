@@ -214,8 +214,16 @@ jobs:
 
       - name: Setup environment
         run: |
+          # ``check --deploy`` audits a *production* configuration, so it has to
+          # run against one. This job used to inherit DEBUG=True from
+          # .env.example and a 15-character SECRET_KEY, which meant it reported
+          # W004/W008/W009/W012/W016/W018 and — at --fail-level WARNING — could
+          # never pass, whatever the code did. The security settings those
+          # warnings ask for are already applied by config/settings.py under
+          # ``if not DEBUG and not TESTING``.
           cp .env.example .env
-          echo "SECRET_KEY=test-secret-key" >> .env
+          echo "SECRET_KEY=$(python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())')" >> .env
+          echo "DEBUG=False" >> .env
 
       - name: Run Django checks
         run: |

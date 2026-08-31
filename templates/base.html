@@ -975,7 +975,7 @@
          "المرحلة الدراسية" with "السنة الدراسية". Served from
          config.context_processors.education_taxonomy so the four forms that
          need it can never drift apart again. -->
-    <script id="education-stage-years" type="application/json">{{ EDUCATION_STAGE_YEARS_JSON }}</script>
+    {{ EDUCATION_STAGE_YEARS|json_script:"education-stage-years" }}
     <script src="{% static 'js/utils/education-stage-year.js' %}"></script>
     <script src="{% static 'js/utils/searchable-select.js' %}"></script>
     {% block extra_js %}{% endblock %}

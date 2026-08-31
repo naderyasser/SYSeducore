@@ -206,6 +206,17 @@ STORAGES = {
     },
 }
 
+# The manifest backend resolves every ``{% static %}`` tag through
+# staticfiles.json, which only exists after ``collectstatic`` has run. That is
+# right in production and wrong under test: a test suite must not depend on a
+# build artefact. Without this override every view test that renders a template
+# dies with "Missing staticfiles manifest entry", and adding a static file makes
+# the whole suite red until someone remembers to re-run collectstatic.
+if TESTING:
+    STORAGES['staticfiles'] = {
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+    }
+
 # Media files
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
