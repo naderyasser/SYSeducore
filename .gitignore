@@ -13,9 +13,10 @@ venv/
 env/
 
 # Secrets / local environment
-# NOTE: .env is currently still TRACKED in git history. This rule only stops
-# *new* additions; untracking it (git rm --cached .env) and rotating the leaked
-# credentials is a deliberate human action - see SEC-02/SEC-03.
+# .env is no longer tracked (untracked 2026-09-01). The values that were in the
+# public history are being treated as compromised and rotated; the history
+# itself still contains them, so rotation — not this rule — is what protects
+# the system. Never re-add this file.
 .env
 .env.local
 .env.*.local
