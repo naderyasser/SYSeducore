@@ -359,3 +359,161 @@ def send_bulk_attendance_report_task(group_id, session_date=None, batch_key=None
         group_id=group_id,
         message_type='attendance',
     )
+
+
+#: How long before a session starts the reminder goes out.
+SESSION_REMINDER_LEAD_MINUTES = 60
+
+
+def notify_session_cancelled(session, reason=''):
+    """
+    Tell the parents of everyone enrolled that a session is off.
+
+    Called synchronously from the cancel action rather than left to a beat
+    tick: a cancellation is only useful if it arrives *before* the family sets
+    out, and the desk cancels the lesson minutes before it was due to start.
+
+    Returns (sent, failed). Never raises — a messaging outage must not roll
+    back the cancellation itself, which is a bookkeeping fact independent of
+    whether anyone was told.
+    """
+    from apps.students.models import StudentGroupEnrollment
+
+    service = NotificationService()
+    group = session.group
+    when = session.session_date.strftime('%Y-%m-%d')
+
+    enrollments = (
+        StudentGroupEnrollment.objects
+        .filter(group=group, is_active=True, student__deleted_at__isnull=True)
+        .select_related('student')
+    )
+
+    sent = failed = 0
+    for enrollment in enrollments:
+        student = enrollment.student
+        phone = student.parent_phone or student.student_phone
+        if not phone:
+            continue
+
+        text = (
+            f'إلغاء حصة\n'
+            f'الطالب: {student.full_name}\n'
+            f'المجموعة: {group.group_name}\n'
+            f'التاريخ: {when}\n'
+        )
+        if reason:
+            text += f'السبب: {reason}\n'
+        text += 'نعتذر عن الإزعاج — سيتم إبلاغكم بموعد التعويض.'
+
+        # One message per (session, student): re-cancelling an already
+        # cancelled session, or a double-click on the button, must not send
+        # the same apology twice.
+        record = _reserve_message(
+            f'session-cancelled:{session.pk}:{student.pk}',
+            phone_number=phone,
+            message_text=text,
+            message_type='parent',
+            student=student,
+            group=group,
+            status='pending',
+        )
+        if record is None:
+            continue
+
+        try:
+            result = service.send_text(phone, text)
+        except Exception:  # noqa: BLE001 - a send failure is not a cancel failure
+            logger.exception('session cancellation notice failed (session=%s)', session.pk)
+            result = {'success': False, 'error': 'exception'}
+
+        if _finalize_message(record, result):
+            sent += 1
+        else:
+            failed += 1
+
+    return sent, failed
+
+
+@shared_task
+def send_session_reminders_task():
+    """
+    Remind parents about a session starting within the next hour.
+
+    Complements the cancellation notice: between them the family knows both
+    that a lesson is coming and that it is off. Idempotent per (session,
+    student) like every other automated send here, so the beat interval can be
+    tightened without sending twice.
+    """
+    from apps.attendance.models import Session
+    from apps.students.models import StudentGroupEnrollment
+
+    now = timezone.localtime()
+    today = now.date()
+    horizon = now + timedelta(minutes=SESSION_REMINDER_LEAD_MINUTES)
+
+    service = NotificationService()
+    sent = failed = 0
+
+    sessions = (
+        Session.objects
+        .filter(session_date=today, is_cancelled=False,
+                group__is_active=True, group__deleted_at__isnull=True)
+        .select_related('group')
+        .prefetch_related('group__schedules')
+    )
+
+    for session in sessions:
+        # ``_session_start_time`` returns a clock time; combine it with the
+        # session's own date before comparing against "now".
+        clock = _session_start_time(session)
+        if clock is None:
+            continue
+        start = _local_datetime(session.session_date, clock)
+        # Only the window ahead of us: a session that already started is the
+        # attendance task's business, not a reminder's.
+        if not (now < start <= horizon):
+            continue
+
+        enrollments = (
+            StudentGroupEnrollment.objects
+            .filter(group=session.group, is_active=True,
+                    student__deleted_at__isnull=True)
+            .select_related('student')
+        )
+        for enrollment in enrollments:
+            student = enrollment.student
+            phone = student.parent_phone or student.student_phone
+            if not phone:
+                continue
+
+            text = (
+                f'تذكير بحصة اليوم\n'
+                f'الطالب: {student.full_name}\n'
+                f'المجموعة: {session.group.group_name}\n'
+                f'الموعد: {start.strftime("%I:%M %p")}'
+            )
+            record = _reserve_message(
+                f'session-reminder:{session.pk}:{student.pk}',
+                phone_number=phone,
+                message_text=text,
+                message_type='parent',
+                student=student,
+                group=session.group,
+                status='pending',
+            )
+            if record is None:
+                continue
+
+            try:
+                result = service.send_text(phone, text)
+            except Exception:  # noqa: BLE001
+                logger.exception('session reminder failed (session=%s)', session.pk)
+                result = {'success': False, 'error': 'exception'}
+
+            if _finalize_message(record, result):
+                sent += 1
+            else:
+                failed += 1
+
+    return f'Session reminders: {sent} sent, {failed} failed'

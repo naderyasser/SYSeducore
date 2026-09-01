@@ -446,6 +446,17 @@
                 تم التسديد في {{ payment.payment_date|date:"Y-m-d"|default:"—" }}
             </div>
             {% endif %}
+
+            {# Printable receipt for the student. Shown for a partial payment
+               too: money changed hands, so the parent is owed a slip for it —
+               waiting for the balance to clear is what left them with nothing
+               to show. #}
+            {% if payment.amount_paid > 0 %}
+            <a href="{% url 'payments:receipt' payment.payment_id %}" target="_blank"
+               class="btn btn-outline-secondary btn-sm w-100 mt-2">
+                <i class="bi bi-printer me-1"></i> طباعة الإيصال
+            </a>
+            {% endif %}
         </div>
     </div>
     {% endfor %}

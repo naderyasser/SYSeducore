@@ -929,3 +929,217 @@ class TestUnpaidAttendanceException(TestCase):
         self.assertIn('scannerPaymentException(', html)
         self.assertIn('استثناء حضور', html)
         self.assertIn("grant-exception", html)
+
+
+class TestPaymentReceipt(TestCase):
+    """
+    Client: "وفاتورة الدفع مش بتظهر للطالب للطبع الإيصال".
+
+    There was no receipt in the system at all — no view, no template, no link.
+    Every movement was already written to PaymentTransaction, so the data
+    existed; nothing rendered it.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='cash_sup', password='pw12345', role='supervisor',
+        )
+        self.client.force_login(self.user)
+        self.room = Room.objects.create(name='قاعة الإيصال', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الإيصال', phone='01080001111',
+            specialization='لغة عربية', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الإيصال', teacher=self.teacher, room=self.room,
+            schedule_day='Monday', schedule_time=time(13, 0),
+            standard_fee=Decimal('100.00'), sessions_per_month=4,
+        )
+        self.student = Student.objects.create(
+            student_code='RCP001', full_name='طالب الإيصال', gender='male',
+            student_phone='01080002222', parent_phone='01080003333',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+        self.payment = Payment.objects.create(
+            student=self.student, group=self.group,
+            month=timezone.localdate().replace(day=1),
+            amount_due=Decimal('100.00'), sessions_total=4,
+        )
+
+    def _url(self):
+        return reverse('payments:receipt', kwargs={'payment_id': self.payment.pk})
+
+    def test_receipt_renders_with_the_student_and_the_money(self):
+        self.payment.record_transaction(Decimal('60.00'), user=self.user)
+        response = self.client.get(self._url())
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('طالب الإيصال', html)
+        self.assertIn('مجموعة الإيصال', html)
+        self.assertIn('مدرس الإيصال', html)
+        # Money is printed unlocalised: ar-eg would render 100.00 as "100,00",
+        # which on a receipt a parent keeps is a different number.
+        self.assertIn('60.00', html)   # paid
+        self.assertIn('40.00', html)   # remaining
+        self.assertNotIn('60,00', html)
+        self.assertIn(str(self.payment.pk), html)  # receipt number
+
+    def test_receipt_lists_each_movement(self):
+        self.payment.record_transaction(Decimal('40.00'), user=self.user)
+        self.payment.record_transaction(Decimal('30.00'), user=self.user)
+        response = self.client.get(self._url())
+        self.assertEqual(len(response.context['transactions']), 2)
+
+    def test_a_partial_payment_still_gets_a_receipt(self):
+        """Money changed hands; the parent is owed a slip for it."""
+        self.payment.record_transaction(Decimal('25.00'), user=self.user)
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.status, 'partial')
+        response = self.client.get(self._url())
+        self.assertContains(response, 'مدفوع جزئيًا')
+        self.assertContains(response, '25.00')
+
+    def test_the_payments_page_links_to_it(self):
+        """The endpoint existing is not the same as the desk being able to reach it."""
+        self.payment.record_transaction(Decimal('100.00'), user=self.user)
+        response = self.client.get(reverse('payments:list'))
+        self.assertContains(response, self._url())
+        self.assertContains(response, 'طباعة الإيصال')
+
+    def test_unpaid_payment_offers_no_receipt_link(self):
+        response = self.client.get(reverse('payments:list'))
+        self.assertNotContains(response, self._url())
+
+    def test_teacher_role_cannot_open_a_receipt(self):
+        teacher_user = User.objects.create_user(
+            username='rcp_teacher', password='pw12345', role='teacher',
+        )
+        self.client.force_login(teacher_user)
+        response = self.client.get(self._url())
+        self.assertIn(response.status_code, (302, 403))
+
+
+class TestSessionAlerts(TestCase):
+    """
+    Client: "عايز تنبيه لحصة او الغاء حصة".
+
+    Cancelling a session recorded the fact and told nobody, so a family still
+    turned up. The notice is sent from the cancel action itself, not a beat
+    tick — it is only useful before they set out.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='alert_sup', password='pw12345', role='supervisor',
+        )
+        self.client.force_login(self.user)
+        self.room = Room.objects.create(name='قاعة التنبيه', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس التنبيه', phone='01060001111',
+            specialization='فيزياء', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة التنبيه', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(10, 0),
+            standard_fee=Decimal('100.00'), sessions_per_month=4,
+        )
+        self.student = Student.objects.create(
+            student_code='ALR001', full_name='طالب التنبيه', gender='male',
+            student_phone='01060002222', parent_phone='01060003333',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+        from apps.attendance.models import Session
+        self.session = Session.objects.create(
+            group=self.group, session_date=timezone.localdate(),
+        )
+
+    def test_cancelling_notifies_the_parents(self):
+        from unittest.mock import patch
+        from apps.notifications.models import WhatsAppMessage
+
+        with patch('apps.notifications.services.NotificationService.send_text',
+                   return_value={'success': True}) as send:
+            response = self.client.post(
+                reverse('attendance:cancel_session',
+                        kwargs={'session_id': self.session.pk}),
+                {'reason': 'ظرف طارئ'},
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()['success'])
+        self.assertEqual(response.json()['notified'], 1)
+
+        send.assert_called_once()
+        text = send.call_args[0][1]
+        self.assertIn('إلغاء حصة', text)
+        self.assertIn('طالب التنبيه', text)
+        self.assertIn('ظرف طارئ', text)
+
+        msg = WhatsAppMessage.objects.get(student=self.student)
+        self.assertEqual(msg.status, 'sent')
+        self.assertEqual(msg.phone_number, '01060003333')  # parent, not student
+
+    def test_the_same_cancellation_never_notifies_twice(self):
+        from unittest.mock import patch
+
+        url = reverse('attendance:cancel_session', kwargs={'session_id': self.session.pk})
+        with patch('apps.notifications.services.NotificationService.send_text',
+                   return_value={'success': True}) as send:
+            self.client.post(url, {'reason': 'أ'})
+            self.client.post(url, {'reason': 'ب'})
+        self.assertEqual(send.call_count, 1)
+
+    def test_a_messaging_outage_does_not_block_the_cancellation(self):
+        """The cancellation is a bookkeeping fact; telling people is separate."""
+        from unittest.mock import patch
+
+        with patch('apps.notifications.services.NotificationService.send_text',
+                   side_effect=RuntimeError('whatsapp down')):
+            response = self.client.post(
+                reverse('attendance:cancel_session',
+                        kwargs={'session_id': self.session.pk}),
+                {'reason': 'اختبار'},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.is_cancelled)
+
+    def test_reminder_goes_out_for_a_session_starting_soon(self):
+        from unittest.mock import patch
+        from apps.notifications.tasks import send_session_reminders_task
+
+        # Put the group's lesson 30 minutes from now, today.
+        soon = (timezone.localtime() + timedelta(minutes=30))
+        self.group.schedules.update(
+            day_of_week=soon.strftime('%A'), start_time=soon.time(),
+        )
+        self.session.session_date = soon.date()
+        self.session.save(update_fields=['session_date'])
+
+        with patch('apps.notifications.services.NotificationService.send_text',
+                   return_value={'success': True}) as send:
+            result = send_session_reminders_task()
+        self.assertIn('1 sent', result)
+        self.assertIn('تذكير بحصة', send.call_args[0][1])
+
+    def test_no_reminder_for_a_cancelled_session(self):
+        from unittest.mock import patch
+        from apps.notifications.tasks import send_session_reminders_task
+
+        soon = (timezone.localtime() + timedelta(minutes=30))
+        self.group.schedules.update(
+            day_of_week=soon.strftime('%A'), start_time=soon.time(),
+        )
+        self.session.session_date = soon.date()
+        self.session.is_cancelled = True
+        self.session.save(update_fields=['session_date', 'is_cancelled'])
+
+        with patch('apps.notifications.services.NotificationService.send_text',
+                   return_value={'success': True}) as send:
+            send_session_reminders_task()
+        send.assert_not_called()

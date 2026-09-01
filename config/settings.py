@@ -349,6 +349,13 @@ if crontab is not None:
             'task': 'apps.attendance.tasks.auto_mark_absent_sessions',
             'schedule': crontab(minute='*/2'),  # Every 2 minutes
         },
+        # Reminder for a lesson starting within the hour. Runs every 15
+        # minutes: the send is idempotent per (session, student), so a tighter
+        # interval only shortens the delay, it never duplicates a message.
+        'send-session-reminders': {
+            'task': 'apps.notifications.tasks.send_session_reminders_task',
+            'schedule': crontab(minute='*/15'),
+        },
         'roll-group-cycles': {
             'task': 'apps.attendance.tasks.roll_group_cycles',
             'schedule': crontab(hour='*/6'),  # Every 6 hours

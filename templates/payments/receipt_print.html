@@ -1,0 +1,153 @@
+{% load static %}
+{% load l10n %}
+{% comment %}
+Money on this page is printed unlocalised. LANGUAGE_CODE is ar-eg, which
+renders 100.00 as "100,00" — on a receipt a parent keeps, that is a different
+number, not a formatting preference. (Note kept in a comment *tag*: Django's
+{# #} comment is single-line only, so a multi-line one leaks its contents back
+into the template as real tags.)
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>إيصال دفع — {{ payment.student.full_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Cairo';
+            src: url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype-variations'),
+                 url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype');
+            font-weight: 200 1000;
+        }
+        * { font-family: 'Cairo', sans-serif; }
+        body { background: #f6f7fb; padding: 20px; }
+
+        /* Sized for the A5 slip the desk actually hands over, not a full page. */
+        .receipt {
+            max-width: 480px;
+            margin: 0 auto;
+            background: #fff;
+            border: 1px solid #d7dbe3;
+            border-radius: 10px;
+            padding: 22px 24px;
+        }
+        .receipt-header { text-align: center; border-bottom: 2px dashed #c9cedb; padding-bottom: 12px; margin-bottom: 14px; }
+        .receipt-header h1 { font-size: 1.35rem; font-weight: 700; margin: 0 0 2px; }
+        .receipt-header .sub { color: #6b7280; font-size: 0.82rem; }
+        .receipt-no { font-size: 0.8rem; color: #6b7280; margin-top: 6px; }
+
+        .row-line { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 0.92rem; }
+        .row-line .k { color: #6b7280; }
+        .row-line .v { font-weight: 600; text-align: left; }
+
+        .amounts { border-top: 2px dashed #c9cedb; margin-top: 12px; padding-top: 12px; }
+        .amounts .row-line .v { font-size: 1rem; }
+        .total { background: #f3f6ff; border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+        .total .row-line { padding: 2px 0; }
+        .paid  { color: #15803d; }
+        .due   { color: #b91c1c; }
+
+        table.txns { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: 0.82rem; }
+        table.txns th, table.txns td { border-bottom: 1px solid #e5e7eb; padding: 6px 4px; text-align: center; }
+        table.txns thead th { color: #6b7280; font-weight: 600; }
+
+        .stamp {
+            margin-top: 16px; text-align: center; font-weight: 700; font-size: 1rem;
+            border: 2px solid; border-radius: 8px; padding: 8px;
+        }
+        .stamp.paid    { border-color: #15803d; color: #15803d; }
+        .stamp.partial { border-color: #b45309; color: #b45309; }
+        .stamp.unpaid  { border-color: #b91c1c; color: #b91c1c; }
+
+        .footer { margin-top: 18px; border-top: 1px dashed #c9cedb; padding-top: 10px; font-size: 0.75rem; color: #6b7280; display: flex; justify-content: space-between; }
+        .sign { margin-top: 26px; display: flex; justify-content: space-between; }
+        .sign div { border-top: 1px solid #333; width: 42%; text-align: center; padding-top: 5px; font-size: 0.8rem; }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff; padding: 0; }
+            .receipt { border: none; max-width: 100%; }
+            @page { size: A5; margin: 8mm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center mb-3">
+        <button class="btn btn-primary" onclick="window.print()">
+            <i class="bi bi-printer"></i> طباعة الإيصال
+        </button>
+        <a href="{% url 'payments:list' %}" class="btn btn-outline-secondary">رجوع</a>
+    </div>
+
+    <div class="receipt">
+        <div class="receipt-header">
+            <h1>بداية — إيصال دفع</h1>
+            <div class="sub">{{ payment.group.group_name }}</div>
+            {# The payment id is the receipt number: it is unique, already
+               printed on nothing else, and lets the desk find the exact row
+               again when a parent comes back with the slip. #}
+            <div class="receipt-no">رقم الإيصال: {{ payment.payment_id }}</div>
+        </div>
+
+        <div class="row-line"><span class="k">الطالب</span><span class="v">{{ payment.student.full_name }}</span></div>
+        <div class="row-line"><span class="k">كود الطالب</span><span class="v">{{ payment.student.student_code }}</span></div>
+        <div class="row-line"><span class="k">المجموعة</span><span class="v">{{ payment.group.group_name }}</span></div>
+        <div class="row-line"><span class="k">المدرس</span><span class="v">{{ payment.group.teacher.full_name|default:"—" }}</span></div>
+        {% if payment.cycle %}
+        <div class="row-line">
+            <span class="k">الدورة</span>
+            <span class="v">دورة {{ payment.cycle.index }} — {{ payment.sessions_total }} حصة</span>
+        </div>
+        {% endif %}
+
+        <div class="amounts">
+            <div class="row-line"><span class="k">المطلوب</span><span class="v">{% localize off %}{{ payment.amount_due }}{% endlocalize %} ج.م</span></div>
+            <div class="row-line"><span class="k">المدفوع</span><span class="v paid">{% localize off %}{{ payment.amount_paid }}{% endlocalize %} ج.م</span></div>
+            <div class="total">
+                <div class="row-line">
+                    <span class="k">المتبقي</span>
+                    <span class="v {% if payment.remaining > 0 %}due{% else %}paid{% endif %}">
+                        {% localize off %}{{ payment.remaining }}{% endlocalize %} ج.م
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        {% if transactions %}
+        <table class="txns">
+            <thead>
+                <tr><th>التاريخ</th><th>البيان</th><th>المبلغ</th><th>استلمها</th></tr>
+            </thead>
+            <tbody>
+                {% for t in transactions %}
+                <tr>
+                    <td>{{ t.effective_on|date:"Y-m-d" }}</td>
+                    <td>{{ t.get_kind_display }}</td>
+                    <td>{% localize off %}{{ t.amount }}{% endlocalize %} ج.م</td>
+                    <td>{{ t.created_by.get_full_name|default:t.created_by.username|default:"—" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        <div class="stamp {{ payment.status }}">
+            {% if payment.status == 'paid' %}مدفوع بالكامل
+            {% elif payment.status == 'partial' %}مدفوع جزئيًا — المتبقي {% localize off %}{{ payment.remaining }}{% endlocalize %} ج.م
+            {% else %}غير مدفوع{% endif %}
+        </div>
+
+        <div class="sign">
+            <div>توقيع المستلم</div>
+            <div>ختم المركز</div>
+        </div>
+
+        <div class="footer">
+            <span>طُبع في {{ printed_at|date:"Y-m-d H:i" }}</span>
+            <span>بواسطة {{ printed_by.get_full_name|default:printed_by.username }}</span>
+        </div>
+    </div>
+</body>
+</html>

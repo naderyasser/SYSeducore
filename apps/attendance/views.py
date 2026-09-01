@@ -175,6 +175,16 @@ def cancel_session(request, session_id):
         except ValueError as exc:
             return JsonResponse({'success': False, 'error': str(exc)}, status=409)
 
+    # Tell the families before they set out. Deliberately after the DB write
+    # and outside its guard: the cancellation is a bookkeeping fact, and a
+    # WhatsApp outage must not undo it.
+    notified = 0
+    try:
+        from apps.notifications.tasks import notify_session_cancelled
+        notified, _ = notify_session_cancelled(session, reason)
+    except Exception:  # noqa: BLE001
+        logger.exception('cancellation notice failed for session %s', session.pk)
+
     ActivityLog.log(
         user=request.user,
         action='session_cancel',
@@ -187,7 +197,7 @@ def cancel_session(request, session_id):
         request=request,
     )
 
-    return JsonResponse({'success': True})
+    return JsonResponse({'success': True, 'notified': notified})
 
 
 @ajax_login_required

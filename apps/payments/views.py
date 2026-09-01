@@ -383,6 +383,39 @@ def settlement_index(request):
     })
 
 
+@supervisor_required
+def payment_receipt(request, payment_id):
+    """
+    إيصال دفع قابل للطباعة للطالب.
+
+    Reported as "فاتورة الدفع مش بتظهر للطالب للطبع الإيصال" — there was no
+    receipt at all. Every money movement has been written to
+    ``PaymentTransaction`` since the ledger was introduced, so the data for a
+    proper receipt already existed; nothing ever rendered it.
+
+    Supervisor-level, not admin: the person who takes the money at the desk is
+    the person who has to hand over the receipt. It shows one payment only —
+    no centre-wide totals — so it does not leak the aggregate figures that
+    ``can_see_financials`` protects.
+    """
+    payment = get_object_or_404(
+        Payment.objects.select_related(
+            'student', 'group', 'group__teacher', 'cycle',
+        ),
+        pk=payment_id,
+    )
+    # Oldest first: a receipt reads as a statement of what was paid and when.
+    transactions = payment.transactions.select_related('created_by').order_by(
+        'effective_on', 'created_at',
+    )
+    return render(request, 'payments/receipt_print.html', {
+        'payment': payment,
+        'transactions': transactions,
+        'printed_at': timezone.now(),
+        'printed_by': request.user,
+    })
+
+
 @admin_required
 def settlement_detail(request, settlement_id):
     """عرض/تعديل كشف تصفية محدد."""
