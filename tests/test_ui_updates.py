@@ -1143,3 +1143,123 @@ class TestSessionAlerts(TestCase):
                    return_value={'success': True}) as send:
             send_session_reminders_task()
         send.assert_not_called()
+
+
+class TestSettlementPeriodBugs(TestCase):
+    """
+    Two money bugs behind "التصفية مش ظاهرة".
+
+    ``Payment.month`` is a bucket — always the first of the month — not the day
+    the money moved, and it was compared directly against period_start. A sheet
+    for 2 Aug — 1 Sep therefore excluded every August payment and came out at
+    0.00, beside an identical-looking 1 Aug — 31 Aug sheet worth thousands.
+
+    And a period spanning two cycles built two lines for the same
+    (group, student), which the unique constraint rejected: the sheet failed
+    with a 500 instead of rendering.
+    """
+
+    def setUp(self):
+        from apps.accounts.models import User as U
+        self.user = U.objects.create_user(
+            username='settle_calc', password='pw12345', role='admin',
+        )
+        self.room = Room.objects.create(name='قاعة التصفية', capacity=30)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس التصفية', phone='01050001111',
+            specialization='كيمياء', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة التصفية', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(9, 0),
+            standard_fee=Decimal('200.00'), center_percentage=Decimal('30.00'),
+            sessions_per_month=4,
+        )
+        self.student = Student.objects.create(
+            student_code='STL001', full_name='طالب التصفية', gender='male',
+            student_phone='01050002222', parent_phone='01050003333',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=self.student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+        self.aug_cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4,
+            started_on=date(2026, 8, 1), closed_on=date(2026, 8, 29),
+        )
+        self.aug_payment = Payment.objects.create(
+            student=self.student, group=self.group, cycle=self.aug_cycle,
+            month=date(2026, 8, 1), amount_due=Decimal('200.00'),
+            amount_paid=Decimal('200.00'), status='paid',
+            sessions_total=4, sessions_attended=4,
+        )
+
+    def _build(self, start, end):
+        from apps.payments.services import SettlementService
+        return SettlementService.build_or_refresh(
+            self.teacher, start, end, user=self.user,
+        )
+
+    def test_period_starting_on_the_first_finds_the_money(self):
+        settlement = self._build(date(2026, 8, 1), date(2026, 8, 31))
+        self.assertEqual(settlement.lines.count(), 1)
+        self.assertEqual(settlement.computed_gross, Decimal('200.00'))
+
+    def test_period_starting_one_day_later_finds_the_same_money(self):
+        """The regression: one day of difference used to zero the sheet."""
+        settlement = self._build(date(2026, 8, 2), date(2026, 9, 1))
+        self.assertEqual(settlement.lines.count(), 1)
+        self.assertEqual(settlement.computed_gross, Decimal('200.00'))
+
+    def test_period_starting_mid_month_finds_the_same_money(self):
+        settlement = self._build(date(2026, 8, 15), date(2026, 9, 14))
+        self.assertEqual(settlement.computed_gross, Decimal('200.00'))
+
+    def test_a_period_spanning_two_cycles_does_not_crash(self):
+        """Two payments, same student, same group — one line, both summed."""
+        sep_cycle = GroupCycle.objects.create(
+            group=self.group, index=2, sessions_planned=4,
+            started_on=date(2026, 9, 1),
+        )
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=sep_cycle,
+            month=date(2026, 9, 1), amount_due=Decimal('200.00'),
+            amount_paid=Decimal('150.00'), status='partial',
+            sessions_total=4, sessions_attended=4,
+        )
+
+        settlement = self._build(date(2026, 8, 1), date(2026, 9, 30))
+        self.assertEqual(settlement.lines.count(), 1)
+
+        line = settlement.lines.get()
+        self.assertEqual(line.sessions_entitled, 8)          # 4 + 4
+        self.assertEqual(line.sessions_consumed, 8)
+        self.assertEqual(line.collected_amount, Decimal('350.00'))   # 200 + 150
+        self.assertEqual(line.fee_full, Decimal('400.00'))           # 200 x 2 cycles
+        self.assertEqual(settlement.computed_gross, Decimal('400.00'))
+
+    def test_each_cycle_is_prorated_on_its_own(self):
+        """
+        Summing sessions before pro-rating would let a fully attended cycle
+        subsidise a barely attended one.
+        """
+        sep_cycle = GroupCycle.objects.create(
+            group=self.group, index=2, sessions_planned=4,
+            started_on=date(2026, 9, 1),
+        )
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=sep_cycle,
+            month=date(2026, 9, 1), amount_due=Decimal('200.00'),
+            amount_paid=Decimal('0.00'), status='unpaid',
+            sessions_total=4, sessions_attended=1,   # one lesson only
+        )
+        settlement = self._build(date(2026, 8, 1), date(2026, 9, 30))
+        line = settlement.lines.get()
+        # 200 (4/4) + 50 (1/4) = 250, not 400 x 5/8 = 250 by luck — check the parts.
+        self.assertEqual(line.computed_amount, Decimal('250.00'))
+
+    def test_a_period_with_no_payments_is_genuinely_empty(self):
+        """The fix must not start inventing money outside the period."""
+        settlement = self._build(date(2026, 1, 1), date(2026, 2, 8))
+        self.assertEqual(settlement.lines.count(), 0)
+        self.assertEqual(settlement.computed_gross, Decimal('0.00'))

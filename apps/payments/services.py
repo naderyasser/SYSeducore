@@ -202,11 +202,22 @@ class SettlementService:
         group_ids = [g.group_id for g in groups]
         groups_by_id = {g.group_id: g for g in groups}
 
+        # ``Payment.month`` is a *bucket* — always the first of the month — not
+        # the day the money moved. Comparing it against ``period_start``
+        # directly therefore drops a whole month whenever the period does not
+        # begin on the 1st: a sheet for 2 Aug — 1 Sep excluded every August
+        # payment and came out at 0.00 next to an identical-looking sheet for
+        # 1 Aug — 31 Aug worth 5,653 EGP. One day of difference, the teacher's
+        # entire month of earnings. The bucket is included when it *overlaps*
+        # the period, which is what the desk means by "this period".
+        period_first_bucket = period_start.replace(day=1)
         payments = (
             Payment.objects.filter(
-                group_id__in=group_ids, month__gte=period_start, month__lte=period_end,
+                group_id__in=group_ids,
+                month__gte=period_first_bucket, month__lte=period_end,
             )
             .select_related('student', 'cycle')
+            .order_by('month', 'payment_id')
         )
 
         enrollments = {
@@ -215,36 +226,73 @@ class SettlementService:
         }
 
         existing_lines = {(l.group_id, l.student_id): l for l in settlement.lines.all()}
+        # One line per (group, student) — the table is unique on that — but a
+        # period can legitimately span several cycles, so a student may have
+        # several payments in it. Iterating payments directly built a second
+        # line for the same pair and the insert died on the unique constraint:
+        # a settlement covering more than one cycle failed with a 500 rather
+        # than a sheet. Payments are grouped first and their cycles summed.
+        payments_by_key = {}
+        for payment in payments:
+            payments_by_key.setdefault(
+                (payment.group_id, payment.student_id), []
+            ).append(payment)
+
         seen_keys = set()
 
-        for payment in payments:
-            key = (payment.group_id, payment.student_id)
+        for key, key_payments in payments_by_key.items():
             seen_keys.add(key)
-            group = groups_by_id.get(payment.group_id)
+            group_id, student_id = key
+            group = groups_by_id.get(group_id)
             enrollment = enrollments.get(key)
 
             line = existing_lines.get(key)
             if line is None:
                 line = TeacherSettlementLine(
-                    settlement=settlement, group_id=payment.group_id, student_id=payment.student_id,
+                    settlement=settlement, group_id=group_id, student_id=student_id,
                 )
 
-            fee_full = base_fee(enrollment, group) if (enrollment and group) else to_money(payment.amount_due)
-            sessions_entitled = payment.sessions_total
-            sessions_consumed = payment.sessions_attended
+            # The most recent payment represents the line (its cycle is the one
+            # shown); the money and the sessions are the sum over the period.
+            latest = key_payments[-1]
+            per_cycle_fee = (
+                base_fee(enrollment, group) if (enrollment and group)
+                else to_money(latest.amount_due)
+            )
 
-            line.cycle = payment.cycle
-            line.payment = payment
+            sessions_entitled = sum(p.sessions_total for p in key_payments)
+            sessions_consumed = sum(p.sessions_attended for p in key_payments)
+            collected = sum((p.amount_paid for p in key_payments), to_money(0))
+            # Pro-rated per cycle and then added up: pro-rating the summed
+            # totals against a summed entitlement would silently let a fully
+            # attended cycle subsidise a barely attended one.
+            computed = sum(
+                (
+                    SettlementService._prorate_by_sessions(
+                        per_cycle_fee, p.sessions_attended, p.sessions_total,
+                    )
+                    for p in key_payments
+                ),
+                to_money(0),
+            )
+
+            session_dates = []
+            for p in key_payments:
+                session_dates.extend(
+                    SettlementService._session_dates_for(p.student_id, p.cycle_id)
+                )
+
+            line.cycle = latest.cycle
+            line.payment = latest
             line.sessions_consumed = sessions_consumed
             line.sessions_entitled = sessions_entitled
-            line.session_dates = SettlementService._session_dates_for(
-                payment.student_id, payment.cycle_id,
-            )
-            line.fee_full = fee_full
-            line.computed_amount = SettlementService._prorate_by_sessions(
-                fee_full, sessions_consumed, sessions_entitled,
-            )
-            line.collected_amount = payment.amount_paid
+            line.session_dates = session_dates
+            # "Full price" for the line means the full price of everything the
+            # period covers, so it stays comparable with the summed amounts
+            # beside it.
+            line.fee_full = to_money(per_cycle_fee * len(key_payments))
+            line.computed_amount = computed
+            line.collected_amount = collected
             line.financial_status = enrollment.financial_status if enrollment else ''
             line.group_center_percentage = group.center_percentage if group else settlement.default_center_percentage
             line.apply()
