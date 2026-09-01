@@ -1263,3 +1263,125 @@ class TestSettlementPeriodBugs(TestCase):
         settlement = self._build(date(2026, 1, 1), date(2026, 2, 8))
         self.assertEqual(settlement.lines.count(), 0)
         self.assertEqual(settlement.computed_gross, Decimal('0.00'))
+
+
+class TestMissedSessionRecovery(TestCase):
+    """
+    Client: "كدا شهر كامل مش بيبعد 8 حصص".
+
+    auto_mark_absent_sessions only ever materialises *today*, so any window in
+    which the worker was not consuming costs those days their Session rows
+    permanently — and the cycles then count lessons that were never written.
+    """
+
+    def setUp(self):
+        self.room = Room.objects.create(name='قاعة الحصص', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الحصص', phone='01040001111',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+        today = timezone.localdate()
+        # A group meeting on both of the last two weekdays.
+        self.yesterday = today - timedelta(days=1)
+        self.day_before = today - timedelta(days=2)
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الحصص', teacher=self.teacher, room=self.room,
+            schedule_day=self.yesterday.strftime('%A'), schedule_time=time(9, 0),
+            standard_fee=Decimal('200.00'), sessions_per_month=8,
+        )
+        from apps.teachers.models import GroupSchedule
+        GroupSchedule.objects.create(
+            group=self.group, day_of_week=self.day_before.strftime('%A'),
+            start_time=time(9, 0), duration=120, room=self.room,
+        )
+        # Backdate creation so the group existed on those days.
+        Group.objects.filter(pk=self.group.pk).update(
+            created_at=timezone.now() - timedelta(days=30),
+        )
+
+    def test_the_task_recovers_days_it_missed(self):
+        from apps.attendance.models import Session
+        from apps.attendance.tasks import auto_mark_absent_sessions
+
+        self.assertEqual(Session.objects.count(), 0)
+        auto_mark_absent_sessions()
+
+        recovered = set(Session.objects.values_list('session_date', flat=True))
+        self.assertIn(self.yesterday, recovered)
+        self.assertIn(self.day_before, recovered)
+
+    def test_recovery_writes_no_attendance(self):
+        """
+        A day nobody scanned is a day we cannot honestly mark anyone absent
+        for — that would charge students for lessons we cannot show they missed.
+        """
+        from apps.attendance.models import Attendance, Session
+        from apps.attendance.tasks import auto_mark_absent_sessions
+
+        student = Student.objects.create(
+            student_code='SES001', full_name='طالب الحصص', gender='male',
+            student_phone='01040002222', parent_phone='01040003333',
+        )
+        StudentGroupEnrollment.objects.create(
+            student=student, group=self.group,
+            financial_status='normal', is_active=True,
+        )
+        auto_mark_absent_sessions()
+
+        past = Session.objects.filter(session_date=self.day_before)
+        self.assertTrue(past.exists())
+        self.assertEqual(Attendance.objects.filter(session__in=past).count(), 0)
+
+    def test_recovery_skips_days_before_the_group_existed(self):
+        from apps.attendance.models import Session
+        from apps.attendance.tasks import auto_mark_absent_sessions
+
+        Group.objects.filter(pk=self.group.pk).update(created_at=timezone.now())
+        auto_mark_absent_sessions()
+        self.assertFalse(
+            Session.objects.filter(session_date=self.day_before).exists()
+        )
+
+    def test_command_reports_without_writing_by_default(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.attendance.models import Session
+
+        out = StringIO()
+        call_command(
+            'backfill_sessions',
+            '--from', (timezone.localdate() - timedelta(days=3)).isoformat(),
+            '--to', (timezone.localdate() - timedelta(days=1)).isoformat(),
+            stdout=out,
+        )
+        self.assertIn('Dry run', out.getvalue())
+        self.assertEqual(Session.objects.count(), 0)
+
+    def test_command_creates_them_with_apply(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from apps.attendance.models import Session
+
+        out = StringIO()
+        call_command(
+            'backfill_sessions',
+            '--from', (timezone.localdate() - timedelta(days=3)).isoformat(),
+            '--to', (timezone.localdate() - timedelta(days=1)).isoformat(),
+            '--apply', stdout=out,
+        )
+        self.assertIn('Created', out.getvalue())
+        self.assertGreater(Session.objects.count(), 0)
+
+    def test_command_refuses_to_touch_today(self):
+        """Today belongs to the live task; a future day has not happened."""
+        from io import StringIO
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command(
+            'backfill_sessions',
+            '--from', (timezone.localdate() - timedelta(days=1)).isoformat(),
+            '--to', (timezone.localdate() + timedelta(days=5)).isoformat(),
+            stdout=out,
+        )
+        self.assertIn('trimmed', out.getvalue())

@@ -2,6 +2,7 @@ import logging
 from datetime import timedelta
 
 from celery import shared_task
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -9,6 +10,17 @@ logger = logging.getLogger('attendance')
 
 #: A student who has not scanned this long after a session started is absent.
 AUTO_ABSENCE_DELAY_MINUTES = 10
+
+#: How many past days ``auto_mark_absent_sessions`` re-checks for scheduled
+#: lessons it never recorded. Small on purpose: it is insurance against a short
+#: outage, not a substitute for the backfill command, which is what recovers a
+#: long historical gap under someone's supervision.
+SESSION_BACKFILL_DAYS = getattr(settings, 'SESSION_BACKFILL_DAYS', 3)
+
+#: ``date.weekday()`` -> the English day names stored on ``GroupSchedule``.
+_WEEKDAY_NAMES = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+]
 
 
 @shared_task
@@ -58,6 +70,50 @@ def auto_mark_absent_sessions():
         )
         if created:
             assign_to_cycle(session)
+
+    # ── Step 0b: recover scheduled days this task missed.
+    #
+    # Step 0 only ever looks at *today*, so any window in which the worker was
+    # not consuming — a deploy, a crash, the stale beat entry that spent eleven
+    # days raising KeyError on every tick — silently costs those days their
+    # Session rows, permanently. Measured on this centre's own data: through
+    # late August roughly half of each day's scheduled groups never got one,
+    # which is why a full month reported three or four lessons instead of eight
+    # and why the cycles never filled up.
+    #
+    # Only the Session row is created. No attendance is written for a recovered
+    # day: absence marking below is scoped to ``session_date=today``, and
+    # inventing an absence for a day nobody scanned would charge students for
+    # lessons we cannot show they missed. The lesson is recorded; who attended
+    # it stays blank and can be entered by hand.
+    backfilled = 0
+    for days_back in range(1, SESSION_BACKFILL_DAYS + 1):
+        past_day = today - timedelta(days=days_back)
+        past_day_name = _WEEKDAY_NAMES[past_day.weekday()]
+        candidates = (
+            Group.objects.filter(is_active=True, deleted_at__isnull=True)
+            .exclude(sessions__session_date=past_day)
+            .prefetch_related('schedules__room')
+        )
+        for group in candidates:
+            # A group created after that day never held a lesson on it.
+            if timezone.localtime(group.created_at).date() > past_day:
+                continue
+            entry = group.get_schedule_for_day(past_day_name)
+            if entry is None or not entry.start_time:
+                continue
+            session, created = Session.objects.get_or_create(
+                group=group, session_date=past_day,
+                defaults={'teacher_attended': False},
+            )
+            if created:
+                assign_to_cycle(session)
+                backfilled += 1
+    if backfilled:
+        logger.warning(
+            'Recovered %s scheduled session(s) missed in the last %s day(s)',
+            backfilled, SESSION_BACKFILL_DAYS,
+        )
 
     sessions = Session.objects.filter(
         session_date=today,
