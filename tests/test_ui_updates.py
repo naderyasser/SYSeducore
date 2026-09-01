@@ -723,3 +723,74 @@ class TestSearchableDropdownMarkup(TestCase):
         html = self.client.get(reverse('students:create')).content.decode()
         self.assertIn('id="filter_teacher"', html)
         self.assertIn('مدرس القائمة', html)
+
+
+class TestSettlementTeacherPicker(TestCase):
+    """
+    Client report: "ف اختيار المدرس مفيش اختيار، ظاهرين بس" — on the settlement
+    screen the teacher names show but choosing one does nothing.
+
+    Two causes, both real:
+      * Two teachers share a name *and* a phone number, differing only by
+        subject, so the picker rendered two byte-identical rows.
+      * Selecting a teacher had no visible effect — the view already supported
+        ``?teacher=<id>`` to filter their sheets, but nothing ever triggered it.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='settle_admin', password='pw12345', role='admin',
+        )
+        self.client.force_login(self.user)
+        # Same name, same phone, different subject — the real shape of the data.
+        self.dup_a = Teacher.objects.create(
+            full_name='جهاد محمود', phone='01097948589',
+            specialization='دراسات اجتماعيه', hire_date=date(2024, 1, 1),
+        )
+        self.dup_b = Teacher.objects.create(
+            full_name='جهاد محمود', phone='01097948589',
+            specialization='تاريخ', hire_date=date(2024, 1, 1),
+        )
+        self.unique = Teacher.objects.create(
+            full_name='مدرس فريد', phone='01000000001',
+            specialization='رياضيات', hire_date=date(2024, 1, 1),
+        )
+
+    def test_duplicate_names_are_disambiguated_by_subject(self):
+        response = self.client.get(reverse('payments:settlement_index'))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode()
+        self.assertIn('جهاد محمود — دراسات اجتماعيه', html)
+        self.assertIn('جهاد محمود — تاريخ', html)
+
+    def test_unique_names_are_left_alone(self):
+        """Only colliding names get the suffix; the list stays clean otherwise."""
+        response = self.client.get(reverse('payments:settlement_index'))
+        self.assertNotIn('مدرس فريد — رياضيات', response.content.decode())
+        self.assertContains(response, 'مدرس فريد')
+
+    def test_choosing_a_teacher_filters_their_sheets(self):
+        """The ?teacher= path the picker now triggers."""
+        response = self.client.get(
+            reverse('payments:settlement_index'), {'teacher': self.dup_b.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['selected_teacher'], self.dup_b.pk)
+
+    def test_typed_dates_survive_choosing_a_teacher(self):
+        """
+        Selecting reloads the page; dates already typed must not be lost, or
+        the desk retypes them every time it changes its mind.
+        """
+        response = self.client.get(reverse('payments:settlement_index'), {
+            'teacher': self.dup_a.pk,
+            'period_start': '2026-01-01',
+            'period_end': '2026-02-08',
+        })
+        html = response.content.decode()
+        self.assertIn('value="2026-01-01"', html)
+        self.assertIn('value="2026-02-08"', html)
+
+    def test_picker_is_searchable(self):
+        response = self.client.get(reverse('payments:settlement_index'))
+        self.assertContains(response, 'data-searchable')

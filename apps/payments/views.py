@@ -356,10 +356,30 @@ def settlement_index(request):
     # Sliced last — a queryset cannot be filtered once a slice has been taken.
     recent = recent.order_by('-created_at')[:20]
 
+    # Two teachers in this centre share a name *and* a phone number, differing
+    # only by the subject they teach, so a picker showing bare ``full_name``
+    # renders two identical rows and the desk cannot tell which one it is
+    # choosing. The template appends the specialization; this flag lets it do
+    # that only for the names that actually collide, so the common case stays
+    # a clean list of names.
+    duplicate_names = set(
+        Teacher.objects.filter(is_active=True)
+        .values('full_name')
+        .annotate(n=Count('teacher_id'))
+        .filter(n__gt=1)
+        .values_list('full_name', flat=True)
+    )
+    for teacher in teachers:
+        teacher.name_is_ambiguous = teacher.full_name in duplicate_names
+
     return render(request, 'payments/settlement_index.html', {
         'teachers': teachers,
         'recent_settlements': recent,
         'selected_teacher': selected_teacher,
+        # Echoed back so choosing a teacher (which reloads to filter their
+        # sheets) does not discard dates the user had already typed.
+        'period_start': request.GET.get('period_start', ''),
+        'period_end': request.GET.get('period_end', ''),
     })
 
 

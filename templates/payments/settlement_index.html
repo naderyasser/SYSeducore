@@ -10,22 +10,31 @@
         <div class="card-body">
             <form id="buildForm" class="row g-3 align-items-end">
                 <div class="col-md-4">
-                    <label class="form-label">المدرس</label>
-                    <select name="teacher_id" class="form-select" required>
+                    <label class="form-label" for="teacher_select">المدرس</label>
+                    {# Two teachers here share a name AND a phone number, so a bare
+                       full_name produced two identical rows with no way to tell
+                       them apart. The specialization is appended for exactly the
+                       names that collide (view sets name_is_ambiguous), and the
+                       list is type-to-search because 32 names is a long scroll. #}
+                    <select name="teacher_id" id="teacher_select" class="form-select" required
+                            data-searchable data-placeholder="اكتب اسم المدرس...">
                         <option value="">اختر مدرسًا</option>
                         {% for teacher in teachers %}
                         <option value="{{ teacher.teacher_id }}"
-                                {% if selected_teacher == teacher.teacher_id %}selected{% endif %}>{{ teacher.full_name }}</option>
+                                {% if selected_teacher == teacher.teacher_id %}selected{% endif %}>{{ teacher.full_name }}{% if teacher.name_is_ambiguous %} — {{ teacher.specialization|default:"بدون تخصص" }}{% endif %}</option>
                         {% endfor %}
                     </select>
+                    <div class="form-text">اختيار المدرس يعرض كشوفاته السابقة بالأسفل فورًا.</div>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">من تاريخ</label>
-                    <input type="date" name="period_start" class="form-control" required>
+                    <input type="date" name="period_start" class="form-control"
+                           value="{{ period_start }}" required>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">إلى تاريخ</label>
-                    <input type="date" name="period_end" class="form-control" required>
+                    <input type="date" name="period_end" class="form-control"
+                           value="{{ period_end }}" required>
                 </div>
                 <div class="col-md-2">
                     <button type="submit" class="btn btn-primary w-100">
@@ -82,6 +91,23 @@
 
 {% block extra_js %}
 <script>
+// Choosing a teacher used to do nothing visible: the desk had to also fill two
+// required dates and press the button before anything happened, so the picker
+// felt inert. The view already supports ?teacher=<id> (it filters the sheets
+// table below) — it was simply never triggered from here. Any dates already
+// typed are carried across the reload so the selection does not cost them.
+document.getElementById('teacher_select').addEventListener('change', function () {
+    const params = new URLSearchParams();
+    if (this.value) params.set('teacher', this.value);
+    const form = document.getElementById('buildForm');
+    ['period_start', 'period_end'].forEach(function (name) {
+        const field = form.elements[name];
+        if (field && field.value) params.set(name, field.value);
+    });
+    const qs = params.toString();
+    window.location = window.location.pathname + (qs ? '?' + qs : '');
+});
+
 document.getElementById('buildForm').addEventListener('submit', function (e) {
     e.preventDefault();
     const formData = new FormData(this);
