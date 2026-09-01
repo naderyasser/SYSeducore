@@ -121,8 +121,20 @@ class AttendanceService:
     """
 
     # ثوابت النظام
-    STRICT_GRACE_PERIOD_MINUTES = 10  # قاعدة الـ 10 دقائق الصارمة
+    #: كان الوصول بعد 10 دقائق يُرفض تمامًا. طلب المركز إلغاء المنع: الطالب
+    #: المتأخر يدخل ويُسجَّل "متأخر"، ولا يُمنع. القيمة باقية لأن حساب
+    #: "متأخر كام دقيقة" ما زال يستخدمها في العرض والتقارير.
+    STRICT_GRACE_PERIOD_MINUTES = 10
     EARLY_ARRIVAL_LIMIT_MINUTES = 30  # السماح بالوصول قبل 30 دقيقة
+
+    #: منع الدخول بسبب التأخير — مُعطَّل افتراضيًا بناءً على طلب المركز.
+    #: يُعاد تفعيله بوضع ``BLOCK_LATE_ENTRY = True`` في الإعدادات، بدون
+    #: إعادة كتابة المنطق: الفرق بين "نسجّل التأخير" و"نمنع بسببه" قرار
+    #: إداري يتغيّر، لا قاعدة ثابتة في الكود.
+    @staticmethod
+    def late_entry_is_blocked():
+        from django.conf import settings
+        return bool(getattr(settings, 'BLOCK_LATE_ENTRY', False))
 
     @staticmethod
     def get_instant_status(student, group):
@@ -633,15 +645,23 @@ class AttendanceService:
                 'error_type': 'too_early'
             }
 
-        # القاعدة الصارمة: أكثر من 10 دقائق = رفض
-        if diff_minutes > AttendanceService.STRICT_GRACE_PERIOD_MINUTES:
+        # التأخير لم يعد يمنع الدخول (طلب المركز). يُسجَّل الطالب "متأخر"
+        # مهما بلغ التأخير، ويظل الرفض ممكنًا فقط إذا كان الحد مُفعَّلًا
+        # صراحةً في الإعدادات.
+        if (
+            AttendanceService.late_entry_is_blocked()
+            and diff_minutes > AttendanceService.STRICT_GRACE_PERIOD_MINUTES
+        ):
             return {
                 'allowed': False,
-                'reason': f'ممنوع الدخول - تأخرت {int(diff_minutes)} دقيقة (الحد المسموح: 10 دقائق)',
+                'reason': (
+                    f'ممنوع الدخول - تأخرت {int(diff_minutes)} دقيقة '
+                    f'(الحد المسموح: {AttendanceService.STRICT_GRACE_PERIOD_MINUTES} دقائق)'
+                ),
                 'error_type': 'too_late'
             }
 
-        # قبول: في الموعد (حاضر) أو في حدود الـ 10 دقائق (متأخر)
+        # قبول: في الموعد (حاضر) أو متأخر (يُسجَّل كـ "متأخر" مهما طال التأخير)
         minutes_late = max(0, int(diff_minutes))
         return {
             'allowed': True,

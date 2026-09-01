@@ -1636,14 +1636,23 @@ function displayResult(data, code) {
         if (paymentSkip && paymentSkip.student_id) {
             const sid = paymentSkip.student_id;
             const pid = paymentSkip.payment_id ? String(paymentSkip.payment_id) : 'null';
+            // Both actions below are per-group. Without it the grace endpoint
+            // falls back to "every group this student is in", which is the
+            // system-wide exemption the per-group billing model exists to
+            // prevent — a 3-day grace for one teacher became 3 free days
+            // with every teacher.
+            const gid = paymentSkip.group_id ? String(paymentSkip.group_id) : 'null';
             const amt = paymentSkip.amount_due || 0;
             detailHtml += `
             <div class="scanner-actions" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
                 <button class="btn btn-success btn-lg flex-fill" onclick="scannerPayNow(${pid}, ${sid})" style="min-width:140px;">
                     <i class="bi bi-cash-stack me-1"></i> ادفع الان${amt > 0 ? ' (' + amt + ' ج.م)' : ''}
                 </button>
-                <button class="btn btn-warning btn-lg flex-fill" onclick="scannerGracePrompt(${sid})" style="min-width:140px;">
-                    <i class="bi bi-clock me-1"></i> استثناء
+                <button class="btn btn-primary btn-lg flex-fill" onclick="scannerPaymentException(${sid}, ${gid})" style="min-width:140px;">
+                    <i class="bi bi-shield-check me-1"></i> استثناء حضور (اليوم)
+                </button>
+                <button class="btn btn-warning btn-lg flex-fill" onclick="scannerGracePrompt(${sid}, ${gid})" style="min-width:140px;">
+                    <i class="bi bi-clock me-1"></i> مهلة أيام
                 </button>
             </div>`;
         }
@@ -1695,15 +1704,73 @@ async function scannerPayNow(paymentId, studentId) {
     }
 }
 
+/**
+ * استثناء حضور لطالب غير مدفوع — يدخل اليوم فقط، بدون تغيير حالته المالية.
+ *
+ * The endpoint (attendance:grant_exception) has existed all along and is what
+ * apps/attendance/entitlement.py checks before rejecting an unpaid student —
+ * but nothing in the UI ever called it, which is why "استثناء الدفع" was
+ * reported as not working. The button that carried that label actually opened
+ * the *grace days* dialog, a different decision entirely: grace opens the gate
+ * for N days, this lets one student in for one day.
+ */
+async function scannerPaymentException(studentId, groupId) {
+    const reason = prompt(
+        'سبب استثناء الحضور:\n' +
+        '1 = نسي المصروفات\n' +
+        '2 = كان في حصة أخرى\n' +
+        '3 = ظرف عائلي طارئ\n' +
+        '4 = سبب آخر',
+        '1'
+    );
+    if (reason === null) return;
+    const reasonMap = {
+        '1': 'forgot_money',
+        '2': 'another_class',
+        '3': 'family_emergency',
+        '4': 'other'
+    };
+    const reasonType = reasonMap[String(reason).trim()] || 'other';
+
+    try {
+        const resp = await fetch('{% url "attendance:grant_exception" %}', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
+            body: JSON.stringify({
+                student_id: studentId,
+                group_id: groupId || null,
+                exception_type: 'payment',
+                reason_type: reasonType
+            })
+        });
+        const data = await resp.json();
+        if (data.success) {
+            playSound('success');
+            showToast('تم منح استثناء الحضور لهذا اليوم', 'success');
+            // Re-scan so the attendance is actually registered now that the
+            // financial gate will pass; granting alone records nothing.
+            const input = document.getElementById('manualCodeInput');
+            const lastCode = input.dataset.lastCode || '';
+            if (lastCode) setTimeout(() => processStudentCode(lastCode), 500);
+        } else {
+            showToast('خطأ: ' + (data.message || 'فشل منح الاستثناء'), 'danger');
+        }
+    } catch (e) {
+        showToast('خطأ في الاتصال', 'danger');
+    }
+}
+
 // Grace period modal state
 let _graceStudentId = null;
+let _graceGroupId = null;
 
 function setGraceDays(d) {
     document.getElementById('graceDaysInput').value = d;
 }
 
-function scannerGracePrompt(studentId) {
+function scannerGracePrompt(studentId, groupId) {
     _graceStudentId = studentId;
+    _graceGroupId = groupId || null;
     document.getElementById('graceDaysInput').value = 3;
     document.getElementById('graceModal').style.display = 'flex';
 }
@@ -1711,21 +1778,23 @@ function scannerGracePrompt(studentId) {
 function closeGraceModal() {
     document.getElementById('graceModal').style.display = 'none';
     _graceStudentId = null;
+    _graceGroupId = null;
 }
 
 function confirmGrace() {
     const days = parseInt(document.getElementById('graceDaysInput').value);
     if (!days || days <= 0) return;
+    const sid = _graceStudentId, gid = _graceGroupId;
     closeGraceModal();
-    scannerGracePeriod(_graceStudentId, days);
+    scannerGracePeriod(sid, days, gid);
 }
 
-async function scannerGracePeriod(studentId, days) {
+async function scannerGracePeriod(studentId, days, groupId) {
     try {
         const resp = await fetch('{% url "attendance:scanner_grace_period" %}', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
-            body: JSON.stringify({student_id: studentId, days: days})
+            body: JSON.stringify({student_id: studentId, days: days, group_id: groupId || null})
         });
         const data = await resp.json();
         if (data.success) {

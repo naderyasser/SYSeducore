@@ -108,27 +108,39 @@ class AttendanceServiceStrictTest(TestCase):
         self.assertTrue(result['allowed'])
         self.assertEqual(result['status'], 'late')
 
-    def test_check_strict_time_11_minutes_late_block(self):
-        """اختبار: تأخر 11 دقيقة (9:11) - رفض كامل ⚠️"""
+    def test_check_strict_time_11_minutes_late_allowed(self):
+        """تأخر 11 دقيقة - يدخل ويُسجَّل متأخر (المنع أُلغي بطلب المركز)"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 11))
         )
 
         result = AttendanceService.check_strict_time(scan_time, schedule_time)
-        self.assertFalse(result['allowed'])
-        self.assertIn('ممنوع الدخول', result['reason'])
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'late')
+        self.assertEqual(result['minutes_late'], 11)
 
-    def test_check_strict_time_15_minutes_late_block(self):
-        """اختبار: تأخر 15 دقيقة (9:15) - رفض كامل"""
+    @override_settings(BLOCK_LATE_ENTRY=True)
+    def test_late_block_can_be_restored_by_setting(self):
+        """المنع لم يُحذف بل صار قرارًا إداريًا يمكن إعادته من الإعدادات."""
+        schedule_time = time(9, 0)
+        scan_time = timezone.make_aware(
+            datetime.combine(timezone.now().date(), time(9, 11))
+        )
+        result = AttendanceService.check_strict_time(scan_time, schedule_time)
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'too_late')
+
+    def test_check_strict_time_15_minutes_late_allowed(self):
+        """تأخر 15 دقيقة - يدخل أيضًا"""
         schedule_time = time(9, 0)
         scan_time = timezone.make_aware(
             datetime.combine(timezone.now().date(), time(9, 15))
         )
 
         result = AttendanceService.check_strict_time(scan_time, schedule_time)
-        self.assertFalse(result['allowed'])
-        self.assertIn('ممنوع الدخول', result['reason'])
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'late')
 
     def test_check_strict_time_too_early(self):
         """اختبار: وصول مبكر جداً (35 دقيقة قبل الموعد)"""

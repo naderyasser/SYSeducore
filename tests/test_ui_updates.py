@@ -13,6 +13,7 @@ form → stored value), not only in the rendered markup: the original bug was a
 front-end one, but a fix that lives only in JavaScript is one stale POST away
 from putting "السادس/إعدادي" back in the database.
 """
+import json
 from datetime import date, time, timedelta
 from decimal import Decimal
 
@@ -794,3 +795,137 @@ class TestSettlementTeacherPicker(TestCase):
     def test_picker_is_searchable(self):
         response = self.client.get(reverse('payments:settlement_index'))
         self.assertContains(response, 'data-searchable')
+
+
+class TestUnpaidAttendanceException(TestCase):
+    """
+    Client: "استثناء الدفع مش شغال" + "ضيف خانة استثناء حضور للطالب غير المدفوع".
+
+    The endpoint and the entitlement check both existed; nothing in the scanner
+    ever called them. The button labelled "استثناء" opened the *grace days*
+    dialog instead — a different decision (open the gate for N days, for every
+    group the student is in) wearing the same word.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='exc_sup', password='pw12345', role='supervisor',
+        )
+        self.client.force_login(self.user)
+        self.room = Room.objects.create(name='قاعة الاستثناء', capacity=20)
+        self.teacher = Teacher.objects.create(
+            full_name='مدرس الاستثناء', phone='01070001111',
+            specialization='علوم', hire_date=date(2024, 1, 1),
+        )
+        self.group = create_group_with_schedule(
+            group_name='مجموعة الاستثناء', teacher=self.teacher, room=self.room,
+            schedule_day='Saturday', schedule_time=time(10, 0),
+            standard_fee=Decimal('100.00'), sessions_per_month=4,
+        )
+        self.other_group = create_group_with_schedule(
+            group_name='مجموعة أخرى', teacher=self.teacher, room=self.room,
+            schedule_day='Sunday', schedule_time=time(12, 0),
+            standard_fee=Decimal('100.00'), sessions_per_month=4,
+        )
+        self.student = Student.objects.create(
+            student_code='EXC001', full_name='طالب غير مدفوع', gender='male',
+            student_phone='01070002222', parent_phone='01070003333',
+        )
+        for g in (self.group, self.other_group):
+            StudentGroupEnrollment.objects.create(
+                student=self.student, group=g,
+                financial_status='normal', is_active=True,
+            )
+        self.cycle = GroupCycle.objects.create(
+            group=self.group, index=1, sessions_planned=4,
+            started_on=timezone.localdate(),
+        )
+
+    def _evaluate(self):
+        from apps.attendance.entitlement import evaluate
+        enrollment = StudentGroupEnrollment.objects.get(
+            student=self.student, group=self.group,
+        )
+        return evaluate(enrollment, self.cycle)
+
+    def test_unpaid_student_is_rejected_before_the_exception(self):
+        from django.test import override_settings
+        with override_settings(BILLING_GRACE_SESSIONS=0):
+            result = self._evaluate()
+        self.assertFalse(result['allowed'])
+        self.assertEqual(result['error_type'], 'payment_required')
+        # The scanner needs the group to scope the exception it grants.
+        self.assertEqual(result['group_id'], self.group.group_id)
+
+    def test_granting_the_exception_lets_the_student_in(self):
+        from django.test import override_settings
+
+        response = self.client.post(
+            reverse('attendance:grant_exception'),
+            data=json.dumps({
+                'student_id': self.student.pk,
+                'group_id': self.group.group_id,
+                'exception_type': 'payment',
+                'reason_type': 'forgot_money',
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()['success'])
+
+        with override_settings(BILLING_GRACE_SESSIONS=0):
+            result = self._evaluate()
+        self.assertTrue(result['allowed'])
+        self.assertTrue(result['exception_applied'])
+
+    def test_the_exception_is_scoped_to_one_group(self):
+        """A favour for one teacher must not open every other teacher's door."""
+        from django.test import override_settings
+        from apps.attendance.services import AttendanceService
+
+        self.client.post(
+            reverse('attendance:grant_exception'),
+            data=json.dumps({
+                'student_id': self.student.pk,
+                'group_id': self.group.group_id,
+                'exception_type': 'payment',
+                'reason_type': 'forgot_money',
+            }),
+            content_type='application/json',
+        )
+        self.assertIsNotNone(
+            AttendanceService.check_exception_status(self.student, self.group)
+        )
+        self.assertIsNone(
+            AttendanceService.check_exception_status(self.student, self.other_group)
+        )
+
+    def test_grace_days_respect_the_group_they_were_granted_for(self):
+        """
+        The scanner used to omit group_id, so the endpoint fell back to every
+        active enrollment — reinstating the system-wide exemption that
+        per-group billing exists to prevent.
+        """
+        response = self.client.post(
+            reverse('attendance:scanner_grace_period'),
+            data=json.dumps({
+                'student_id': self.student.pk,
+                'group_id': self.group.group_id,
+                'days': 3,
+            }),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        here = StudentGroupEnrollment.objects.get(student=self.student, group=self.group)
+        elsewhere = StudentGroupEnrollment.objects.get(
+            student=self.student, group=self.other_group,
+        )
+        self.assertIsNotNone(here.grace_until)
+        self.assertIsNone(elsewhere.grace_until)
+
+    def test_scanner_exposes_both_actions(self):
+        response = self.client.get(reverse('attendance:scanner'))
+        html = response.content.decode()
+        self.assertIn('scannerPaymentException(', html)
+        self.assertIn('استثناء حضور', html)
+        self.assertIn("grant-exception", html)

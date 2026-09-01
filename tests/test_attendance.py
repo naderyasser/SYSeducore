@@ -13,7 +13,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from apps.attendance.models import Session, Attendance, ActivityLog
@@ -124,16 +124,30 @@ class TestStrictTimeCheck(TestCase):
         result = AttendanceService.check_strict_time(scan, schedule, 120)
         self.assertTrue(result['allowed'])
 
-    def test_11_minutes_late_blocked(self):
-        """Student scans 11 minutes late — exceeds grace, must be BLOCKED."""
+    def test_11_minutes_late_is_admitted_as_late(self):
+        """
+        The centre asked for the 10-minute door to be removed: a late student
+        is recorded as late, never turned away.
+        """
         schedule = time(14, 0)
         scan = self._make_scan_time(schedule, 11)
         result = AttendanceService.check_strict_time(scan, schedule, 120)
-        self.assertFalse(result['allowed'])
-        self.assertEqual(result['error_type'], 'too_late')
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'late')
+        self.assertEqual(result['minutes_late'], 11)
 
-    def test_20_minutes_late_blocked(self):
-        """Student scans 20 minutes late — clearly blocked."""
+    def test_20_minutes_late_is_admitted_as_late(self):
+        """Still admitted, and the delay is still recorded honestly."""
+        schedule = time(14, 0)
+        scan = self._make_scan_time(schedule, 20)
+        result = AttendanceService.check_strict_time(scan, schedule, 120)
+        self.assertTrue(result['allowed'])
+        self.assertEqual(result['status'], 'late')
+        self.assertEqual(result['minutes_late'], 20)
+
+    @override_settings(BLOCK_LATE_ENTRY=True)
+    def test_the_door_can_be_put_back_from_settings(self):
+        """Removed as a default, not deleted — the centre may want it back."""
         schedule = time(14, 0)
         scan = self._make_scan_time(schedule, 20)
         result = AttendanceService.check_strict_time(scan, schedule, 120)
