@@ -24,6 +24,27 @@
         .totals { display: flex; gap: 20px; justify-content: flex-end; margin-top: 20px; font-size: 1.05rem; }
         .signatures { display: flex; justify-content: space-between; margin-top: 60px; }
         .signatures div { border-top: 1px solid #333; width: 200px; text-align: center; padding-top: 6px; }
+
+        /* On screen this is a preview of an A4 landscape print, so the table
+           is legitimately wider than a phone. Letting the sheet scroll on its
+           own keeps that width without dragging the page sideways. The print
+           rules below are untouched. */
+        @media screen and (max-width: 1040px) {
+            body { padding: 12px; }
+
+            .sheet {
+                max-width: 100%;
+                overflow-x: auto;
+            }
+
+            .sheet-header,
+            .totals,
+            .signatures {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+        }
+
         @media print {
             .no-print { display: none !important; }
             @page { size: A4 landscape; margin: 10mm; }

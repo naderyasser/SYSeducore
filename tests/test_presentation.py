@@ -156,3 +156,70 @@ class MoneyFilterTests(SimpleTestCase):
             '{% load money_format %}{{ fee|egp }}'
         ).render(Context({'fee': Decimal('50.00')}))
         self.assertEqual(rendered, '50 ج.م')
+
+
+class ErrorPageTests(SimpleTestCase):
+    """
+    A refused page has to be as Arabic as every other page.
+
+    403 had no handler, so Django's built-in page answered: "403 Forbidden",
+    in English, unstyled, with no link back. A teacher who opened a screen
+    above their role saw that, and the Arabic sentence the permission check
+    actually raises was discarded with it.
+    """
+
+    def _page(self, handler, exception=None):
+        from django.test import RequestFactory
+        request = RequestFactory().get('/payments/')
+        response = handler(request, exception) if exception is not None else handler(request)
+        return response, response.content.decode('utf-8')
+
+    def test_403_is_arabic_and_right_to_left(self):
+        from config.urls import error_403
+        response, body = self._page(error_403, exception=None)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('dir="rtl"', body)
+        self.assertIn('لا تملك صلاحية الدخول', body)
+        self.assertNotIn('Forbidden', body)
+
+    def test_403_repeats_the_message_the_permission_check_raised(self):
+        from django.core.exceptions import PermissionDenied
+        from config.urls import error_403
+        _, body = self._page(
+            error_403, exception=PermissionDenied('ليس لديك صلاحية للقيام بهذا الإجراء')
+        )
+        self.assertIn('ليس لديك صلاحية للقيام بهذا الإجراء', body)
+
+    def test_403_offers_a_way_back(self):
+        from config.urls import error_403
+        _, body = self._page(error_403, exception=None)
+        self.assertIn('href="/"', body)
+
+    def test_handler_is_registered(self):
+        from config import urls
+        self.assertEqual(urls.handler403, 'config.urls.error_403')
+
+
+class CurrencyMarkupTests(SimpleTestCase):
+    """No screen assembles an amount by hand any more."""
+
+    # ``{{ value }} ج.م`` — the pattern that kept the trailing ``.00`` and
+    # skipped thousand grouping. ``|egp`` renders both parts together.
+    AD_HOC = re.compile(r'\{\{[^}]*\}\}\s*ج\.م')
+
+    def test_no_template_appends_the_currency_by_hand(self):
+        offenders = []
+        for path in sorted(TEMPLATE_ROOT.rglob('*.html')):
+            for number, line in enumerate(
+                path.read_text(encoding='utf-8').split('\n'), start=1
+            ):
+                if '${' in line:  # a JS template literal, not a Django variable
+                    continue
+                if self.AD_HOC.search(line):
+                    offenders.append(f'{path.relative_to(TEMPLATE_ROOT)}:{number}')
+        self.assertEqual(
+            offenders, [],
+            'Render money with |egp rather than "{{ value }} ج.م": the filter '
+            'drops a zero fraction and groups thousands. Found at: '
+            + ', '.join(offenders)
+        )

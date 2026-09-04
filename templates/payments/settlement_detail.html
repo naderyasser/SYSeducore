@@ -52,6 +52,14 @@
 
     {% for group, lines in groups.items %}
     <div class="group-title">{{ group.group_name }} — نسبة المركز الافتراضية {{ group.center_percentage }}%</div>
+    {% comment %}
+    Eleven columns, and the layout gives the content area 260px less as soon
+    as the sidebar appears at 993px. Without a scrolling wrapper the sheet was
+    simply cut off by `.content-area`, and نصيب المركز and نصيب المدرس — the
+    two figures the whole screen exists to show — could not be reached at all
+    on a 1024px or 1280px laptop.
+    {% endcomment %}
+    <div class="table-responsive">
     <table class="settle-table">
         <thead>
             <tr>
@@ -86,6 +94,7 @@
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% empty %}
     <div class="text-center text-muted py-5">لا توجد سطور في هذا الكشف</div>
     {% endfor %}

@@ -64,7 +64,11 @@
 
     .filter-group {
         flex: 1;
-        min-width: 200px;
+        /* A hard 200px (and 300px on the search box below) is wider than the
+           content area of a 320px phone, so the filters were cut off at the
+           edge of the screen. The floor only applies where there is room for
+           it. */
+        min-width: min(200px, 100%);
     }
 
     .filter-group label {
@@ -317,7 +321,7 @@
 <!-- Search Card -->
 <div class="search-card">
     <form method="get" class="filter-section">
-        <div class="filter-group" style="flex: 2; min-width: 300px;">
+        <div class="filter-group" style="flex: 2; min-width: min(300px, 100%);">
             <label>البحث</label>
             <div class="search-input-wrapper">
                 <i class="bi bi-search search-icon"></i>

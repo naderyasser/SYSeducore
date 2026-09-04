@@ -200,11 +200,18 @@
             transform: translateX(-50%);
             z-index: 100;
             display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
             gap: 10px;
+            /* Three buttons at 36px of side padding each come to 354px, wider
+               than a 320px phone, and the outer two hung off both edges of
+               the screen. Bounded and allowed to wrap. */
+            max-width: calc(100vw - 20px);
         }
 
         .no-print button {
             padding: 12px 36px;
+            max-width: 100%;
             font-size: 16px;
             cursor: pointer;
             font-family: 'Cairo', sans-serif;
@@ -301,7 +308,15 @@
                layout box too; a transform would leave the same 1512px hole
                behind. The card's insides are in mm and scale with it. */
             .card {
-                zoom: 0.22;
+                zoom: 0.18;
+            }
+
+            @media (max-width: 400px) {
+                .no-print button { padding: 10px 16px; font-size: 14px; }
+            }
+
+            @media (min-width: 360px) {
+                .card { zoom: 0.22; }
             }
 
             @media (min-width: 480px) {

@@ -27,7 +27,12 @@
 
     .table-card {
         background: #fff; border-radius: 14px; padding: 4px 0 0;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.06); overflow: hidden;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        /* `overflow: hidden` was here for the rounded corners, and it cut the
+           table off instead of letting it scroll: below ~1250px the last two
+           columns were unreachable. `auto` on the x axis still clips to the
+           padding box, so the corners are unchanged. */
+        overflow-x: auto;
     }
     table.comp { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
     table.comp th, table.comp td {

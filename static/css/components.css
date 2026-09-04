@@ -157,11 +157,11 @@
  * keeps its (scrollable) header.
  */
 @media (max-width: 767.98px) {
-    /* Whatever wrapper the table sits in, it no longer needs to scroll. */
-    .table-responsive:has(> .has-card-labels),
-    .table-wrap:has(> .has-card-labels),
-    .table-container:has(> .has-card-labels) {
-        overflow-x: visible;
+    /* Whatever box the table scrolled inside, it has nothing left to scroll:
+       `responsive-tables.js` finds that box and marks it, because the
+       wrappers across the project share no class of their own. */
+    .card-table-host {
+        overflow-x: visible !important;
     }
 
     table.has-card-labels,
@@ -285,5 +285,68 @@
         max-width: none;
         overflow: visible;
         white-space: normal;
+    }
+}
+
+/* ── Touch targets for checkboxes and switches ──────────────────────────────
+ *
+ * Bootstrap draws a checkbox at 1em (14–16px) and a switch at 2em × 1em. On a
+ * phone those are a quarter of the area a fingertip actually covers, and the
+ * ones that matter are the ones you least want to mis-tap: the subject list on
+ * the teacher form, the "نشط" switch on every form, and مستبعد / مجاني on the
+ * settlement sheet, which move money.
+ *
+ * The box grows to 24px on a touch screen. `pointer: coarse` catches a tablet
+ * as well as a phone, and the width query behind it catches the phones that
+ * report a fine pointer anyway — a browser getting that wrong should not cost
+ * the person a usable checkbox.
+ */
+@media (pointer: coarse), (max-width: 767.98px) {
+    .form-check-input {
+        width: 1.5rem;
+        height: 1.5rem;
+        margin-top: 0.1rem;
+    }
+
+    .form-check-input[type="checkbox"][role="switch"],
+    .form-switch .form-check-input {
+        width: 3rem;
+        height: 1.5rem;
+    }
+
+    .form-check {
+        min-height: 1.75rem;
+    }
+
+    .form-switch {
+        padding-inline-start: 3.5rem;
+    }
+
+    .form-switch .form-check-input {
+        margin-inline-start: -3.5rem;
+    }
+
+    /* A checkbox on its own inside a table cell — the settlement sheet's
+       exclude/free flags — has no label to widen the target, so the cell
+       itself becomes the tap area. */
+    td > .form-check-input {
+        margin: 0.25rem;
+    }
+}
+
+/* A bare icon button — a link-styled button with no padding — is as wide as
+   its glyph. `tap-target` gives one a hit area without changing how it looks. */
+.tap-target {
+    min-width: 2rem;
+    min-height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (pointer: coarse), (max-width: 767.98px) {
+    .tap-target {
+        min-width: 2.5rem;
+        min-height: 2.5rem;
     }
 }

@@ -522,7 +522,7 @@ function recordPartial(paymentId, studentName) {
         return;
     }
 
-    if (!confirm(`تسجيل دفعة ${amount} ج.م للطالب "${studentName}"؟`)) return;
+    if (!confirm(`تسجيل دفعة ${formatEgp(amount)} للطالب "${studentName}"؟`)) return;
 
     const body = new URLSearchParams();
     body.set('amount', raw);
@@ -559,7 +559,7 @@ function recordPartial(paymentId, studentName) {
         showToast(
             data.status === 'paid'
                 ? 'اكتمل سداد المبلغ وتم تفعيل الاشتراك'
-                : `تم تسجيل الدفعة — المتبقي ${data.remaining} ج.م`,
+                : `تم تسجيل الدفعة — المتبقي ${formatEgp(data.remaining)}`,
             'success'
         );
     })
@@ -578,10 +578,10 @@ function updateCardAmounts(paymentId, data) {
 
     const vals = card.querySelectorAll('.amount-block .val');
     if (vals.length >= 2) {
-        vals[1].innerHTML = `${data.amount_paid} <small>ج.م</small>`;
+        vals[1].innerHTML = `${formatMoney(data.amount_paid)} <small>ج.م</small>`;
     }
     const rem = card.querySelector('[data-field="remaining"]');
-    if (rem) rem.innerHTML = `${data.remaining} <small>ج.م</small>`;
+    if (rem) rem.innerHTML = `${formatMoney(data.remaining)} <small>ج.م</small>`;
 
     const badge = card.querySelector('.status-badge');
     if (badge) {
@@ -616,7 +616,7 @@ function updateCardAmounts(paymentId, data) {
 }
 
 function payAndActivate(paymentId, studentId, studentName, amountDue) {
-    if (!confirm(`هل تريد تسديد ${amountDue} ج.م وتفعيل اشتراك "${studentName}" لمدة 30 يوم؟`)) return;
+    if (!confirm(`هل تريد تسديد ${formatEgp(amountDue)} وتفعيل اشتراك "${studentName}" لمدة 30 يوم؟`)) return;
 
     showLoading();
 

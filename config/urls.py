@@ -18,10 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 # --- QUAL-07: project-level error handlers -----------------------------------
-# These render templates/404.html and templates/500.html when those templates
+# These render templates/403.html, 404.html and 500.html when those templates
 # exist, and otherwise fall back to a self-contained Arabic RTL response. The
 # fallback must never raise, so template rendering is wrapped defensively: a 500
 # page that itself explodes would hide the original error.
+#
+# 403 was missing here, so a teacher who opened a screen they are not allowed
+# to see got Django's built-in page: "403 Forbidden", in English, unstyled, no
+# way back. The Arabic message the permission check actually raises
+# ("ليس لديك صلاحية للقيام بهذا الإجراء") was thrown away with it.
 
 _ERROR_PAGE = """<!doctype html>
 <html lang="ar" dir="rtl">
@@ -69,6 +74,26 @@ def _render_or_fallback(request, template_name, code, title, message):
     return _fallback_error_response(code, title, message)
 
 
+def error_403(request, exception=None):
+    """
+    Arabic 403 page. Uses templates/403.html when that template exists.
+
+    The message carried by the ``PermissionDenied`` is preferred over the
+    generic line: the decorators raise a sentence written for the person
+    reading it, and repeating it here is more useful than "access denied".
+    """
+    message = str(exception) if exception else ''
+    if not message or message == 'Permission denied':
+        message = 'هذه الصفحة متاحة لصلاحية أعلى من صلاحيتك. ارجع للصفحة الرئيسية أو اطلب من المدير فتحها لك.'
+    return _render_or_fallback(
+        request,
+        '403.html',
+        403,
+        'لا تملك صلاحية الدخول',
+        message,
+    )
+
+
 def error_404(request, exception=None):
     """Arabic 404 page. Uses templates/404.html when that template exists."""
     return _render_or_fallback(
@@ -91,6 +116,7 @@ def error_500(request):
     )
 
 
+handler403 = 'config.urls.error_403'
 handler404 = 'config.urls.error_404'
 handler500 = 'config.urls.error_500'
 

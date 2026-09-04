@@ -1441,8 +1441,8 @@ function renderDossier(d) {
         const icon  = payIcons[p.status]  || '⚫';
         const cls   = payColors[p.status] || 'secondary';
         let payText = p.status_display;
-        if (p.status === 'partial') payText += `: ${p.amount_paid} من ${p.amount_due} ج.م`;
-        else if (p.status === 'unpaid' && p.amount_due > 0) payText += `: ${p.amount_due} ج.م`;
+        if (p.status === 'partial') payText += `: ${formatMoney(p.amount_paid)} من ${formatEgp(p.amount_due)}`;
+        else if (p.status === 'unpaid' && p.amount_due > 0) payText += `: ${formatEgp(p.amount_due)}`;
         const schedInfo = enr.schedule_day_ar && enr.schedule_time
             ? `${enr.schedule_day_ar} ${enr.schedule_time}`
             : (enr.schedule || '');
@@ -1500,8 +1500,8 @@ function renderDossier(d) {
             <div class="dossier-section">
                 <div class="dossier-section-title">ملخص مالي (الشهر الحالي)</div>
                 <div class="dossier-summary-grid">
-                    <div class="dossier-sum-item"><span class="dossier-sum-value paid">${fin.total_paid} ج.م</span><span class="dossier-sum-label">مدفوع</span></div>
-                    <div class="dossier-sum-item"><span class="dossier-sum-value remaining">${fin.total_remaining} ج.م</span><span class="dossier-sum-label">متبقي</span></div>
+                    <div class="dossier-sum-item"><span class="dossier-sum-value paid">${formatEgp(fin.total_paid)}</span><span class="dossier-sum-label">مدفوع</span></div>
+                    <div class="dossier-sum-item"><span class="dossier-sum-value remaining">${formatEgp(fin.total_remaining)}</span><span class="dossier-sum-label">متبقي</span></div>
                     ${fin.overdue_months > 0 ? `<div class="dossier-sum-item"><span class="dossier-sum-value overdue">${fin.overdue_months}</span><span class="dossier-sum-label">شهور متأخرة</span></div>` : ''}
                 </div>
             </div>`;
@@ -1646,7 +1646,7 @@ function displayResult(data, code) {
             detailHtml += `
             <div class="scanner-actions" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
                 <button class="btn btn-success btn-lg flex-fill" onclick="scannerPayNow(${pid}, ${sid})" style="min-width:140px;">
-                    <i class="bi bi-cash-stack me-1"></i> ادفع الان${amt > 0 ? ' (' + amt + ' ج.م)' : ''}
+                    <i class="bi bi-cash-stack me-1"></i> ادفع الان${amt > 0 ? ' (' + formatEgp(amt) + ')' : ''}
                 </button>
                 <button class="btn btn-primary btn-lg flex-fill" onclick="scannerPaymentException(${sid}, ${gid})" style="min-width:140px;">
                     <i class="bi bi-shield-check me-1"></i> استثناء حضور (اليوم)
@@ -1854,7 +1854,7 @@ function addToHistory(data, code) {
         status: data.status || (data.success ? 'registered' : 'error'),
         message: data.message,
         student: data.student?.full_name || data.student?.name || '-',
-        time: new Date().toLocaleTimeString('ar-EG'),
+        time: new Date().toLocaleTimeString('ar-EG-u-nu-latn'),
         timestamp: Date.now()
     };
 
@@ -2216,7 +2216,7 @@ async function refreshSessions() {
 // Update Clock
 function updateClock() {
     const now = new Date();
-    const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+    const timeStr = now.toLocaleTimeString('ar-EG-u-nu-latn', { hour: '2-digit', minute: '2-digit' });
     document.getElementById('lastScanTime').textContent = timeStr;
 }
 

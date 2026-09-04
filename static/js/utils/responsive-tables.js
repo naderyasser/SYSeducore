@@ -24,6 +24,7 @@
     'use strict';
 
     var LABELLED = 'has-card-labels';
+    var HOST = 'card-table-host';
     var ACTION_HEADINGS = /إجراء|الإجراءات|أدوات|عمليات|تحكم/;
 
     function text(node) {
@@ -93,6 +94,29 @@
         }
     }
 
+    /**
+     * Mark whatever box the table scrolls inside, so the card rules can
+     * switch that scrolling off on a phone.
+     *
+     * The wrappers have no shared class — `.table-responsive`,
+     * `.students-table-container`, `.table-card`, `.grid-wrap` — and
+     * enumerating them in CSS meant every new screen had to remember to use
+     * one of the known names. Finding it here keeps that knowledge in one
+     * place.
+     */
+    function markScrollHost(table) {
+        var node = table.parentElement;
+        while (node && node !== document.body) {
+            var overflow = window.getComputedStyle(node).overflowX;
+            if (overflow === 'auto' || overflow === 'scroll' ||
+                overflow === 'hidden') {
+                node.classList.add(HOST);
+                return;
+            }
+            node = node.parentElement;
+        }
+    }
+
     function stamp(table) {
         var labels = headings(table);
         if (!labels) return;
@@ -100,6 +124,7 @@
             stampBody(table, labels, table.tBodies[b]);
         }
         table.classList.add(LABELLED);
+        markScrollHost(table);
     }
 
     function watch(table) {

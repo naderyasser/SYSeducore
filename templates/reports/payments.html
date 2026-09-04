@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load math_filters %}
 
 {% block title %}تقرير المدفوعات{% endblock %}
@@ -321,21 +322,21 @@
         <div class="financial-card-icon">
             <i class="bi bi-cash-stack"></i>
         </div>
-        <div class="financial-card-value">{{ total_due|floatformat:0 }} ج.م</div>
+        <div class="financial-card-value">{{ total_due|egp }}</div>
         <div class="financial-card-label">إجمالي المستحق</div>
     </div>
     <div class="financial-card paid">
         <div class="financial-card-icon">
             <i class="bi bi-check-circle"></i>
         </div>
-        <div class="financial-card-value">{{ total_paid|floatformat:0 }} ج.م</div>
+        <div class="financial-card-value">{{ total_paid|egp }}</div>
         <div class="financial-card-label">إجمالي المحصل</div>
     </div>
     <div class="financial-card remaining">
         <div class="financial-card-icon">
             <i class="bi bi-exclamation-triangle"></i>
         </div>
-        <div class="financial-card-value">{{ total_remaining|floatformat:0 }} ج.م</div>
+        <div class="financial-card-value">{{ total_remaining|egp }}</div>
         <div class="financial-card-label">المتبقي</div>
     </div>
 </div>
@@ -426,8 +427,8 @@
                         <span class="group-badge">{{ payment.group.group_name }}</span>
                     </td>
                     <td>{{ payment.month|date:"Y-m" }}</td>
-                    <td class="amount-cell text-danger">{{ payment.amount_due|floatformat:0 }} ج.م</td>
-                    <td class="amount-cell text-success">{{ payment.amount_paid|floatformat:0 }} ج.م</td>
+                    <td class="amount-cell text-danger">{{ payment.amount_due|egp }}</td>
+                    <td class="amount-cell text-success">{{ payment.amount_paid|egp }}</td>
                     <td>
                         {% if payment.amount_due > 0 %}
                         {% with percentage=payment.amount_paid|div:payment.amount_due|mul:100 %}

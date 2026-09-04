@@ -85,7 +85,7 @@
         <div class="col-md-4">
             <div class="card shadow-sm">
                 <div class="card-body text-center">
-                    <h4 class="text-primary fw-bold">{{ total_due|floatformat:0 }} ج.م</h4>
+                    <h4 class="text-primary fw-bold">{{ total_due|egp }}</h4>
                     <small class="text-muted">إجمالي المستحق</small>
                 </div>
             </div>
@@ -93,7 +93,7 @@
         <div class="col-md-4">
             <div class="card shadow-sm">
                 <div class="card-body text-center">
-                    <h4 class="text-success fw-bold">{{ total_paid|floatformat:0 }} ج.م</h4>
+                    <h4 class="text-success fw-bold">{{ total_paid|egp }}</h4>
                     <small class="text-muted">إجمالي المدفوع</small>
                 </div>
             </div>
@@ -101,7 +101,7 @@
         <div class="col-md-4">
             <div class="card shadow-sm">
                 <div class="card-body text-center">
-                    <h4 class="text-danger fw-bold">{{ total_remaining|floatformat:0 }} ج.م</h4>
+                    <h4 class="text-danger fw-bold">{{ total_remaining|egp }}</h4>
                     <small class="text-muted">المتبقي</small>
                 </div>
             </div>
@@ -158,10 +158,10 @@
                                     <td class="text-center"><span class="badge bg-success">{{ g.paid }}</span></td>
                                     <td class="text-center"><span class="badge bg-warning text-dark">{{ g.partial }}</span></td>
                                     <td class="text-center"><span class="badge bg-danger">{{ g.unpaid }}</span></td>
-                                    <td class="text-end">{{ g.due|floatformat:0 }} ج.م</td>
-                                    <td class="text-end">{{ g.paid_amount|floatformat:0 }} ج.م</td>
+                                    <td class="text-end">{{ g.due|egp }}</td>
+                                    <td class="text-end">{{ g.paid_amount|egp }}</td>
                                     <td class="text-end fw-bold {% if g.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
-                                        {{ g.remaining|floatformat:0 }} ج.م
+                                        {{ g.remaining|egp }}
                                     </td>
                                     <td>
                                         <div class="d-flex align-items-center gap-2">

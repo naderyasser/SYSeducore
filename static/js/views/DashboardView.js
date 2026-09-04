@@ -73,7 +73,7 @@ class DashboardView {
                 <div class="card bg-secondary text-white">
                     <div class="card-body">
                         <h5 class="card-title">إيرادات الشهر</h5>
-                        <h3>${stats.monthly_revenue || 0} ج.م</h3>
+                        <h3>${formatEgp(stats.monthly_revenue)}</h3>
                     </div>
                 </div>
             </div>
@@ -81,7 +81,7 @@ class DashboardView {
                 <div class="card bg-danger text-white">
                     <div class="card-body">
                         <h5 class="card-title">المدفوعات المستحقة</h5>
-                        <h3>${stats.pending_payments || 0} ج.م</h3>
+                        <h3>${formatEgp(stats.pending_payments)}</h3>
                     </div>
                 </div>
             </div>
@@ -89,7 +89,7 @@ class DashboardView {
                 <div class="card bg-success text-white">
                     <div class="card-body">
                         <h5 class="card-title">المدفوعات المحصلة</h5>
-                        <h3>${stats.collected_payments || 0} ج.م</h3>
+                        <h3>${formatEgp(stats.collected_payments)}</h3>
                     </div>
                 </div>
             </div>

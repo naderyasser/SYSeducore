@@ -119,7 +119,7 @@ class ScannerView {
         scanItem.className = `alert ${data.success ? 'alert-success' : 'alert-danger'} mb-2`;
         scanItem.innerHTML = `
             <strong>${data.student ? data.student.name : 'غير معروف'}</strong>
-            <small class="d-block text-muted">${new Date().toLocaleTimeString('ar-EG')}</small>
+            <small class="d-block text-muted">${new Date().toLocaleTimeString('ar-EG-u-nu-latn')}</small>
             ${data.message ? `<small>${data.message}</small>` : ''}
         `;
         

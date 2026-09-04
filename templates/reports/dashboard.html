@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load math_filters %}
 
 {% block title %}لوحة التحكم{% endblock %}
@@ -746,7 +747,7 @@
                             <div class="list-item-meta">{{ payment.group.group_name }} · {{ payment.month|date:"Y-m" }}</div>
                         </div>
                         <div class="text-end">
-                            <div class="fw-bold text-success">{{ payment.amount_paid|floatformat:0 }} ج.م</div>
+                            <div class="fw-bold text-success">{{ payment.amount_paid|egp }}</div>
                             <small class="text-muted">{{ payment.payment_date|timesince }}</small>
                         </div>
                     </div>
@@ -785,7 +786,7 @@
                         <div class="list-item-meta">{{ payment.group.group_name }}</div>
                     </div>
                     <div class="text-end">
-                        <div class="fw-bold text-danger">{{ payment.amount_due|floatformat:0 }} ج.م</div>
+                        <div class="fw-bold text-danger">{{ payment.amount_due|egp }}</div>
                         {% if payment.status == 'unpaid' %}
                         <span class="badge bg-danger">غير مدفوع</span>
                         {% else %}
@@ -860,8 +861,17 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// Chart.js formats its axis ticks with `toLocaleString()` and no locale, so
+// an Arabic browser drew ١٬٢٣٤٫٥ on the axis while every figure the server
+// rendered on the same page read 1,234.50. Pinning the chart locale keeps one
+// digit system on the screen; the labels stay Arabic, only the numerals are
+// fixed.
+Chart.defaults.locale = 'en-US';
 // Set current date
-document.getElementById('currentDate').textContent = new Date().toLocaleDateString('ar-EG', {
+// `ar-EG` alone gives Arabic month names *and* Arabic-Indic numerals, so the
+// header read ٤ سبتمبر ٢٠٢٦ next to dates the server wrote as 2026-09-04.
+// The `-u-nu-latn` extension keeps the Arabic words and the Western digits.
+document.getElementById('currentDate').textContent = new Date().toLocaleDateString('ar-EG-u-nu-latn', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',

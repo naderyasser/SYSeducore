@@ -46,6 +46,23 @@
         display: flex;
         align-items: center;
         gap: 15px;
+        /* A 48px icon, a gap and two lines of Arabic label do not fit the
+           ~130px a two-up card gets on a 320px screen; the card ran past the
+           edge. Below 380px the icon and the text stack instead. */
+        min-width: 0;
+    }
+
+    .stat-card .stat-info {
+        min-width: 0;
+    }
+
+    @media (max-width: 380px) {
+        .stat-card {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 14px;
+        }
     }
 
     .stat-card .stat-icon {
@@ -117,7 +134,11 @@
         background: #fff;
         border-radius: 8px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        overflow: hidden;
+        /* Was `overflow: hidden`, with `overflow-x: auto` added only below
+           992px — one breakpoint short. 993px is exactly where the 260px
+           sidebar appears, so from there to ~1250px the 967px table was cut
+           off with no way to scroll to the rest of it. */
+        overflow-x: auto;
     }
 
     .students-table {
@@ -546,10 +567,6 @@
 
     /* Mobile Responsive */
     @media (max-width: 992px) {
-        .students-table-container {
-            overflow-x: auto;
-        }
-
         .students-table {
             min-width: 900px;
         }
@@ -1097,7 +1114,7 @@ function renderAvailableGroups() {
             </div>
             <div class="group-meta">
                 <span><i class="bi bi-people me-1"></i>${group.enrolled} / ${group.capacity}</span>
-                <span><i class="bi bi-cash me-1"></i>${group.standard_fee} ج.م</span>
+                <span><i class="bi bi-cash me-1"></i>${formatEgp(group.standard_fee)}</span>
             </div>
         </div>
     `).join('');

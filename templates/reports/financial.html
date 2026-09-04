@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load math_filters %}
 
 {% block title %}التقرير المالي{% endblock %}
@@ -230,7 +231,7 @@
                     <tr>
                         <td><strong>{{ teacher.name }}</strong></td>
                         <td>{{ teacher.groups_count }}</td>
-                        <td class="amount-positive">{{ teacher.total_revenue|floatformat:0 }} ج.م</td>
+                        <td class="amount-positive">{{ teacher.total_revenue|egp }}</td>
                         <td>
                             {% if teacher.is_active %}
                             <span class="badge bg-success">نشط</span>
@@ -256,6 +257,12 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
+// Chart.js formats its axis ticks with `toLocaleString()` and no locale, so
+// an Arabic browser drew ١٬٢٣٤٫٥ on the axis while every figure the server
+// rendered on the same page read 1,234.50. Pinning the chart locale keeps one
+// digit system on the screen; the labels stay Arabic, only the numerals are
+// fixed.
+Chart.defaults.locale = 'en-US';
 // Monthly Revenue Data
 const monthlyData = JSON.parse('{{ monthly_data|safe }}');
 
@@ -277,8 +284,8 @@ monthlyData.forEach(month => {
     tableBody.innerHTML += `
         <tr>
             <td><strong>${month.month_name}</strong></td>
-            <td class="amount-negative">${parseFloat(month.total_due).toFixed(0)} ج.م</td>
-            <td class="amount-positive">${parseFloat(month.total_paid).toFixed(0)} ج.م</td>
+            <td class="amount-negative">${formatEgp(month.total_due)}</td>
+            <td class="amount-positive">${formatEgp(month.total_paid)}</td>
             <td>
                 <div class="d-flex align-items-center gap-2">
                     <div class="flex-fill">
@@ -328,7 +335,7 @@ new Chart(ctx, {
                 beginAtZero: true,
                 ticks: {
                     callback: function(value) {
-                        return value + ' ج.م';
+                        return formatEgp(value);
                     }
                 }
             },
@@ -346,7 +353,7 @@ new Chart(ctx, {
             tooltip: {
                 callbacks: {
                     label: function(context) {
-                        return context.dataset.label + ': ' + context.parsed.y + ' ج.م';
+                        return context.dataset.label + ': ' + formatEgp(context.parsed.y);
                     }
                 }
             }

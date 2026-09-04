@@ -137,6 +137,17 @@
         cursor: pointer;
     }
 
+    /* Enrolling a student in a group is the consequential tap on this form,
+       and 18px is under the 24px a fingertip needs. The whole row is already
+       a clickable card, but the box itself has to be hittable too. */
+    @media (pointer: coarse), (max-width: 767.98px) {
+        .group-checkbox input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            margin-top: 1px;
+        }
+    }
+
     .group-checkbox-content {
         flex: 1;
     }
