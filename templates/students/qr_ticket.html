@@ -293,6 +293,33 @@
                 margin: 0 auto;
             }
 
+            /* The card is 400mm wide because that is what gets printed —
+               about 1512px. Shown at full size it set the width of the whole
+               document, so every screen, phone and desktop alike, scrolled
+               sideways past a page that is otherwise 500px of text. `zoom`
+               rather than `transform: scale()` because zoom shrinks the
+               layout box too; a transform would leave the same 1512px hole
+               behind. The card's insides are in mm and scale with it. */
+            .card {
+                zoom: 0.22;
+            }
+
+            @media (min-width: 480px) {
+                .card { zoom: 0.28; }
+            }
+
+            @media (min-width: 600px) {
+                .card { zoom: 0.36; }
+            }
+
+            @media (min-width: 900px) {
+                .card { zoom: 0.55; }
+            }
+
+            @media (min-width: 1500px) {
+                .card { zoom: 0.9; }
+            }
+
             .sticker-label {
                 display: block;
                 font-family: 'Cairo', sans-serif;

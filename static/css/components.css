@@ -157,7 +157,10 @@
  * keeps its (scrollable) header.
  */
 @media (max-width: 767.98px) {
-    .table-responsive:has(> .has-card-labels) {
+    /* Whatever wrapper the table sits in, it no longer needs to scroll. */
+    .table-responsive:has(> .has-card-labels),
+    .table-wrap:has(> .has-card-labels),
+    .table-container:has(> .has-card-labels) {
         overflow-x: visible;
     }
 
@@ -167,6 +170,14 @@
     table.has-card-labels td {
         display: block;
         width: auto;
+        /* Several screens give their table a `min-width` so the columns stay
+           legible while it scrolls sideways — the students index asks for
+           900px. In card form there are no columns left to keep apart, and
+           that floor would push the cards off a 390px screen. `!important`
+           because those declarations live in page-level <style> blocks that
+           this file cannot outrank on specificity alone. */
+        min-width: 0 !important;
+        max-width: 100%;
     }
 
     table.has-card-labels thead {

@@ -47,11 +47,20 @@
                 <tr>
                   <td>{{ attendance.student.full_name }}</td>
                   <td>
+                    {% comment %}
+                    Kept on one line per branch on purpose. A Django template
+                    tag cannot span lines — the tokeniser's pattern does not
+                    match a newline — so a `{% elif %}` wrapped after the
+                    keyword stopped being a tag and printed itself. Every
+                    present student's row read
+                    "حاضر {% elif attendance.status == 'late' %}متأخر …".
+                    {% endcomment %}
                     <span class="status-{{ attendance.status }}">
-                      {% if attendance.status == 'present' %}حاضر {% elif
-                      attendance.status == 'late' %}متأخر {% elif
-                      attendance.status == 'absent' %}غائب {% elif
-                      attendance.status == 'exception' %}استثناء {% endif %}
+                      {% if attendance.status == 'present' %}حاضر
+                      {% elif attendance.status == 'late' %}متأخر
+                      {% elif attendance.status == 'absent' %}غائب
+                      {% elif attendance.status == 'exception' %}استثناء
+                      {% endif %}
                     </span>
                   </td>
                   <td>{{ attendance.scan_time|time:"H:i" }}</td>

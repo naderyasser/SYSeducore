@@ -115,9 +115,19 @@
     }
 
     function init(root) {
-        var tables = (root || document).querySelectorAll('table.table');
-        for (var i = 0; i < tables.length; i++) {
-            var table = tables[i];
+        // Every data table, not just the Bootstrap-classed ones: the students
+        // index, the report grids and the group roster all carry their own
+        // class (`students-table`, `data-table`, `comp`) and were the widest
+        // tables in the project. `stamp` is a no-op on a table without
+        // headings, so a layout table is left alone; `data-no-cards` opts one
+        // out explicitly.
+        var tables = (root || document).getElementsByTagName('table');
+        // A live HTMLCollection, and `stamp` adds a class rather than moving
+        // nodes, so a snapshot is not needed — but iterate a copy anyway in
+        // case a caller passes a root that is itself being rebuilt.
+        var list = Array.prototype.slice.call(tables);
+        for (var i = 0; i < list.length; i++) {
+            var table = list[i];
             if (table.hasAttribute('data-no-cards')) continue;
             stamp(table);
             watch(table);

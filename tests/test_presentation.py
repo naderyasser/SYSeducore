@@ -31,6 +31,11 @@ TEMPLATE_ROOT = Path(settings.BASE_DIR) / 'templates'
 # template engine will not treat as one.
 COMMENT = re.compile(r'\{#.*?#\}', re.S)
 
+# The same trap for real tags. Django's tokeniser pattern is
+# ``({%.*?%}|{{.*?}}|{#.*?#})`` with no DOTALL flag, so a tag wrapped across
+# two lines is not a tag — it is printed.
+TAG = re.compile(r'\{%.*?%\}|\{\{.*?\}\}', re.S)
+
 
 class TemplateCommentsTests(SimpleTestCase):
     """No template may carry a multi-line ``{# … #}``."""
@@ -49,6 +54,35 @@ class TemplateCommentsTests(SimpleTestCase):
             'Use {% comment %}…{% endcomment %} instead. Found at: '
             + ', '.join(offenders)
         )
+
+    def test_no_multiline_tags(self):
+        """
+        A ``{% if %}``/``{{ }}`` may not wrap across lines either. The session
+        detail screen had ``{% elif`` at the end of a line three times, so
+        every present student's row read
+        "حاضر {% elif attendance.status == 'late' %}متأخر …".
+        """
+        offenders = []
+        for path in sorted(TEMPLATE_ROOT.rglob('*.html')):
+            body = path.read_text(encoding='utf-8')
+            for match in TAG.finditer(body):
+                if '\n' in match.group(0):
+                    line = body[:match.start()].count('\n') + 1
+                    offenders.append(
+                        f'{path.relative_to(TEMPLATE_ROOT)}:{line}'
+                    )
+        self.assertEqual(
+            offenders, [],
+            'A Django template tag cannot span lines — it is rendered as '
+            'text instead. Found at: ' + ', '.join(offenders)
+        )
+
+    def test_multiline_tag_really_does_leak(self):
+        """The premise of the test above, pinned so it cannot rot."""
+        rendered = Template(
+            "{% if 1 %}نعم {% elif\n 0 %}لا{% endif %}"
+        ).render(Context({}))
+        self.assertIn('elif', rendered)
 
     def test_multiline_hash_comment_really_does_leak(self):
         """The premise of the test above, pinned so it cannot rot."""

@@ -52,6 +52,28 @@
         .legend { font-size: 0.8rem; color: #6b7280; margin-bottom: 16px; }
         .legend span { display: inline-block; margin-inline-end: 14px; }
         .visitor-section h5 { margin-top: 20px; }
+
+        /* On screen this sheet is a preview of an A4 landscape print: one
+           column per session date, so it is legitimately wider than a phone.
+           Letting the sheet scroll on its own keeps that width without
+           dragging the whole page sideways — and the print rules below are
+           untouched, so what comes out of the printer is unchanged. */
+        @media screen and (max-width: 1100px) {
+            body { padding: 12px; }
+
+            .sheet {
+                max-width: 100%;
+                overflow-x: auto;
+            }
+
+            .sheet-header {
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .sheet-meta { text-align: right; }
+        }
+
         @media print {
             body { background: #fff; padding: 0; }
             .no-print { display: none !important; }

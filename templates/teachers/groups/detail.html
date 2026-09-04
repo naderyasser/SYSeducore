@@ -648,10 +648,15 @@
     <div class="detail-container">
         <div class="detail-header">
             <h5 class="mb-0"><i class="bi bi-grid-3x3 me-2"></i>جدول الحضور التاريخي</h5>
-            <form method="get" class="d-flex gap-2 align-items-center">
-                <input type="date" name="from" value="{{ grid_from|date:'Y-m-d' }}" class="form-control form-control-sm">
+            {% comment %}
+            `flex-wrap`: two date inputs, a label and two buttons do not fit
+            one phone-width line, and without it the row ran off the right of
+            the screen instead of stacking.
+            {% endcomment %}
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
+                <input type="date" name="from" value="{{ grid_from|date:'Y-m-d' }}" class="form-control form-control-sm w-auto">
                 <span>إلى</span>
-                <input type="date" name="to" value="{{ grid_to|date:'Y-m-d' }}" class="form-control form-control-sm">
+                <input type="date" name="to" value="{{ grid_to|date:'Y-m-d' }}" class="form-control form-control-sm w-auto">
                 <button type="submit" class="btn btn-sm btn-outline-primary">تحديث</button>
                 <a href="{% url 'attendance:group_roster_print' group.group_id %}?from={{ grid_from|date:'Y-m-d' }}&to={{ grid_to|date:'Y-m-d' }}" target="_blank" class="btn btn-sm btn-outline-dark">
                     <i class="bi bi-printer me-1"></i>طباعة كشف الحضور
