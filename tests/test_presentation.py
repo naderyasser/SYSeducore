@@ -21,7 +21,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.template import Context, Template
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from apps.core.templatetags.money_format import egp, money
 
@@ -223,3 +223,46 @@ class CurrencyMarkupTests(SimpleTestCase):
             'drops a zero fraction and groups thousands. Found at: '
             + ', '.join(offenders)
         )
+
+
+class LoginRedirectTests(TestCase):
+    """
+    Signing in with a ``next`` must land on that page, not on a 500.
+
+    ``url_has_allowed_host_and_scheme`` takes ``require_https``; the call
+    passed ``require_secure``, which Django rejects with a ``TypeError``. The
+    crash happened *after* ``login()``, so the session existed and the person
+    was shown a server error instead of the page they had clicked. Anyone
+    whose session expired hit it: the redirect to the login screen always
+    carries a ``next``.
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.user = get_user_model().objects.create_user(
+            username='desk', password='pw12345!', role='supervisor'
+        )
+
+    def test_login_with_next_lands_on_that_page(self):
+        response = self.client.post(
+            '/accounts/login/',
+            {'username': 'desk', 'password': 'pw12345!', 'next': '/students/'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/students/')
+
+    def test_login_without_next_lands_on_the_dashboard(self):
+        response = self.client.post(
+            '/accounts/login/', {'username': 'desk', 'password': 'pw12345!'}
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/reports/', response['Location'])
+
+    def test_a_next_pointing_off_site_is_ignored(self):
+        response = self.client.post(
+            '/accounts/login/',
+            {'username': 'desk', 'password': 'pw12345!',
+             'next': 'https://example.com/steal'},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn('example.com', response['Location'])

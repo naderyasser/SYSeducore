@@ -174,12 +174,20 @@ def _is_inactive_account(username, password):
 
 
 def _safe_next_url(request):
-    """Return ?next= only when it points back at this host."""
+    """
+    Return ?next= only when it points back at this host.
+
+    The keyword is ``require_https``. It was written as ``require_secure``,
+    which Django rejects with a ``TypeError`` — so every login that carried a
+    ``next`` raised 500 *after* the session had already been created. Anyone
+    whose session expired, clicked a link, and signed in again was logged in
+    and shown a crash instead of the page they asked for.
+    """
     next_url = request.POST.get('next') or request.GET.get('next')
     if next_url and url_has_allowed_host_and_scheme(
         next_url,
         allowed_hosts={request.get_host()},
-        require_secure=request.is_secure(),
+        require_https=request.is_secure(),
     ):
         return next_url
     return None
