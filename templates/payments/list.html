@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load l10n %}
 {% block title %}المدفوعات{% endblock %}
 {% block page_title %}المدفوعات{% endblock %}
@@ -410,10 +411,10 @@
 
             <!-- Action Buttons -->
             {% if payment.status != 'paid' %}
-            {# Partial collection. The record endpoint has always accepted an
+            {% comment %} Partial collection. The record endpoint has always accepted an
                arbitrary amount; this screen simply never exposed a field for
                one, so a student paying 50 of 100 could not be recorded here at
-               all — the desk either took the full amount or nothing. #}
+               all — the desk either took the full amount or nothing. {% endcomment %}
             <div class="partial-pay" data-payment="{{ payment.payment_id }}">
                 <div class="input-group input-group-sm">
                     <span class="input-group-text"><i class="bi bi-cash"></i></span>
@@ -438,7 +439,7 @@
             <button class="btn-pay full"
                     onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name|escapejs }}', {% localize off %}{{ payment.amount_due }}{% endlocalize %})">
                 <i class="bi bi-check-circle-fill"></i>
-                تسديد كامل {{ payment.amount_due }} ج.م + تفعيل اشتراك
+                تسديد كامل {{ payment.amount_due|egp }} + تفعيل اشتراك
             </button>
             {% else %}
             <div class="btn-pay done">
@@ -447,10 +448,10 @@
             </div>
             {% endif %}
 
-            {# Printable receipt for the student. Shown for a partial payment
+            {% comment %} Printable receipt for the student. Shown for a partial payment
                too: money changed hands, so the parent is owed a slip for it —
                waiting for the balance to clear is what left them with nothing
-               to show. #}
+               to show. {% endcomment %}
             {% if payment.amount_paid > 0 %}
             <a href="{% url 'payments:receipt' payment.payment_id %}" target="_blank"
                class="btn btn-outline-secondary btn-sm w-100 mt-2">

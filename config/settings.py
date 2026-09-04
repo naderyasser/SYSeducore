@@ -184,6 +184,17 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Django's stock ``ar`` locale formats numbers the Maghreb way — "," for the
+# decimal point and "." for thousands — so every fee on every screen rendered
+# as ``50,00`` and every zero balance as ``0,00``. config/formats/ar_EG
+# restores the Egyptian convention (``50.00``, ``1,250.00``).
+FORMAT_MODULE_PATH = ['config.formats']
+
+# Thousand grouping is deliberately left off globally: it applies to every
+# integer Django renders, which would turn payment id 1234 into "1,234" and
+# year 2026 into "2,026". Money gets its grouping from the ``money``/``egp``
+# filters in apps.core.templatetags.money_format instead.
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.0/howto/static-files/

@@ -262,7 +262,48 @@
         .table {
             width: 100%;
             max-width: 100%;
+        }
+
+        /* Arabic names sit next to Latin ones (a teacher's "Mr. Ahmed", a
+           subject code). Without isolation the bidi algorithm reorders the
+           two around each other and the cell reads as two half-sentences —
+           `plaintext` gives every cell its own direction from its own first
+           strong character. */
+        .table th,
+        .table td {
+            unicode-bidi: plaintext;
+            /* `break-word`, deliberately not `anywhere`: `anywhere` lets a
+               column shrink to one character, and the table layout then gave
+               every name column a single letter per line. `break-word` only
+               splits a word that genuinely cannot fit. */
+            overflow-wrap: break-word;
+        }
+
+        /* Only the columns that genuinely must not break keep nowrap: money,
+           dates, action buttons. Everything else wraps instead of pushing the
+           table wider than the screen. */
+        .table .text-nowrap,
+        .table .table-actions,
+        .table .table-num {
             white-space: nowrap;
+        }
+
+        /* Between a phone and a wide monitor the sidebar takes 260px and an
+           eight-column table is a few dozen pixels too wide for what is left,
+           which costs the last column to a horizontal scroll. Tightening the
+           cell padding over that range buys back the width instead. */
+        @media (min-width: 768px) and (max-width: 1399.98px) {
+            .table thead th {
+                padding: 10px 10px;
+            }
+
+            .table tbody td {
+                padding: 10px 10px;
+            }
+
+            .table .btn-sm {
+                padding: 4px 8px;
+            }
         }
 
         @media (max-width: 768px) {
@@ -512,22 +553,24 @@
                 font-size: 0.85rem;
             }
 
-            /* Improve touch targets on mobile */
+            /* Touch targets. `display: flex` here used to turn every button
+               into a block-level box — including the small action buttons
+               inside a table cell, which then stacked one per line and gave
+               each row a three-button height. `inline-flex` keeps them on one
+               line, and buttons inside a table keep a smaller target because
+               the row itself is already the tap area. */
             .btn, .nav-link, .dropdown-item, .menu-item {
                 min-height: 44px;
-                display: flex;
+                display: inline-flex;
                 align-items: center;
+                justify-content: center;
             }
 
-            /* Stack form elements vertically */
-            .form-row, .row {
-                flex-direction: column;
-            }
-
-            .col, [class*="col-"] {
-                width: 100%;
-                max-width: 100%;
-                margin-bottom: 10px;
+            .table .btn,
+            .btn-group-sm .btn,
+            .btn-sm {
+                min-height: 34px;
+                padding: 4px 10px;
             }
 
             /* Better spacing for cards */
@@ -978,6 +1021,7 @@
     {{ EDUCATION_STAGE_YEARS|json_script:"education-stage-years" }}
     <script src="{% static 'js/utils/education-stage-year.js' %}"></script>
     <script src="{% static 'js/utils/searchable-select.js' %}"></script>
+    <script src="{% static 'js/utils/responsive-tables.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

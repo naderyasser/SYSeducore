@@ -1,3 +1,4 @@
+{% load money_format %}
 {% comment %}
 Rows of the groups directory — rendered standalone for the live-search
 ``?partial=1`` fetch and included by ``list.html`` on a normal page load.
@@ -11,19 +12,27 @@ Rows of the groups directory — rendered standalone for the live-search
         </a>
     </td>
     <td>
-        {# Clicking a teacher re-runs the search for them: the fastest path from
-           "this group" to "everything this teacher runs". #}
+        {% comment %} Clicking a teacher re-runs the search for them: the fastest path from
+           "this group" to "everything this teacher runs". {% endcomment %}
         <a href="{% url 'teachers:group_list' %}?q={{ group.teacher.full_name|urlencode }}"
-           class="text-decoration-none text-body">{{ group.teacher.full_name }}</a>
+           class="text-decoration-none text-body" title="{{ group.teacher.full_name }}">{{ group.teacher.full_name }}</a>
     </td>
     <td>
         <span class="badge bg-secondary">{{ group.get_rooms_display }}</span>
     </td>
-    <td>{{ group.get_schedule_display }}</td>
+    {% comment %}
+    A schedule reads "السبت والثلاثاء 4:00 م - 6:00 م" and is the longest
+    column here. Clipped to keep it from setting the table's width; the full
+    text stays in the tooltip, and the card layout on a phone drops the clip
+    and wraps it instead.
+    {% endcomment %}
     <td>
+        <span class="cell-truncate" title="{{ group.get_schedule_display }}">{{ group.get_schedule_display }}</span>
+    </td>
+    <td class="table-num">
         <span class="badge bg-light text-dark">{{ group.students_count }} طالب</span>
     </td>
-    <td>{{ group.standard_fee }} ج.م</td>
+    <td class="table-num">{{ group.standard_fee|egp }}</td>
     <td>
         {% if group.is_active %}
         <span class="badge bg-success">نشط</span>
@@ -31,7 +40,7 @@ Rows of the groups directory — rendered standalone for the live-search
         <span class="badge bg-secondary">غير نشط</span>
         {% endif %}
     </td>
-    <td>
+    <td class="table-actions">
         <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
            class="btn btn-sm btn-outline-info" title="عرض تفاصيل المجموعة">
             <i class="bi bi-eye me-1"></i>عرض

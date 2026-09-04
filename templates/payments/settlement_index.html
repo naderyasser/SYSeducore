@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 
+{% load money_format %}
 {% block title %}تسويات المدرسين{% endblock %}
 {% block page_title %}تسويات المدرسين{% endblock %}
 
@@ -11,11 +12,11 @@
             <form id="buildForm" class="row g-3 align-items-end">
                 <div class="col-md-4">
                     <label class="form-label" for="teacher_select">المدرس</label>
-                    {# Two teachers here share a name AND a phone number, so a bare
+                    {% comment %} Two teachers here share a name AND a phone number, so a bare
                        full_name produced two identical rows with no way to tell
                        them apart. The specialization is appended for exactly the
                        names that collide (view sets name_is_ambiguous), and the
-                       list is type-to-search because 32 names is a long scroll. #}
+                       list is type-to-search because 32 names is a long scroll. {% endcomment %}
                     <select name="teacher_id" id="teacher_select" class="form-select" required
                             data-searchable data-placeholder="اكتب اسم المدرس...">
                         <option value="">اختر مدرسًا</option>
@@ -73,8 +74,8 @@
                                 <span class="badge bg-warning text-dark">مسودة</span>
                             {% endif %}
                         </td>
-                        <td>{{ s.adjusted_gross }} ج.م</td>
-                        <td>{{ s.teacher_share }} ج.م</td>
+                        <td>{{ s.adjusted_gross|egp }}</td>
+                        <td>{{ s.teacher_share|egp }}</td>
                         <td>
                             <a href="{% url 'payments:settlement_detail' s.settlement_id %}" class="btn btn-sm btn-outline-primary">فتح</a>
                         </td>

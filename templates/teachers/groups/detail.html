@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load dict_filters %}
 
 {% block title %}{{ group.group_name }}{% endblock %}
@@ -445,7 +446,7 @@
                 <i class="bi bi-cash"></i>
                 المصروف (الدورة كاملة)
             </div>
-            <div class="info-card-value">{{ group.standard_fee }} ج.م</div>
+            <div class="info-card-value">{{ group.standard_fee|egp }}</div>
         </div>
 
         <div class="info-card">
@@ -469,24 +470,24 @@
             </div>
             <div class="info-card-value">
                 {% if per_session_fee is not None %}
-                    {{ per_session_fee }} ج.م
+                    {{ per_session_fee|egp }}
                 {% else %}
                     —
                 {% endif %}
             </div>
         </div>
 
-        {# Cumulative cycle money is admin-only, like every other total in the
+        {% comment %} Cumulative cycle money is admin-only, like every other total in the
            system (see User.can_see_financials): group_detail is open to
            supervisors, and per-student amounts have always been visible to
-           them, but the group-wide sums have not. #}
+           them, but the group-wide sums have not. {% endcomment %}
         {% if open_cycle and user.can_see_financials %}
         <div class="info-card">
             <div class="info-card-header">
                 <i class="bi bi-wallet2"></i>
                 المُحصَّل في الدورة
             </div>
-            <div class="info-card-value">{{ collected_total }} ج.م</div>
+            <div class="info-card-value">{{ collected_total|egp }}</div>
         </div>
 
         <div class="info-card">
@@ -494,7 +495,7 @@
                 <i class="bi bi-hourglass-split"></i>
                 المتبقي على الطلاب
             </div>
-            <div class="info-card-value">{{ outstanding_total }} ج.م</div>
+            <div class="info-card-value">{{ outstanding_total|egp }}</div>
         </div>
         {% endif %}
 
@@ -508,11 +509,11 @@
                 دورة {{ open_cycle.index }}
                 <small class="text-muted d-block" style="font-size:0.72rem;">
                     {{ cycle_sessions_done }}/{{ open_cycle.sessions_planned }} حصة
-                    {# A cycle is created "reserved" and only gets its start date
+                    {% comment %} A cycle is created "reserved" and only gets its start date
                        from the first lesson actually held (apps/teachers/cycles.py
                        assign_to_cycle). Saying so beats omitting the line, which
                        read as a missing start date rather than a cycle that has
-                       not begun — every freshly opened cycle looked broken. #}
+                       not begun — every freshly opened cycle looked broken. {% endcomment %}
                     {% if open_cycle.started_on %}— بدأت {{ open_cycle.started_on|date:"Y-m-d" }}
                     {% else %}— لم تبدأ بعد (تبدأ بأول حصة){% endif %}
                 </small>
@@ -614,13 +615,13 @@
                                 </span>
                                 {% if row.payment_amount_due is not None %}
                                 <small class="text-muted d-block">
-                                    {# "دفع 50 من 100، باقي 50" — the whole point
+                                    {% comment %} "دفع 50 من 100، باقي 50" — the whole point
                                        of the partial-collection flow is legible
-                                       here, not just the price. #}
-                                    {{ row.payment_amount_paid }} / {{ row.payment_amount_due }} ج.م
+                                       here, not just the price. {% endcomment %}
+                                    {{ row.payment_amount_paid }} / {{ row.payment_amount_due|egp }}
                                 </small>
                                 {% if row.payment_remaining and row.payment_remaining > 0 %}
-                                <small class="text-danger d-block">باقي {{ row.payment_remaining }} ج.م</small>
+                                <small class="text-danger d-block">باقي {{ row.payment_remaining|egp }}</small>
                                 {% endif %}
                                 {% endif %}
                             </td>

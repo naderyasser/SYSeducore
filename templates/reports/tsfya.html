@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load math_filters %}
 
 {% block title %}التصفية الشهرية — Tsfya{% endblock %}
@@ -227,10 +228,10 @@
                                             <span class="badge bg-danger">غير مدفوع</span>
                                         {% endif %}
                                     </td>
-                                    <td class="text-end">{{ p.amount_due|floatformat:2 }} ج.م</td>
-                                    <td class="text-end">{{ p.amount_paid|floatformat:2 }} ج.م</td>
+                                    <td class="text-end">{{ p.amount_due|egp }}</td>
+                                    <td class="text-end">{{ p.amount_paid|egp }}</td>
                                     <td class="text-end fw-bold {% if p.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
-                                        {{ p.remaining|floatformat:2 }} ج.م
+                                        {{ p.remaining|egp }}
                                     </td>
                                     <td class="text-center">{{ p.sessions_attended }} / {{ p.sessions_total }}</td>
                                     <td class="text-muted small">

@@ -85,9 +85,9 @@ into the template as real tags.)
         <div class="receipt-header">
             <h1>بداية — إيصال دفع</h1>
             <div class="sub">{{ payment.group.group_name }}</div>
-            {# The payment id is the receipt number: it is unique, already
+            {% comment %} The payment id is the receipt number: it is unique, already
                printed on nothing else, and lets the desk find the exact row
-               again when a parent comes back with the slip. #}
+               again when a parent comes back with the slip. {% endcomment %}
             <div class="receipt-no">رقم الإيصال: {{ payment.payment_id }}</div>
         </div>
 

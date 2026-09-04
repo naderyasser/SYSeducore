@@ -1,4 +1,5 @@
 {% load static %}
+{% load money_format %}
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
@@ -74,9 +75,9 @@
         {% endfor %}
 
         <div class="totals">
-            <div>إجمالي بعد التعديل: <strong>{{ settlement.adjusted_gross }} ج.م</strong></div>
-            <div>نصيب المركز: <strong>{{ settlement.center_share }} ج.م</strong></div>
-            <div>نصيب المدرس: <strong>{{ settlement.teacher_share }} ج.م</strong></div>
+            <div>إجمالي بعد التعديل: <strong>{{ settlement.adjusted_gross|egp }}</strong></div>
+            <div>نصيب المركز: <strong>{{ settlement.center_share|egp }}</strong></div>
+            <div>نصيب المدرس: <strong>{{ settlement.teacher_share|egp }}</strong></div>
         </div>
 
         <div class="signatures">

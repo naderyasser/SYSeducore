@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 
+{% load money_format %}
 {% block title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %}{% endblock %}
 {% block page_title %}{% if student %}تعديل الطالب{% else %}إضافة طالب جديد{% endif %}{% endblock %}
 
@@ -340,10 +341,10 @@
                 <div class="form-section">
                     <h6><i class="bi bi-mortarboard me-2"></i>البيانات الدراسية</h6>
                     <div class="row g-3">
-                        {# Stages come from apps.core.education via the
+                        {% comment %} Stages come from apps.core.education via the
                            education_taxonomy context processor — never hard-coded
                            here again, which is how تأسيس/كورسات reach every form
-                           at once. #}
+                           at once. {% endcomment %}
                         <div class="col-md-4">
                             <label for="id_education_stage" class="form-label">المرحلة الدراسية</label>
                             <select name="education_stage" id="id_education_stage" class="form-select">
@@ -354,13 +355,13 @@
                             </select>
                         </div>
 
-                        {# The year options below are the no-JS fallback only:
+                        {% comment %} The year options below are the no-JS fallback only:
                            education-stage-year.js rebuilds this select from the
                            stage map on load and on every stage change, so a year
                            the stage does not have is removed from the DOM rather
                            than merely hidden (hiding an <option> is advisory and
                            Safari ignores it — that is the six-years-for-إعدادي
-                           bug). data-selected survives the rebuild. #}
+                           bug). data-selected survives the rebuild. {% endcomment %}
                         <div class="col-md-4" id="education_year_wrapper">
                             <label for="id_education_year" class="form-label">السنة الدراسية</label>
                             <select name="education_year" id="id_education_year" class="form-select"
@@ -478,10 +479,10 @@
                         </div>
                         <div class="col-md-3">
                             <label for="filter_teacher" class="form-label">المدرس</label>
-                            {# data-searchable turns this into a type-to-filter
+                            {% comment %} data-searchable turns this into a type-to-filter
                                combobox (static/js/utils/searchable-select.js).
                                The <select> itself still holds the value, so the
-                               existing filter JS below is untouched. #}
+                               existing filter JS below is untouched. {% endcomment %}
                             <select id="filter_teacher" class="form-select" data-searchable
                                     data-placeholder="اكتب اسم المدرس...">
                                 <option value="">-- الكل --</option>
@@ -519,7 +520,7 @@
                                         <span style="margin: 0 5px;">|</span>
                                         <i class="bi bi-clock me-1"></i>{{ group.schedule_time|date:"H:i" }}
                                         <span style="margin: 0 5px;">|</span>
-                                        <i class="bi bi-cash me-1"></i>{{ group.standard_fee }} ج.م
+                                        <i class="bi bi-cash me-1"></i>{{ group.standard_fee|egp }}
                                     </div>
                                 </div>
                             </div>
@@ -556,10 +557,10 @@
                                 </div>
                                 {% if is_create %}
                                 <div style="margin-top: 8px;">
-                                    {# Partial payments are supported: enter 50
+                                    {% comment %} Partial payments are supported: enter 50
                                        against a 100 ج.م fee and the enrolment is
                                        saved with status "جزئي". Only the leftover
-                                       is chased later. #}
+                                       is chased later. {% endcomment %}
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text"><i class="bi bi-cash me-1"></i> دفعة أولى</span>
                                         <input type="number" name="initial_payment_{{ group.group_id }}"

@@ -500,8 +500,8 @@
 
 <!-- Quick Actions -->
 <div class="row g-3 mb-4">
-    {# Desk-only actions: a teacher account hits 403 on all three, so the
-       dashboard must not offer them a dead-end button. #}
+    {% comment %} Desk-only actions: a teacher account hits 403 on all three, so the
+       dashboard must not offer them a dead-end button. {% endcomment %}
     {% if user.is_supervisor %}
     <div class="col-6 col-md-3">
         <a href="{% url 'attendance:scanner' %}" class="quick-action">

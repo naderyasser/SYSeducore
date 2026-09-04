@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 {% load static %}
 
 {% block title %}تسوية المدرس{% endblock %}
@@ -16,7 +17,7 @@
           <div class="card bg-primary text-white">
             <div class="card-body text-center">
               <h5>إجمالي الإيرادات</h5>
-              <h2>{{ settlement.total_revenue }} ج.م</h2>
+              <h2>{{ settlement.total_revenue|egp }}</h2>
             </div>
           </div>
         </div>
@@ -24,7 +25,7 @@
           <div class="card bg-success text-white">
             <div class="card-body text-center">
               <h5>نصيب المدرس</h5>
-              <h2>{{ settlement.teacher_share }} ج.م</h2>
+              <h2>{{ settlement.teacher_share|egp }}</h2>
             </div>
           </div>
         </div>
@@ -32,7 +33,7 @@
           <div class="card bg-info text-white">
             <div class="card-body text-center">
               <h5>نصيب المركز</h5>
-              <h2>{{ settlement.center_share }} ج.م</h2>
+              <h2>{{ settlement.center_share|egp }}</h2>
             </div>
           </div>
         </div>
@@ -55,10 +56,10 @@
             <tr{% if not row.group_active %} class="text-muted"{% endif %}>
               <td>{{ row.group_name }}{% if not row.group_active %} (محذوفة){% endif %}</td>
               <td>{{ row.students }}</td>
-              <td>{{ row.revenue }} ج.م</td>
+              <td>{{ row.revenue|egp }}</td>
               <td>{{ row.center_percentage }}%</td>
-              <td>{{ row.center_share }} ج.م</td>
-              <td>{{ row.teacher_share }} ج.م</td>
+              <td>{{ row.center_share|egp }}</td>
+              <td>{{ row.teacher_share|egp }}</td>
             </tr>
             {% endfor %}
           </tbody>

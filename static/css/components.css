@@ -142,3 +142,137 @@
 .teacher-groups .teacher-group-meta {
     color: #6c757d;
 }
+
+/* ── Tables as cards on a phone ─────────────────────────────────────────────
+ *
+ * A directory table has eight columns. On a 390px screen that is a horizontal
+ * scroll where the body slides out from under its own header, so a column and
+ * its title are never on screen together — you scroll to a number and no
+ * longer know which number it is.
+ *
+ * Below 768px each row becomes a card and each cell carries its column title
+ * beside it. `responsive-tables.js` copies the titles out of <thead> into
+ * `data-label` and adds `.has-card-labels`; the card layout only switches on
+ * once that has happened, so with JavaScript off the table stays a table and
+ * keeps its (scrollable) header.
+ */
+@media (max-width: 767.98px) {
+    .table-responsive:has(> .has-card-labels) {
+        overflow-x: visible;
+    }
+
+    table.has-card-labels,
+    table.has-card-labels tbody,
+    table.has-card-labels tr,
+    table.has-card-labels td {
+        display: block;
+        width: auto;
+    }
+
+    table.has-card-labels thead {
+        /* Hidden from sight, kept for screen readers and for the script that
+           re-reads the titles when live search swaps the rows. */
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+    }
+
+    table.has-card-labels tbody tr {
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 0.35rem 0.75rem;
+        margin-bottom: 0.75rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    }
+
+    table.has-card-labels tbody tr:last-child {
+        margin-bottom: 0;
+    }
+
+    table.has-card-labels tbody td {
+        display: grid;
+        grid-template-columns: minmax(5.5rem, 38%) 1fr;
+        align-items: baseline;
+        gap: 0.75rem;
+        padding: 0.4rem 0;
+        border: 0;
+        border-bottom: 1px solid #f1f3f6;
+        text-align: start;
+        /* Without this a badge — a room name, a status pill — is a stretched
+           grid item and paints as a full-width grey bar. */
+        justify-items: start;
+        min-height: 0;
+    }
+
+    table.has-card-labels tbody td:last-child {
+        border-bottom: 0;
+    }
+
+    table.has-card-labels tbody td::before {
+        content: attr(data-label);
+        color: #6b7280;
+        font-size: 0.8rem;
+        font-weight: 600;
+        /* The label is Arabic and the value may not be: isolate them so one
+           cannot reorder the other. */
+        unicode-bidi: isolate;
+        overflow-wrap: anywhere;
+    }
+
+    /* A cell the script could not label (a colspan row: "no results", a
+       totals footer) spans the card instead of leaving an empty label
+       column. */
+    table.has-card-labels tbody td:not([data-label])::before {
+        content: none;
+    }
+
+    table.has-card-labels tbody td:not([data-label]) {
+        display: block;
+        text-align: center;
+    }
+
+    /* Actions read as a row of buttons at the foot of the card. */
+    table.has-card-labels tbody td.table-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.4rem;
+        padding-top: 0.6rem;
+    }
+
+    table.has-card-labels tbody td.table-actions::before {
+        content: none;
+    }
+
+    table.has-card-labels tbody td.table-actions form {
+        display: inline-flex;
+    }
+
+    /* Nothing inside a card may force it wider than the screen. */
+    table.has-card-labels tbody td > * {
+        max-width: 100%;
+        min-width: 0;
+    }
+}
+
+/* Long free text in a table cell — a schedule, a note — is clipped rather
+   than allowed to set the column width. The full value stays in `title`. */
+.table .cell-truncate {
+    display: block;
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+    .table .cell-truncate {
+        max-width: none;
+        overflow: visible;
+        white-space: normal;
+    }
+}

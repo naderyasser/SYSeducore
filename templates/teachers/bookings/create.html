@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 
+{% load money_format %}
 {% block title %}إنشاء حجز جديد{% endblock %}
 {% block page_title %}إنشاء حجز - موعد جديد{% endblock %}
 
@@ -387,7 +388,7 @@
                         <span class="mx-1">|</span>
                         <i class="bi bi-people me-1"></i>{{ group.students_count }} طالب
                         <span class="mx-1">|</span>
-                        <i class="bi bi-cash me-1"></i>{{ group.standard_fee }} ج.م
+                        <i class="bi bi-cash me-1"></i>{{ group.standard_fee|egp }}
                     </div>
                 </div>
                 <button type="button" class="btn-enrol"
@@ -476,8 +477,8 @@
                 </select>
             </div>
 
-            {# Rebuilt per stage by education-stage-year.js; the options below
-               are the no-JS fallback. Hidden entirely for تأسيس/كورسات. #}
+            {% comment %} Rebuilt per stage by education-stage-year.js; the options below
+               are the no-JS fallback. Hidden entirely for تأسيس/كورسات. {% endcomment %}
             <div class="form-group" id="education_year_wrapper">
                 <label for="education_year">الصف الدراسي</label>
                 <select name="education_year" id="education_year" class="form-control">

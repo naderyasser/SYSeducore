@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 
+{% load money_format %}
 {% block title %}التقويم الشامل للمواعيد{% endblock %}
 {% block page_title %}التقويم الشامل للمواعيد{% endblock %}
 
@@ -291,7 +292,7 @@
                         </div>
                         <div class="booking-detail">
                             <i class="bi bi-cash"></i>
-                            {{ booking.fee }} ج.م
+                            {{ booking.fee|egp }}
                         </div>
                     </div>
 

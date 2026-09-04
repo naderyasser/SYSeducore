@@ -1,3 +1,4 @@
+{% load money_format %}
 {% comment %}
 Rows of the teachers directory. Rendered standalone by ``teacher_list`` when
 the live-search JS asks for ``?partial=1``, and included by ``list.html`` on a
@@ -83,7 +84,7 @@ find out defeats the point.
                 <i class="bi bi-people me-1"></i>{{ group.students_count }} طالب
             </span>
             <span class="teacher-group-meta">
-                <i class="bi bi-cash me-1"></i>{{ group.standard_fee }} ج.م
+                <i class="bi bi-cash me-1"></i>{{ group.standard_fee|egp }}
             </span>
             <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
                class="btn btn-sm btn-outline-info ms-auto">
