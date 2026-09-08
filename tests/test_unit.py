@@ -793,7 +793,6 @@ class GroupViewTest(BaseTestMixin, TestCase):
             reverse('teachers:group_delete', kwargs={'group_id': self.group.group_id})
         )
         self.assertEqual(response.status_code, 302)
-        from apps.teachers.models import Group
         group = Group.all_objects.get(pk=self.group.group_id)
         self.assertIsNotNone(group.deleted_at)
 

@@ -18,8 +18,7 @@ Both drop a zero fractional part, keep real piastres, and group thousands.
 from decimal import Decimal, DecimalException, ROUND_HALF_UP
 
 from django import template
-from django.utils.html import escape
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html
 
 register = template.Library()
 
@@ -76,8 +75,6 @@ def egp(value, default='0'):
     The space is a non-breaking one so the amount and its unit never wrap onto
     two lines inside a narrow table cell on a phone.
     """
-    amount = money(value, default)
-    if amount == default:
-        # ``default`` is caller-supplied text; the formatted amount is not.
-        amount = escape(default)
-    return mark_safe(f'{amount}{NBSP}{CURRENCY_SUFFIX}')
+    # format_html escapes every argument, so a caller-supplied ``default``
+    # can never carry markup; the formatted amount is digits and separators.
+    return format_html('{}{}{}', money(value, default), NBSP, CURRENCY_SUFFIX)
