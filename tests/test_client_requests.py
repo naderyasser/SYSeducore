@@ -129,6 +129,26 @@ class QuickSearchTests(TestCase):
         self.assertTrue(data['students']['more'])
         self.assertIn('search=', data['more_urls']['students'])
 
+    def test_more_links_survive_a_term_with_reserved_characters(self):
+        from urllib.parse import parse_qs, urlsplit
+        term = 'أحمد & على #1'
+        data = self.client.get(self.url, {'q': term}).json()
+        for key, param in (('groups', 'q'), ('teachers', 'q'), ('students', 'search')):
+            qs = parse_qs(urlsplit(data['more_urls'][key]).query)
+            self.assertEqual(qs[param], [term], key)
+
+    def test_throttled_search_answers_json_429_not_a_login_bounce(self):
+        from django.test import override_settings
+        from django.core.cache import cache
+        cache.clear()
+        with override_settings(RATELIMIT_ENABLE=True):
+            last = None
+            for _ in range(301):
+                last = self.client.get(self.url, {'q': 'محمد'})
+        self.assertEqual(last.status_code, 429)
+        self.assertEqual(last['Content-Type'], 'application/json')
+        self.assertIn('error', last.json())
+
     def test_requires_login(self):
         self.client.logout()
         r = self.client.get(self.url, {'q': 'محمد'})

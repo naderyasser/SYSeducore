@@ -12,6 +12,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Q
 from django.http import JsonResponse
 from django.urls import reverse
+from django.utils.http import urlencode
 from django.views.decorators.http import require_GET
 from django_ratelimit.decorators import ratelimit
 
@@ -91,15 +92,26 @@ def _students(term):
 
 @login_required
 @require_GET
-@ratelimit(key=ratelimit_key, rate='120/m', method='GET', block=True)
+@ratelimit(key=ratelimit_key, rate='300/m', method='GET', block=False)
 def quick_search(request):
     """
     ``GET /api/quick-search/?q=`` → ``{"groups": [...], "teachers": [...],
     "students": [...]}``, each capped at :data:`LIMIT` with a ``more`` flag.
 
-    Fires on every keystroke, hence the rate limit — generous enough for
-    typing, tight enough that a stuck key cannot hammer the database.
+    Fires on every keystroke, hence the rate limit. The bucket is per client
+    IP (``ratelimit_key``), and a centre's whole desk sits behind one router,
+    so the rate has to cover several people typing at once — 300/min does;
+    a stuck key is already collapsed by the 200ms debounce in the browser.
+    ``block=False`` on purpose: with ``block=True`` a throttled request raises
+    ``Ratelimited`` (a ``PermissionDenied``), which the project's 403 handler
+    turns into an HTML page — and a fetch() reading a 403 as "session gone"
+    would bounce a logged-in user off whatever screen they were on. A JSON
+    429 lets the box say "try again in a moment" instead.
     """
+    if getattr(request, 'limited', False):
+        return JsonResponse(
+            {'error': 'محاولات كثيرة في وقت قصير، حاول بعد لحظة'}, status=429
+        )
     term = (request.GET.get('q') or '').strip()
     if len(term) < MIN_CHARS:
         return JsonResponse({'q': term, 'groups': [], 'teachers': [], 'students': []})
@@ -112,9 +124,11 @@ def quick_search(request):
         'groups': capped(_groups(term)),
         'teachers': capped(_teachers(term)),
         'students': capped(_students(term)),
+        # urlencode, not concatenation: a term with "&" or "#" would
+        # otherwise cut its own link short.
         'more_urls': {
-            'groups': reverse('teachers:group_list') + '?q=' + term,
-            'teachers': reverse('teachers:list') + '?q=' + term,
-            'students': reverse('students:list') + '?search=' + term,
+            'groups': reverse('teachers:group_list') + '?' + urlencode({'q': term}),
+            'teachers': reverse('teachers:list') + '?' + urlencode({'q': term}),
+            'students': reverse('students:list') + '?' + urlencode({'search': term}),
         },
     })

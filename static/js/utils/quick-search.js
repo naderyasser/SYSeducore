@@ -82,11 +82,17 @@
                 signal: controller.signal
             })
                 .then(function (r) {
-                    if (r.redirected || r.status === 401 || r.status === 403) {
+                    if (r.redirected || r.status === 401) {
                         // Session expired mid-search: a silent empty list
                         // reads as "the search is broken".
                         window.location.href = '/accounts/login/';
                         throw new Error('session');
+                    }
+                    if (r.status === 429 || r.status === 403) {
+                        // Throttled, or a permission gate — the person is
+                        // still signed in; navigating away would lose their
+                        // page for nothing.
+                        throw new Error('throttled');
                     }
                     if (!r.ok) throw new Error('http ' + r.status);
                     return r.json();
@@ -96,7 +102,9 @@
                 })
                 .catch(function (e) {
                     if (e.name === 'AbortError' || e.message === 'session') return;
-                    menu.innerHTML = '<div class="quick-search-empty">تعذّر البحث الآن</div>';
+                    menu.innerHTML = '<div class="quick-search-empty">' +
+                        (e.message === 'throttled' ? 'محاولات كثيرة، حاول بعد لحظة' : 'تعذّر البحث الآن') +
+                        '</div>';
                     open();
                 });
         }
