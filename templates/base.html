@@ -942,6 +942,26 @@
                 <h1 class="page-title">{% block page_title %}لوحة التحكم{% endblock %}</h1>
             </div>
             {% if user.is_authenticated %}
+            {% comment %}
+            One box for "take me to Mr. Ahmed" / "open Group A" / "find this
+            student" — the desk's ask was fewer steps than list → row → page.
+            A real GET form so Enter works without JS (it lands on the groups
+            directory, which already searches teachers and groups by name).
+            {% endcomment %}
+            <form class="quick-search" role="search" method="get"
+                  action="{% url 'teachers:group_list' %}"
+                  data-quick-search data-endpoint="{% url 'core:quick_search' %}">
+                <button type="button" class="quick-search-toggle" aria-label="بحث سريع" title="بحث سريع">
+                    <i class="bi bi-search"></i>
+                </button>
+                <div class="quick-search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="search" name="q" autocomplete="off"
+                           placeholder="ابحث باسم مدرس أو مجموعة أو طالب…"
+                           aria-label="بحث سريع عن مدرس أو مجموعة أو طالب">
+                </div>
+                <div class="quick-search-menu" hidden></div>
+            </form>
             <div class="user-info">
                 <span class="user-name">{{ user.get_full_name|default:user.username }}</span>
                 <div class="user-avatar">
@@ -1023,6 +1043,7 @@
     <script src="{% static 'js/utils/searchable-select.js' %}"></script>
     <script src="{% static 'js/utils/responsive-tables.js' %}"></script>
     <script src="{% static 'js/utils/money.js' %}"></script>
+    <script src="{% static 'js/utils/quick-search.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

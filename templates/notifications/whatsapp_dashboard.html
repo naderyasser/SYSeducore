@@ -5,6 +5,62 @@
 
 {% block content %}
 <div class="container-fluid">
+    {% comment %}
+    Connection first: none of the numbers below mean anything while the
+    instance is not linked. Green only when Wapilot says WORKING; the error
+    text is Wapilot's own, because "not an API subscription" and "QR never
+    scanned" need different fixes and both used to look like "sending fails".
+    {% endcomment %}
+    <div class="card mb-4 border-0" id="whatsapp-connection">
+        <div class="card-body">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <div class="d-flex align-items-center gap-3">
+                    {% if connection.success and connection.connected %}
+                    <span class="badge bg-success fs-6"><i class="bi bi-check-circle me-1"></i>متصل</span>
+                    {% elif connection.success %}
+                    <span class="badge bg-warning fs-6"><i class="bi bi-exclamation-triangle me-1"></i>غير مرتبط بهاتف</span>
+                    {% else %}
+                    <span class="badge bg-danger fs-6"><i class="bi bi-x-circle me-1"></i>غير متصل</span>
+                    {% endif %}
+                    <div>
+                        <div class="fw-semibold">حالة ربط الواتساب</div>
+                        <div class="small text-muted">
+                            {% if connection.success %}
+                                الحالة: <code>{{ connection.status }}</code>
+                                {% if connection.phone %}— الرقم المرتبط: <strong dir="ltr">{{ connection.phone }}</strong>{% endif %}
+                                {% if connection.message %}— {{ connection.message }}{% endif %}
+                            {% else %}
+                                {{ connection.error }}
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% if expected_number %}
+                <div class="small">
+                    الرقم المطلوب ربطه: <strong dir="ltr">{{ expected_number }}</strong>
+                    {% if connection.success and connection.phone %}
+                        {% if expected_number in connection.phone %}
+                        <span class="badge bg-success ms-1">مطابق</span>
+                        {% else %}
+                        <span class="badge bg-danger ms-1">هاتف مختلف</span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            {% if not connection.success or not connection.connected %}
+            <div class="alert alert-light border mt-3 mb-0 small">
+                <div class="fw-semibold mb-1">لتشغيل الإرسال:</div>
+                <ol class="mb-0 ps-3">
+                    <li>افتح لوحة Wapilot (app.wapilot.net) وتأكد أن الـ instance على اشتراك يدعم الـ API.</li>
+                    <li>من صفحة WhatsApp Instances امسح رمز QR بهاتف الرقم المطلوب ربطه.</li>
+                    <li>ارجع هنا خلال دقيقة؛ الشارة تتحول للأخضر تلقائيًا عندما تصبح الحالة WORKING.</li>
+                </ol>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
     <!-- الإحصائيات -->
     <div class="row mb-4">
         <div class="col-md-3">

@@ -1,0 +1,244 @@
+{% load static %}
+{% load money_format %}
+{% comment %}
+Print-ready student report: identity, enrolments, attendance and the payment
+statement on one A4 page. Standalone like the ID card and the receipt (own
+DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
+{% endcomment %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>تقرير الطالب — {{ student.full_name }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        @font-face {
+            font-family: 'Cairo';
+            src: url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype-variations'),
+                 url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype');
+            font-weight: 200 1000;
+        }
+        * { font-family: 'Cairo', sans-serif; }
+        body { background: #f6f7fb; padding: 20px; color: #1f2937; }
+
+        .sheet {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+            border: 1px solid #d7dbe3;
+            border-radius: 12px;
+            padding: 26px 30px;
+        }
+        .sheet-header {
+            display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap;
+            border-bottom: 2px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 18px;
+        }
+        .sheet-header h1 { font-size: 1.45rem; font-weight: 700; margin: 0; color: #1e3a8a; }
+        .sheet-header .sub { color: #6b7280; font-size: 0.85rem; }
+        .sheet-meta { font-size: 0.8rem; color: #6b7280; text-align: left; }
+
+        h2.sec { font-size: 1rem; font-weight: 700; color: #1e3a8a; margin: 20px 0 8px; display: flex; align-items: center; gap: 8px; }
+        h2.sec::after { content: ''; flex: 1; border-top: 1px dashed #c9cedb; }
+
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 22px; }
+        .info-grid .k { color: #6b7280; font-size: 0.8rem; }
+        .info-grid .v { font-weight: 600; font-size: 0.95rem; unicode-bidi: plaintext; }
+
+        table.rep { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        table.rep th, table.rep td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: center; vertical-align: middle; unicode-bidi: plaintext; }
+        table.rep thead th { background: #f3f6ff; color: #374151; font-weight: 600; }
+        table.rep td.start, table.rep th.start { text-align: right; }
+        table.rep tfoot td { font-weight: 700; background: #f8fafc; }
+        .num { white-space: nowrap; }
+        .ok { color: #15803d; } .bad { color: #b91c1c; } .warn { color: #b45309; }
+
+        .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
+        .kpi { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px; text-align: center; }
+        .kpi .n { font-size: 1.4rem; font-weight: 700; }
+        .kpi .l { font-size: 0.78rem; color: #6b7280; }
+
+        .ledger { font-size: 0.78rem; color: #4b5563; text-align: right; }
+        .ledger div { white-space: nowrap; }
+
+        .footer { margin-top: 22px; border-top: 1px dashed #c9cedb; padding-top: 10px; font-size: 0.75rem; color: #6b7280; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+        .sign { margin-top: 30px; display: flex; justify-content: space-between; gap: 20px; }
+        .sign div { border-top: 1px solid #333; width: 40%; text-align: center; padding-top: 5px; font-size: 0.8rem; }
+
+        @media screen and (max-width: 900px) {
+            body { padding: 12px; }
+            .sheet { padding: 16px; max-width: 100%; overflow-x: auto; }
+        }
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff; padding: 0; }
+            .sheet { border: none; max-width: 100%; padding: 0; }
+            .kpi, table.rep { page-break-inside: avoid; }
+            @page { size: A4; margin: 10mm; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center mb-3">
+        <button class="btn btn-primary" onclick="window.print()">
+            <i class="bi bi-printer"></i> طباعة التقرير
+        </button>
+        <a href="{% url 'students:detail' student_id=student.student_id %}" class="btn btn-outline-secondary">رجوع لصفحة الطالب</a>
+    </div>
+
+    <div class="sheet">
+        <div class="sheet-header">
+            <div>
+                <h1>تقرير الطالب</h1>
+                <div class="sub">بداية — نظام إدارة تعليمي</div>
+            </div>
+            <div class="sheet-meta">
+                كود الطالب: <strong>{{ student.student_code }}</strong><br>
+                طُبع في {{ printed_at|date:"Y-m-d H:i" }}
+            </div>
+        </div>
+
+        <h2 class="sec"><i class="bi bi-person-vcard"></i> البيانات الأساسية</h2>
+        <div class="info-grid">
+            <div><div class="k">الاسم</div><div class="v">{{ student.full_name }}</div></div>
+            <div><div class="k">النوع</div><div class="v">{% if student.gender == 'male' %}ولد{% elif student.gender == 'female' %}بنت{% else %}—{% endif %}</div></div>
+            <div><div class="k">تاريخ الميلاد</div><div class="v">{{ student.date_of_birth|date:"Y-m-d"|default:"—" }}</div></div>
+            <div><div class="k">رقم الطالب</div><div class="v">{{ student.student_phone|default:"—" }}</div></div>
+            <div><div class="k">{{ student.get_parent_label }}</div><div class="v">{{ student.parent_phone|default:"—" }}</div></div>
+            <div><div class="k">ولي الأمر</div><div class="v">{{ student.parent_name|default:"—" }}</div></div>
+            <div><div class="k">الحالة</div><div class="v {% if student.is_active %}ok{% else %}bad{% endif %}">{% if student.is_active %}نشط{% else %}غير نشط{% endif %}</div></div>
+            <div><div class="k">تاريخ التسجيل</div><div class="v">{{ student.created_at|date:"Y-m-d" }}</div></div>
+        </div>
+
+        <h2 class="sec"><i class="bi bi-mortarboard"></i> البيانات الدراسية</h2>
+        <div class="info-grid">
+            <div><div class="k">المرحلة / السنة</div><div class="v">{{ student.get_education_display_full }}</div></div>
+            <div><div class="k">المدرسة</div><div class="v">{{ student.school_name|default:"—" }}</div></div>
+            <div><div class="k">العنوان</div><div class="v">{{ student.address|default:"—" }}</div></div>
+        </div>
+
+        <h2 class="sec"><i class="bi bi-collection"></i> المجموعات المسجل فيها</h2>
+        <table class="rep">
+            <thead>
+                <tr>
+                    <th class="start">المجموعة</th>
+                    <th class="start">المدرس</th>
+                    <th>الموعد</th>
+                    <th>القاعة</th>
+                    <th>المصروف</th>
+                    <th>الحالة المالية</th>
+                    <th>تاريخ الانضمام</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in enrollments %}
+                <tr>
+                    <td class="start">{{ e.group.group_name }}</td>
+                    <td class="start">{{ e.group.teacher.full_name|default:"—" }}</td>
+                    <td>{{ e.group.get_schedule_display }}</td>
+                    <td>{{ e.group.get_rooms_display }}</td>
+                    <td class="num">{% if e.custom_fee is not None %}{{ e.custom_fee|egp }}{% else %}{{ e.group.standard_fee|egp }}{% endif %}</td>
+                    <td>{{ e.get_financial_status_display }}</td>
+                    <td class="num">{{ e.enrolled_at|date:"Y-m-d" }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-muted">الطالب غير مسجل في أي مجموعة حاليًا</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <h2 class="sec"><i class="bi bi-graph-up"></i> الحضور</h2>
+        <div class="kpis">
+            <div class="kpi"><div class="n ok">{{ attendance_recent.present }}</div><div class="l">حاضر — آخر 30 يوم</div></div>
+            <div class="kpi"><div class="n warn">{{ attendance_recent.late }}</div><div class="l">متأخر — آخر 30 يوم</div></div>
+            <div class="kpi"><div class="n bad">{{ attendance_recent.absent }}</div><div class="l">غائب — آخر 30 يوم</div></div>
+            <div class="kpi"><div class="n">{{ attendance_all.total }}</div><div class="l">إجمالي الحصص المسجلة</div></div>
+            <div class="kpi"><div class="n ok">{{ attendance_all.present }}</div><div class="l">حاضر — الإجمالي</div></div>
+            <div class="kpi"><div class="n bad">{{ attendance_all.absent }}</div><div class="l">غائب — الإجمالي</div></div>
+        </div>
+
+        {% if recent_rows %}
+        <table class="rep mt-3">
+            <thead>
+                <tr><th>التاريخ</th><th class="start">المجموعة</th><th>الحالة</th><th>الوقت</th></tr>
+            </thead>
+            <tbody>
+                {% for a in recent_rows %}
+                <tr>
+                    <td class="num">{{ a.scan_time|date:"Y-m-d" }}</td>
+                    <td class="start">{{ a.session.group.group_name|default:"—" }}</td>
+                    <td>
+                        {% if a.status == 'present' %}<span class="ok">حاضر</span>
+                        {% elif a.status == 'late' %}<span class="warn">متأخر</span>
+                        {% elif a.status == 'absent' %}<span class="bad">غائب</span>
+                        {% else %}استثناء{% endif %}
+                    </td>
+                    <td class="num">{{ a.scan_time|time:"H:i" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% endif %}
+
+        <h2 class="sec"><i class="bi bi-cash-stack"></i> كشف حساب المدفوعات</h2>
+        <table class="rep">
+            <thead>
+                <tr>
+                    <th>الشهر / الدورة</th>
+                    <th class="start">المجموعة</th>
+                    <th>المطلوب</th>
+                    <th>المدفوع</th>
+                    <th>المتبقي</th>
+                    <th>الحالة</th>
+                    <th class="start">حركات الدفع بالتاريخ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in payments %}
+                <tr>
+                    <td class="num">{% if p.cycle %}دورة {{ p.cycle.index }}{% else %}{{ p.month|date:"Y-m" }}{% endif %}</td>
+                    <td class="start">{{ p.group.group_name }}</td>
+                    <td class="num">{{ p.amount_due|egp }}</td>
+                    <td class="num ok">{{ p.amount_paid|egp }}</td>
+                    <td class="num {% if p.remaining > 0 and not p.is_exempt %}bad{% endif %}">{% if p.is_exempt %}—{% else %}{{ p.remaining|egp }}{% endif %}</td>
+                    <td>
+                        {% if p.is_exempt %}معفى
+                        {% elif p.status == 'paid' %}<span class="ok">مدفوع</span>
+                        {% elif p.status == 'partial' %}<span class="warn">جزئي</span>
+                        {% else %}<span class="bad">غير مدفوع</span>{% endif %}
+                    </td>
+                    <td class="ledger">
+                        {% for t in p.transactions.all %}
+                        <div>{{ t.effective_on|default:t.created_at|date:"Y-m-d" }} — {{ t.amount|egp }}{% if t.kind != 'payment' %} ({{ t.get_kind_display }}){% endif %}{% if t.created_by %} — {{ t.created_by.get_full_name|default:t.created_by.username }}{% endif %}</div>
+                        {% empty %}—{% endfor %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-muted">لا توجد مدفوعات مسجلة</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if payment_totals.count %}
+            <tfoot>
+                <tr>
+                    <td colspan="2" class="start">الإجمالي ({{ payment_totals.count }} سطر)</td>
+                    <td class="num">{{ payment_totals.due|egp }}</td>
+                    <td class="num ok">{{ payment_totals.paid|egp }}</td>
+                    <td class="num {% if payment_totals.remaining > 0 %}bad{% endif %}">{{ payment_totals.remaining|egp }}</td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+
+        <div class="sign">
+            <div>توقيع المشرف</div>
+            <div>توقيع ولي الأمر</div>
+        </div>
+        <div class="footer">
+            <span>هذا التقرير صادر من نظام بداية ويعكس السجلات حتى تاريخ الطباعة.</span>
+            <span>{{ today|date:"Y-m-d" }}</span>
+        </div>
+    </div>
+</body>
+</html>

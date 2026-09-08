@@ -5,6 +5,7 @@ from datetime import datetime
 from functools import wraps
 
 from django.conf import settings
+from django.core.cache import cache
 from django.contrib import messages as django_messages
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -102,10 +103,34 @@ def whatsapp_dashboard(request):
         'stats': stats,
         'recent_messages': recent_messages,
         'groups': groups,
+        'connection': _connection_status(),
+        'expected_number': settings.WHATSAPP_EXPECTED_NUMBER,
         'page_title': 'إدارة الواتساب'
     }
 
     return render(request, 'notifications/whatsapp_dashboard.html', context)
+
+
+CONNECTION_CACHE_KEY = 'whatsapp:instance-status'
+CONNECTION_CACHE_TTL = 60
+
+
+def _connection_status():
+    """
+    Whether the WhatsApp instance is linked to a phone, and which one.
+
+    ``WhatsAppService.get_instance_status`` has existed for a while but
+    nothing on a screen ever called it, so the desk could not tell a working
+    instance from one whose QR code was never scanned — or, as happened, one
+    whose subscription does not include the API at all. Every message just
+    failed. Cached for a minute: this is an external HTTP call and the
+    dashboard is opened often.
+    """
+    status = cache.get(CONNECTION_CACHE_KEY)
+    if status is None:
+        status = WhatsAppService().get_instance_status()
+        cache.set(CONNECTION_CACHE_KEY, status, CONNECTION_CACHE_TTL)
+    return status
 
 
 @supervisor_required

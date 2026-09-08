@@ -233,8 +233,90 @@ def student_detail(request, student_id):
         'attendance_stats': attendance_stats,
         'available_groups': available_groups,
     }
+    context.update(_payment_statement(student))
 
     return render(request, 'students/detail.html', context)
+
+
+def _payment_statement(student):
+    """
+    Every payment the student has ever had, newest first, with its ledger.
+
+    The desk asked for "all of the student's payments, with the dates". A
+    ``Payment`` is one billing line (a month or a cycle of one group); the
+    dates live on its ``PaymentTransaction`` rows, which say when each pound
+    was actually taken and by whom. Both are returned so a screen can show
+    the line and, under it, the movements that make up ``amount_paid``.
+
+    Totals skip exempt and zero-fee rows: those are settled by definition
+    (see ``Payment._derive_status``) and would otherwise inflate "owed".
+    """
+    payments = list(
+        Payment.objects.filter(student=student)
+        .select_related('group', 'group__teacher', 'cycle')
+        .prefetch_related('transactions', 'transactions__created_by')
+        .order_by('-month', '-created_at')
+    )
+    billable = [p for p in payments if not p.is_exempt and p.amount_due > 0]
+    total_due = sum((p.amount_due for p in billable), Decimal('0'))
+    total_paid = sum((p.amount_paid for p in billable), Decimal('0'))
+    return {
+        'payments': payments,
+        'payment_totals': {
+            'due': total_due,
+            'paid': total_paid,
+            'remaining': total_due - total_paid,
+            'count': len(payments),
+        },
+    }
+
+
+@login_required
+def student_report(request, student_id):
+    """
+    Print-ready, single-page report: who the student is, where they are
+    enrolled, how they attend, and what they have paid.
+
+    Standalone like the ID card and the receipt (own DOCTYPE, A4), so it
+    prints cleanly and can be handed to a parent. Attendance is shown twice:
+    the last 30 days, which is what the desk usually argues about, and the
+    whole record, which is what a parent asks for.
+    """
+    student = get_object_or_404(Student, pk=student_id)
+
+    enrollments = (
+        StudentGroupEnrollment.objects.filter(student=student, is_active=True)
+        .select_related('group', 'group__teacher')
+        .prefetch_related('group__schedules__room')
+    )
+
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    attendance = Attendance.objects.filter(student=student)
+    counts = dict(
+        present=Count('pk', filter=Q(status='present')),
+        late=Count('pk', filter=Q(status='late')),
+        absent=Count('pk', filter=Q(status='absent')),
+        exception=Count('pk', filter=Q(status='exception')),
+        total=Count('pk'),
+    )
+    attendance_all = attendance.aggregate(**counts)
+    attendance_recent = attendance.filter(scan_time__gte=thirty_days_ago).aggregate(**counts)
+    recent_rows = (
+        attendance.select_related('session', 'session__group')
+        .order_by('-scan_time')[:15]
+    )
+
+    context = {
+        'student': student,
+        'enrollments': enrollments,
+        'attendance_all': attendance_all,
+        'attendance_recent': attendance_recent,
+        'recent_rows': recent_rows,
+        'today': timezone.localdate(),
+        'printed_at': timezone.localtime(),
+    }
+    context.update(_payment_statement(student))
+    return render(request, 'students/report.html', context)
 
 
 def _teachers_of(groups):

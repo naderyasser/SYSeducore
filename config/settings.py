@@ -393,6 +393,11 @@ WAPILOT_API_TOKEN = config('WAPILOT_API_TOKEN', default='')
 WAPILOT_INSTANCE_ID = config('WAPILOT_INSTANCE_ID', default='')
 WAPILOT_API_BASE_URL = config('WAPILOT_API_BASE_URL', default='https://api.wapilot.net/api/v2')
 
+# The phone number the centre intends to have linked to the instance. Display
+# only: the dashboard compares it with the number Wapilot reports so the desk
+# can see at a glance whether the right phone scanned the QR code.
+WHATSAPP_EXPECTED_NUMBER = config('WHATSAPP_EXPECTED_NUMBER', default='')
+
 # Notification Settings
 NOTIFICATION_METHOD = config('NOTIFICATION_METHOD', default='whatsapp')
 

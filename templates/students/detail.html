@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load money_format %}
 
 {% block title %}تفاصيل الطالب - {{ student.full_name }}{% endblock %}
 {% block page_title %}تفاصيل الطالب{% endblock %}
@@ -374,6 +375,9 @@
                     <a href="{% url 'students:qr_ticket_pdf' student_id=student.student_id %}" target="_blank" class="btn btn-outline-dark">
                         <i class="bi bi-qr-code me-1"></i>تذكرة QR
                     </a>
+                    <a href="{% url 'students:report' student_id=student.student_id %}" target="_blank" class="btn btn-outline-success">
+                        <i class="bi bi-file-earmark-text me-1"></i>تقرير الطالب
+                    </a>
                 </div>
                 <div class="mt-2">
                     <small class="text-muted">
@@ -505,6 +509,98 @@
                                 <td colspan="4" class="text-center py-4 text-muted">
                                     <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>
                                     <p class="mt-2 mb-0">لا يوجد سجل حضور</p>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% comment %}
+        Every payment line the student has had, newest first, and under each
+        one the ledger rows that say when the money was actually taken. The
+        desk used to open the payments screen and filter by month to answer
+        "what has this student paid?" — the answer belongs on the student.
+        {% endcomment %}
+        <div class="section-card" id="payments">
+            <div class="section-header">
+                <h5 class="section-title">
+                    <i class="bi bi-cash-stack"></i>
+                    سجل المدفوعات
+                </h5>
+                <div class="d-flex flex-wrap gap-2 align-items-center small">
+                    {% if payment_totals.count %}
+                    <span class="badge bg-light text-dark">المطلوب {{ payment_totals.due|egp }}</span>
+                    <span class="badge bg-success">المدفوع {{ payment_totals.paid|egp }}</span>
+                    <span class="badge {% if payment_totals.remaining > 0 %}bg-danger{% else %}bg-secondary{% endif %}">المتبقي {{ payment_totals.remaining|egp }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="section-body p-0">
+                <div class="table-responsive">
+                    <table class="attendance-table payments-table">
+                        <thead>
+                            <tr>
+                                <th>الشهر / الدورة</th>
+                                <th>المجموعة</th>
+                                <th>المطلوب</th>
+                                <th>المدفوع</th>
+                                <th>المتبقي</th>
+                                <th>الحالة</th>
+                                <th>التواريخ</th>
+                                <th>الإيصال</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for payment in payments %}
+                            <tr>
+                                <td class="table-num">
+                                    {% if payment.cycle %}دورة {{ payment.cycle.index }}{% else %}{{ payment.month|date:"Y-m" }}{% endif %}
+                                </td>
+                                <td>{{ payment.group.group_name }}</td>
+                                <td class="table-num">{{ payment.amount_due|egp }}</td>
+                                <td class="table-num text-success">{{ payment.amount_paid|egp }}</td>
+                                <td class="table-num {% if payment.remaining > 0 and not payment.is_exempt %}text-danger{% endif %}">
+                                    {% if payment.is_exempt %}—{% else %}{{ payment.remaining|egp }}{% endif %}
+                                </td>
+                                <td>
+                                    {% if payment.is_exempt %}
+                                    <span class="badge bg-info">معفى</span>
+                                    {% elif payment.status == 'paid' %}
+                                    <span class="badge bg-success">مدفوع</span>
+                                    {% elif payment.status == 'partial' %}
+                                    <span class="badge bg-warning">جزئي</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">غير مدفوع</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% for t in payment.transactions.all %}
+                                    <div class="small text-nowrap">
+                                        <span class="text-muted">{{ t.effective_on|default:t.created_at|date:"Y-m-d" }}</span>
+                                        {{ t.amount|egp }}
+                                        {% if t.kind != 'payment' %}<span class="text-muted">({{ t.get_kind_display }})</span>{% endif %}
+                                    </div>
+                                    {% empty %}
+                                    <span class="text-muted small">—</span>
+                                    {% endfor %}
+                                </td>
+                                <td class="table-actions">
+                                    {% if payment.amount_paid > 0 %}
+                                    <a href="{% url 'payments:receipt' payment_id=payment.payment_id %}" target="_blank"
+                                       class="btn btn-sm btn-outline-secondary" title="طباعة الإيصال">
+                                        <i class="bi bi-printer"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="8" class="text-center py-4 text-muted">
+                                    <i class="bi bi-wallet2" style="font-size: 2rem;"></i>
+                                    <p class="mt-2 mb-0">لا توجد مدفوعات مسجلة لهذا الطالب</p>
                                 </td>
                             </tr>
                             {% endfor %}
