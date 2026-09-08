@@ -46,3 +46,8 @@ staticfiles/
 
 # Claude/Copilot local settings
 .claude/
+
+# coverage data
+.coverage
+coverage.xml
+htmlcov/
