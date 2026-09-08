@@ -14,6 +14,19 @@ def dict_lookup(dictionary, key):
     return dictionary.get(key)
 
 
+@register.filter
+def index(sequence, position):
+    """
+    ``{{ columns|index:forloop.counter0 }}`` — the item at ``position``.
+    The attendance grid walks a row's cells and needs the matching column
+    (its date and session id) for each one.
+    """
+    try:
+        return sequence[int(position)]
+    except (IndexError, TypeError, ValueError, KeyError):
+        return None
+
+
 #: Attendance-grid cell state → (glyph, CSS class). Shared by the group
 #: detail page and the printable roster so the two stay visually consistent.
 CELL_GLYPHS = {

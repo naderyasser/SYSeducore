@@ -476,6 +476,11 @@
                     <i class="bi bi-clock-history"></i>
                     سجل الحضور الأخير
                 </h5>
+                {% if user.is_supervisor and active_enrollments %}
+                <button class="btn btn-sm btn-primary" type="button" onclick="showManualAttendance()">
+                    <i class="bi bi-calendar-plus me-1"></i>تسجيل حضور يدوي
+                </button>
+                {% endif %}
             </div>
             <div class="section-body p-0">
                 <div class="table-responsive">
@@ -613,6 +618,56 @@
 </div>
 
 <!-- Add to Group Modal -->
+{% if user.is_supervisor and active_enrollments %}
+{% comment %}
+Manual attendance for one student: pick the group, the lesson date (today
+or earlier) and the status. Posts to attendance:manual_attendance, which
+creates the day's Session if the scanner never did, then reloads so the
+recent-attendance list and the 30-day counters show the new row.
+{% endcomment %}
+<div class="modal fade" id="manualAttendanceModal" tabindex="-1" aria-labelledby="manualAttendanceTitle">
+    <div class="modal-dialog">
+        <form class="modal-content" id="manual-attendance-form">
+            <div class="modal-header">
+                <h5 class="modal-title" id="manualAttendanceTitle">تسجيل حضور يدوي — {{ student.full_name }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label" for="ma-group">المجموعة</label>
+                    <select class="form-select" id="ma-group" required>
+                        {% for enrollment in active_enrollments %}
+                        <option value="{{ enrollment.group.group_id }}">{{ enrollment.group.group_name }} — {{ enrollment.group.teacher.full_name|default:"-" }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label" for="ma-date">تاريخ الحصة</label>
+                    <input type="date" class="form-control" id="ma-date" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" required>
+                    <div class="form-text">اليوم أو أي تاريخ سابق — تُنشأ الحصة تلقائيًا إن لم تكن مسجلة.</div>
+                </div>
+                <div class="mb-2">
+                    <span class="form-label d-block">الحالة</span>
+                    <div class="btn-group w-100" role="group" aria-label="الحالة">
+                        <input type="radio" class="btn-check" name="ma-status" id="ma-present" value="present" checked>
+                        <label class="btn btn-outline-success" for="ma-present">حاضر</label>
+                        <input type="radio" class="btn-check" name="ma-status" id="ma-late" value="late">
+                        <label class="btn btn-outline-warning" for="ma-late">متأخر</label>
+                        <input type="radio" class="btn-check" name="ma-status" id="ma-absent" value="absent">
+                        <label class="btn btn-outline-danger" for="ma-absent">غائب</label>
+                    </div>
+                </div>
+                <div class="alert alert-danger py-2 mb-0 mt-3" id="ma-error" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">إلغاء</button>
+                <button type="submit" class="btn btn-primary" id="ma-submit"><i class="bi bi-check-lg me-1"></i>حفظ</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <div class="modal fade" id="addGroupModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -635,6 +690,33 @@
 {% block extra_js %}
 <script>
 let currentStudentId = null;
+
+{% if user.is_supervisor and active_enrollments %}
+// Manual attendance
+function showManualAttendance() {
+    document.getElementById('ma-error').hidden = true;
+    new bootstrap.Modal(document.getElementById('manualAttendanceModal')).show();
+}
+document.getElementById('manual-attendance-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    const submit = document.getElementById('ma-submit');
+    const error = document.getElementById('ma-error');
+    error.hidden = true;
+    submit.disabled = true;
+    ManualAttendance.mark({
+        groupId: document.getElementById('ma-group').value,
+        studentId: {{ student.student_id }},
+        date: document.getElementById('ma-date').value,
+        status: document.querySelector('input[name="ma-status"]:checked').value
+    })
+    .then(data => {
+        if (!data.success) { error.textContent = data.message || 'فشل التسجيل'; error.hidden = false; return; }
+        location.reload();
+    })
+    .catch(err => { if (err.message !== 'الجلسة منتهية') { error.textContent = 'فشل الاتصال بالخادم'; error.hidden = false; } })
+    .finally(() => { submit.disabled = false; });
+});
+{% endif %}
 
 // HTML escaping helper
 function escHtml(str) {

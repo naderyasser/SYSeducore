@@ -739,6 +739,7 @@ def group_detail(request, group_id):
         'students_rows': students_rows,
         'session_columns': grid['columns'],
         'grid_from': grid_from,
+        'today': today,
         'grid_to': grid_to,
         'open_cycle': open_cycle,
         'per_session_fee': per_session_fee,

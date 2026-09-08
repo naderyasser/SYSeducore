@@ -2,73 +2,122 @@
 
 {% block title %}تفاصيل الحصة{% endblock %}
 
+{% block extra_css %}
+<style>
+    .roster-table td, .roster-table th { vertical-align: middle; }
+    .mark-group .btn { min-width: 2.6rem; }
+    .mark-group .btn.is-current { box-shadow: inset 0 0 0 2px currentColor; font-weight: 700; }
+    .status-present { color: #15803d; }
+    .status-late { color: #b45309; }
+    .status-absent { color: #b91c1c; }
+    .status-exception { color: #1d4ed8; }
+    .status-none { color: #9ca3af; }
+    .session-counts .badge { font-size: 0.85rem; }
+    @media (max-width: 767.98px) {
+        .mark-group { justify-content: flex-start; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container mt-4">
   <div class="card">
-    <div class="card-header">
-      <h4>📅 تفاصيل الحصة</h4>
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <h4 class="mb-0">📅 تفاصيل الحصة</h4>
+      <a href="{% url 'teachers:group_detail' group_id=session.group.group_id %}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-people me-1"></i>صفحة المجموعة
+      </a>
     </div>
     <div class="card-body">
       <div class="row mb-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
           <h5>معلومات الحصة</h5>
           <p><strong>المجموعة:</strong> {{ session.group.group_name }}</p>
           <p><strong>المدرس:</strong> {{ session.group.teacher.full_name }}</p>
-          <p>
-            <strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}
-          </p>
-          <p>
-            <strong>الوقت:</strong> {{ schedule_entry.start_time|time:"H:i" }}
-          </p>
+          <p><strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}</p>
+          <p><strong>الوقت:</strong> {% if schedule_entry %}{{ schedule_entry.start_time|time:"H:i" }}{% else %}<span class="text-muted">حصة تعويضية</span>{% endif %}</p>
           <p>
             <strong>حضور المدرس:</strong>
             {% if session.teacher_attended %}
-            <span class="text-success"
-              >✅ نعم ({{ session.teacher_checkin_time|time:"H:i" }})</span
-            >
+            <span class="text-success">✅ نعم ({{ session.teacher_checkin_time|time:"H:i" }})</span>
             {% else %}
             <span class="text-danger">❌ لا</span>
             {% endif %}
           </p>
+          {% if session.is_cancelled %}
+          <div class="alert alert-warning py-2 mb-0">الحصة ملغاة{% if session.cancellation_reason %} — {{ session.cancellation_reason }}{% endif %}</div>
+          {% endif %}
         </div>
-        <div class="col-md-6">
-          <h5>حضور الطلاب</h5>
+        <div class="col-md-8">
+          <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <h5 class="mb-0">حضور الطلاب</h5>
+            <div class="session-counts d-flex flex-wrap gap-1">
+              <span class="badge bg-success">حاضر <span data-count="present">{{ counts.present }}</span></span>
+              <span class="badge bg-warning text-dark">متأخر <span data-count="late">{{ counts.late }}</span></span>
+              <span class="badge bg-danger">غائب <span data-count="absent">{{ counts.absent }}</span></span>
+              {% if counts.exception %}<span class="badge bg-primary">استثناء {{ counts.exception }}</span>{% endif %}
+            </div>
+          </div>
+          {% if can_mark %}
+          <p class="text-muted small mb-2">
+            <i class="bi bi-hand-index me-1"></i>تسجيل يدوي: اضغط الحالة أمام كل طالب — يُحفظ فورًا ويُحتسب في الدورة مثل الباركود.
+          </p>
+          {% endif %}
           <div class="table-responsive">
-            <table class="table table-striped">
+            <table class="table table-striped roster-table" id="session-roster">
               <thead>
                 <tr>
                   <th>الطالب</th>
                   <th>الحالة</th>
-                  <th>وقت المسح</th>
+                  <th>الوقت</th>
+                  {% if can_mark %}<th>تسجيل يدوي</th>{% endif %}
                 </tr>
               </thead>
               <tbody>
-                {% for attendance in attendances %}
-                <tr>
-                  <td>{{ attendance.student.full_name }}</td>
+                {% for row in roster %}
+                {% with att=row.attendance %}
+                <tr data-student-id="{{ row.student.student_id }}" data-status="{{ att.status|default:'' }}">
+                  <td>
+                    <a href="{% url 'students:detail' student_id=row.student.student_id %}" class="text-reset text-decoration-none">{{ row.student.full_name }}</a>
+                    {% if row.unenrolled %}<span class="badge bg-secondary ms-1">غير مسجل حاليًا</span>{% endif %}
+                  </td>
                   <td>
                     {% comment %}
-                    Kept on one line per branch on purpose. A Django template
-                    tag cannot span lines — the tokeniser's pattern does not
-                    match a newline — so a `{% elif %}` wrapped after the
-                    keyword stopped being a tag and printed itself. Every
-                    present student's row read
-                    "حاضر {% elif attendance.status == 'late' %}متأخر …".
+                    One line per branch on purpose: a Django tag cannot span
+                    lines, and a wrapped `{% elif %}` prints itself as text.
                     {% endcomment %}
-                    <span class="status-{{ attendance.status }}">
-                      {% if attendance.status == 'present' %}حاضر
-                      {% elif attendance.status == 'late' %}متأخر
-                      {% elif attendance.status == 'absent' %}غائب
-                      {% elif attendance.status == 'exception' %}استثناء
+                    <span class="status-label status-{{ att.status|default:'none' }}">
+                      {% if att.status == 'present' %}حاضر
+                      {% elif att.status == 'late' %}متأخر
+                      {% elif att.status == 'absent' %}غائب
+                      {% elif att.status == 'exception' %}استثناء
+                      {% else %}— بلا سجل
                       {% endif %}
                     </span>
                   </td>
-                  <td>{{ attendance.scan_time|time:"H:i" }}</td>
+                  <td class="scan-time">{% if att %}{{ att.scan_time|time:"H:i" }}{% else %}—{% endif %}</td>
+                  {% if can_mark %}
+                  <td>
+                    {% if att.status == 'exception' %}
+                    <span class="text-muted small">يُدار من الاستثناءات</span>
+                    {% elif row.unenrolled %}
+                    <span class="text-muted small">أُزيل من المجموعة</span>
+                    {% else %}
+                    <div class="btn-group btn-group-sm mark-group" role="group" aria-label="تسجيل حضور {{ row.student.full_name }}">
+                      <button type="button" class="btn btn-outline-success{% if att.status == 'present' %} is-current{% endif %}" data-mark="present">حاضر</button>
+                      <button type="button" class="btn btn-outline-warning{% if att.status == 'late' %} is-current{% endif %}" data-mark="late">متأخر</button>
+                      <button type="button" class="btn btn-outline-danger{% if att.status == 'absent' %} is-current{% endif %}" data-mark="absent">غائب</button>
+                      <button type="button" class="btn btn-outline-secondary" data-mark="clear" title="مسح السجل"><i class="bi bi-eraser"></i></button>
+                    </div>
+                    {% endif %}
+                  </td>
+                  {% endif %}
                 </tr>
+                {% endwith %}
                 {% empty %}
                 <tr>
-                  <td colspan="3" class="text-center text-muted">
-                    لا يوجد سجلات حضور
+                  <td colspan="{% if can_mark %}4{% else %}3{% endif %}" class="text-center text-muted">
+                    لا يوجد طلاب مسجلون في هذه المجموعة
                   </td>
                 </tr>
                 {% endfor %}
@@ -80,4 +129,61 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if can_mark %}
+<script>
+(function () {
+    'use strict';
+    var GROUP_ID = {{ session.group.group_id }};
+    var DATE = '{{ session.session_date|date:"Y-m-d" }}';
+    var LABELS = {present: 'حاضر', late: 'متأخر', absent: 'غائب', '': '— بلا سجل'};
+
+    function recount() {
+        var rows = document.querySelectorAll('#session-roster tbody tr[data-student-id]');
+        ['present', 'late', 'absent'].forEach(function (status) {
+            var n = 0;
+            rows.forEach(function (r) { if (r.dataset.status === status) { n += 1; } });
+            var el = document.querySelector('[data-count="' + status + '"]');
+            if (el) { el.textContent = n; }
+        });
+    }
+
+    function paint(row, status, scanTime) {
+        row.dataset.status = status;
+        var label = row.querySelector('.status-label');
+        label.className = 'status-label status-' + (status || 'none');
+        label.textContent = LABELS[status];
+        row.querySelector('.scan-time').textContent = scanTime || '—';
+        row.querySelectorAll('[data-mark]').forEach(function (b) {
+            b.classList.toggle('is-current', b.dataset.mark === status);
+        });
+        recount();
+    }
+
+    document.getElementById('session-roster').addEventListener('click', function (event) {
+        var button = event.target.closest('[data-mark]');
+        if (!button) { return; }
+        var row = button.closest('tr');
+        var status = button.dataset.mark;
+        if (status === 'clear' && !row.dataset.status) { return; }
+        if (status === 'clear' && !confirm('مسح سجل حضور هذا الطالب لهذه الحصة؟')) { return; }
+
+        var buttons = row.querySelectorAll('[data-mark]');
+        buttons.forEach(function (b) { b.disabled = true; });
+        ManualAttendance.mark({groupId: GROUP_ID, studentId: row.dataset.studentId, date: DATE, status: status})
+            .then(function (data) {
+                if (!data.success) { alert(data.message || 'فشل التسجيل'); return; }
+                var att = data.attendance;
+                var time = att ? new Date(att.scan_time).toLocaleTimeString('ar-EG-u-nu-latn', {hour: '2-digit', minute: '2-digit'}) : '';
+                paint(row, att ? att.status : '', time);
+                if (data.warning) { console.info(data.warning); }
+            })
+            .catch(function (err) { if (err.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); } })
+            .finally(function () { buttons.forEach(function (b) { b.disabled = false; }); });
+    });
+})();
+</script>
+{% endif %}
 {% endblock %}

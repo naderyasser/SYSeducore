@@ -503,6 +503,166 @@ class AttendanceService:
             'dossier': dossier(),
         }
     
+    #: Statuses the desk may write by hand. ``exception`` is deliberately
+    #: absent — it is owned by grant/revoke_exception and carries a link the
+    #: manual path must not overwrite.
+    MANUAL_STATUSES = ('present', 'late', 'absent')
+
+    @staticmethod
+    def ensure_manual_session(group, on_date):
+        """
+        The ``Session`` row for ``group`` on ``on_date``, creating and
+        cycle-assigning it when the scanner never did.
+
+        Returns ``(session, created, error)`` — ``error`` is a message and the
+        session ``None`` when the date is in the future or falls at or before
+        the close of a settled cycle: ``assign_to_cycle`` numbers into the
+        *open* cycle, so a lesson inserted back there would renumber the open
+        cycle around a date that was already billed in the closed one (and a
+        date before the first cycle ever would drag ``started_on`` back).
+        Shared by the student mark and the group page's "إضافة حصة بتاريخ".
+        """
+        from apps.teachers.cycles import assign_to_cycle
+        from apps.teachers.models import GroupCycle
+
+        if on_date > timezone.localdate():
+            return None, False, 'لا يمكن إضافة حصة بتاريخ مستقبلي'
+
+        with transaction.atomic():
+            session = Session.objects.filter(group=group, session_date=on_date).first()
+            if session is not None:
+                return session, False, None
+            if GroupCycle.objects.filter(group=group, closed_on__gte=on_date).exists():
+                return None, False, 'هذا التاريخ يقع في دورة مغلقة تمت تسويتها — لا يمكن إضافة حصة جديدة فيه'
+            session = Session.objects.create(group=group, session_date=on_date, teacher_attended=False)
+            assign_to_cycle(session)
+        return session, True, None
+
+    @staticmethod
+    def record_manual(student, group, on_date, status, supervisor):
+        """
+        تسجيل حضور يدوي — بديل/مكمل للباركود.
+
+        Writes (or rewrites) ``student``'s attendance for ``group`` on
+        ``on_date`` exactly the way a scan would: the ``Session`` row is
+        created and attached to the cycle if missing, the ``Attendance`` row
+        is created or its status changed, and the payment session counter is
+        recomputed. ``status='clear'`` deletes the row instead.
+
+        Deliberately skips the scan's time window and financial checks — this
+        is the desk overriding the automatic path (a student who paid at the
+        door, a scanner that was off, a lesson recorded a day later). The
+        supervisor is the audit trail, so it is always stored.
+
+        Refuses, with a message the UI can show verbatim, when:
+          * the date is in the future;
+          * the student has no active enrollment in the group;
+          * the session for that date is cancelled;
+          * the date needs a *new* session but falls at or before the close of
+            a settled cycle (see :meth:`ensure_manual_session`);
+          * the existing row is an ``exception`` (revoke it first).
+
+        Returns a dict: ``success``, ``message``, and on success ``session_id``,
+        ``created`` (True for a fresh attendance row), ``attendance`` (or
+        ``None`` after a clear) and ``warning`` when the date is not one of the
+        group's scheduled days (allowed — make-up lessons exist).
+        """
+        if status not in AttendanceService.MANUAL_STATUSES + ('clear',):
+            return {'success': False, 'message': 'حالة حضور غير صالحة'}
+
+        today = timezone.localdate()
+        if on_date > today:
+            return {'success': False, 'message': 'لا يمكن تسجيل حضور بتاريخ مستقبلي'}
+
+        enrolled = StudentGroupEnrollment.objects.filter(
+            student=student, group=group, is_active=True,
+        ).exists()
+        if not enrolled:
+            return {'success': False, 'message': f'{student.full_name} غير مسجل في مجموعة {group.group_name}'}
+
+        day_name = on_date.strftime('%A')
+        entry = group.get_schedule_for_day(day_name)
+        warning = None
+        if entry is None:
+            warning = f'{WEEK_DAYS_AR.get(day_name, day_name)} ليس من أيام هذه المجموعة — سُجِّلت كحصة تعويضية'
+
+        with transaction.atomic():
+            if status == 'clear' and not Session.objects.filter(group=group, session_date=on_date).exists():
+                return {'success': True, 'message': 'لا يوجد سجل لمسحه', 'session_id': None,
+                        'created': False, 'attendance': None, 'warning': warning}
+            session, _, error = AttendanceService.ensure_manual_session(group, on_date)
+            if error:
+                return {'success': False, 'message': error}
+
+            if session.is_cancelled:
+                reason = session.cancellation_reason or 'تم إلغاء الحصة'
+                return {'success': False, 'message': f'الحصة ملغاة — {reason}'}
+
+            attendance = Attendance.objects.select_for_update().filter(
+                student=student, session=session,
+            ).first()
+            if attendance is not None and attendance.status == 'exception':
+                return {'success': False,
+                        'message': 'هذا اليوم مسجل كاستثناء — ألغِ الاستثناء أولاً ثم سجّل الحضور يدويًا'}
+
+            # The row's timestamp is the *lesson's* moment, not the moment the
+            # desk typed it: every "recent attendance" list and the student
+            # report date their rows by ``scan_time``, so a backdated mark
+            # stamped "now" would show up as today's lesson.
+            clock = entry.start_time if entry is not None else datetime.min.time().replace(hour=12)
+            scan_time = local_datetime(on_date, clock)
+            if on_date == today and scan_time > timezone.now():
+                scan_time = timezone.now()
+
+            created = False
+            if status == 'clear':
+                if attendance is not None:
+                    attendance.delete()
+                attendance = None
+            elif attendance is None:
+                attendance = Attendance.objects.create(
+                    student=student, session=session, status=status,
+                    scan_time=scan_time, supervisor=supervisor,
+                )
+                created = True
+            else:
+                attendance.status = status
+                attendance.supervisor = supervisor
+                attendance.save(update_fields=['status', 'supervisor'])
+
+            # The counter lives on the *open* cycle's Payment and
+            # ``update_payment_sessions`` creates that row when missing —
+            # touching it for a lesson in a closed cycle would open a Payment
+            # on the current cycle as a side effect of editing history.
+            cycle = session.cycle
+            if group.sessions_per_month and (cycle is None or cycle.closed_on is None):
+                AttendanceService.update_payment_sessions(student, group)
+
+        if attendance is None:
+            message = f'تم مسح سجل {student.full_name} ليوم {on_date:%Y-%m-%d}'
+        else:
+            message = (
+                f'تم تسجيل {student.full_name} '
+                f'{attendance.get_status_display()} — {group.group_name} {on_date:%Y-%m-%d}'
+            )
+        logger.info(
+            f"MANUAL_ATTENDANCE student={student.student_code} group={group.pk} "
+            f"date={on_date} status={status} supervisor={getattr(supervisor, 'id', '?')}"
+        )
+        return {
+            'success': True,
+            'message': message,
+            'session_id': session.session_id,
+            'created': created,
+            'warning': warning,
+            'attendance': None if attendance is None else {
+                'attendance_id': attendance.attendance_id,
+                'status': attendance.status,
+                'status_display': attendance.get_status_display(),
+                'scan_time': attendance.scan_time.isoformat(),
+            },
+        }
+
     @staticmethod
     def _build_schedule_rejection(student, enrollments, current_day_name, now_local):
         """

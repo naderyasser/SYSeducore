@@ -234,6 +234,26 @@
         color: #9ca3af;
         text-decoration: line-through;
     }
+    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-not_enrolled):not(.cell-exception) {
+        cursor: pointer;
+    }
+    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-not_enrolled):not(.cell-exception):hover {
+        outline: 2px solid #2563eb;
+        outline-offset: -2px;
+    }
+    .attendance-grid td.cell.is-saving { opacity: 0.5; }
+    .cell-chooser {
+        position: absolute;
+        z-index: 1050;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        padding: 6px;
+        display: flex;
+        gap: 4px;
+    }
+    .cell-chooser .btn { min-width: 3.2rem; }
     .grid-legend {
         margin-top: 12px;
         font-size: 0.82rem;
@@ -663,6 +683,22 @@
                 </a>
             </form>
         </div>
+        {% if user.is_supervisor %}
+        {% comment %}
+        Manual attendance. Tapping a cell opens a small chooser (حاضر / متأخر /
+        غائب / مسح) and saves at once. A lesson the scanner never recorded has
+        no column to tap, so "إضافة حصة بتاريخ" creates the Session row for a
+        past date (today by default) and reloads with that column in range.
+        {% endcomment %}
+        <div class="manual-bar d-flex flex-wrap gap-2 align-items-center mt-2">
+            <span class="text-muted small"><i class="bi bi-hand-index me-1"></i>تسجيل يدوي: اضغط أي خانة لتغيير حالة الطالب.</span>
+            <form class="d-flex flex-wrap gap-2 align-items-center ms-auto" id="add-session-form">
+                <label class="small text-muted mb-0" for="add-session-date">إضافة حصة بتاريخ</label>
+                <input type="date" id="add-session-date" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" class="form-control form-control-sm w-auto" required>
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>إضافة</button>
+            </form>
+        </div>
+        {% endif %}
         {% if session_columns %}
         <div class="grid-wrap">
             <table class="attendance-grid">
@@ -670,16 +706,18 @@
                     <tr>
                         <th class="sticky-name">الطالب</th>
                         {% for col in session_columns %}
-                        <th>{{ col.date|date:"d/m" }}</th>
+                        <th>{% if col.session_id %}<a href="{% url 'attendance:session_detail' session_id=col.session_id %}" class="text-reset text-decoration-none" title="تفاصيل الحصة">{{ col.date|date:"d/m" }}</a>{% else %}{{ col.date|date:"d/m" }}{% endif %}</th>
                         {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for row in students_rows %}
-                    <tr>
+                    <tr data-student-id="{{ row.student.student_id }}">
                         <th class="sticky-name">{{ row.student.full_name }}</th>
                         {% for cell in row.cells %}
-                        <td class="cell cell-{{ cell }}">{{ cell|cell_glyph }}</td>
+                        {% with col=session_columns|index:forloop.counter0 %}
+                        <td class="cell cell-{{ cell }}" data-state="{{ cell }}" data-date="{{ col.date|date:'Y-m-d' }}"{% if col.session_id %} data-session-id="{{ col.session_id }}"{% endif %}>{{ cell|cell_glyph }}</td>
+                        {% endwith %}
                         {% endfor %}
                     </tr>
                     {% endfor %}
@@ -706,6 +744,114 @@
 {% endblock %}
 
 {% block extra_js %}
+{% if user.is_supervisor %}
+<script>
+(function () {
+    'use strict';
+    var GROUP_ID = {{ group.group_id }};
+    var GLYPH = {present: '✓', late: 'م', absent: '✗', no_record: '—'};
+    var grid = document.querySelector('.attendance-grid');
+    var chooser = null;
+
+    function closeChooser() {
+        if (chooser) { chooser.remove(); chooser = null; }
+    }
+
+    function paint(cell, state) {
+        cell.className = 'cell cell-' + state;
+        cell.dataset.state = state;
+        cell.textContent = GLYPH[state] || '؟';
+    }
+
+    function save(cell, status) {
+        var row = cell.closest('tr');
+        cell.classList.add('is-saving');
+        ManualAttendance.mark({groupId: GROUP_ID, studentId: row.dataset.studentId, date: cell.dataset.date, status: status})
+            .then(function (data) {
+                if (!data.success) { alert(data.message || 'فشل التسجيل'); return; }
+                if (data.session_id) { cell.dataset.sessionId = data.session_id; }
+                paint(cell, data.attendance ? data.attendance.status : 'no_record');
+            })
+            .catch(function (err) { if (err.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); } })
+            .finally(function () { cell.classList.remove('is-saving'); });
+    }
+
+    function openChooser(cell) {
+        closeChooser();
+        var current = cell.dataset.state;
+        chooser = document.createElement('div');
+        chooser.className = 'cell-chooser';
+        chooser.setAttribute('role', 'menu');
+        [['present', 'حاضر', 'success'], ['late', 'متأخر', 'warning'], ['absent', 'غائب', 'danger']].forEach(function (opt) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn btn-sm btn-' + (current === opt[0] ? '' : 'outline-') + opt[2];
+            b.textContent = opt[1];
+            b.addEventListener('click', function () { closeChooser(); save(cell, opt[0]); });
+            chooser.appendChild(b);
+        });
+        if (current === 'present' || current === 'late' || current === 'absent') {
+            var clear = document.createElement('button');
+            clear.type = 'button';
+            clear.className = 'btn btn-sm btn-outline-secondary';
+            clear.title = 'مسح السجل';
+            clear.innerHTML = '<i class="bi bi-eraser"></i>';
+            clear.addEventListener('click', function () { closeChooser(); save(cell, 'clear'); });
+            chooser.appendChild(clear);
+        }
+        document.body.appendChild(chooser);
+        var r = cell.getBoundingClientRect();
+        var top = r.bottom + window.scrollY + 4;
+        var left = r.left + window.scrollX + r.width / 2 - chooser.offsetWidth / 2;
+        left = Math.max(8, Math.min(left, window.scrollX + document.documentElement.clientWidth - chooser.offsetWidth - 8));
+        chooser.style.top = top + 'px';
+        chooser.style.left = left + 'px';
+    }
+
+    if (grid) {
+        grid.classList.add('is-editable');
+        grid.addEventListener('click', function (event) {
+            var cell = event.target.closest('td.cell');
+            if (!cell) { return; }
+            var state = cell.dataset.state;
+            if (state === 'cancelled' || state === 'not_enrolled' || state === 'exception') { return; }
+            event.stopPropagation();
+            openChooser(cell);
+        });
+        document.addEventListener('click', function (event) {
+            if (chooser && !chooser.contains(event.target)) { closeChooser(); }
+        });
+        document.addEventListener('keydown', function (event) { if (event.key === 'Escape') { closeChooser(); } });
+        window.addEventListener('scroll', closeChooser, {passive: true});
+    }
+
+    var addForm = document.getElementById('add-session-form');
+    if (addForm) {
+        addForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            var date = document.getElementById('add-session-date').value;
+            if (!date) { return; }
+            var button = addForm.querySelector('button');
+            button.disabled = true;
+            ManualAttendance.addSession({groupId: GROUP_ID, date: date})
+                .then(function (data) {
+                    if (!data.success) { alert(data.message || 'تعذّر إضافة الحصة'); return; }
+                    // Reload with the new date inside the visible range.
+                    var params = new URLSearchParams(window.location.search);
+                    var from = params.get('from') || '{{ grid_from|date:"Y-m-d" }}';
+                    var to = params.get('to') || '{{ grid_to|date:"Y-m-d" }}';
+                    if (date < from) { from = date; }
+                    if (date > to) { to = date; }
+                    params.set('from', from); params.set('to', to);
+                    window.location.search = params.toString();
+                })
+                .catch(function (err) { if (err.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); } })
+                .finally(function () { button.disabled = false; });
+        });
+    }
+})();
+</script>
+{% endif %}
 <script>
 function removeStudent(enrollmentId, studentName) {
     if (!confirm(`هل أنت متأكد من إزالة "${studentName}" من هذه المجموعة؟`)) {

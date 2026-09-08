@@ -91,6 +91,82 @@ def process_student_code(request):
         })
 
 
+@ajax_supervisor_required
+@require_http_methods(["POST"])
+def manual_attendance(request):
+    """
+    API: تسجيل حضور يدوي لطالب في مجموعة بتاريخ محدد (اليوم أو بأثر رجعي).
+
+    Body (JSON or form): ``student_id``, ``group_id``, ``date`` (YYYY-MM-DD,
+    defaults to today), ``status`` (present / late / absent / clear).
+    Without ``student_id`` only the Session row for that date is created —
+    how the group page adds a backdated lesson column before marking it.
+    Every write goes through :meth:`AttendanceService.record_manual`.
+    """
+    from datetime import date as _date
+    from apps.students.models import Student
+    from apps.teachers.models import Group
+
+    if request.content_type and 'json' in request.content_type:
+        try:
+            data = json.loads(request.body or b'{}')
+        except json.JSONDecodeError:
+            return JsonResponse({'success': False, 'message': 'خطأ في البيانات المرسلة'}, status=400)
+    else:
+        data = request.POST
+
+    try:
+        group = Group.objects.get(pk=int(data.get('group_id') or 0), deleted_at__isnull=True)
+    except (Group.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'success': False, 'message': 'المجموعة غير موجودة'}, status=400)
+
+    raw_date = (data.get('date') or '').strip()
+    try:
+        on_date = _date.fromisoformat(raw_date) if raw_date else timezone.localdate()
+    except ValueError:
+        return JsonResponse({'success': False, 'message': 'تاريخ غير صالح'}, status=400)
+
+    student_id = data.get('student_id')
+    if not student_id:
+        # Session only — a lesson the scanner never saw, to be marked next.
+        session, created, error = AttendanceService.ensure_manual_session(group, on_date)
+        if error:
+            return JsonResponse({'success': False, 'message': error}, status=400)
+        if created:
+            ActivityLog.log(
+                user=request.user, action='attendance_manual',
+                description=f'إضافة حصة يدويًا لمجموعة {group.group_name} بتاريخ {on_date}',
+                target_model='Session', target_id=session.pk, request=request,
+            )
+        return JsonResponse({'success': True, 'created': created, 'session_id': session.pk,
+                             'message': 'تمت إضافة الحصة' if created else 'الحصة موجودة بالفعل'})
+
+    try:
+        student = Student.objects.get(pk=int(student_id), deleted_at__isnull=True)
+    except (Student.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'success': False, 'message': 'الطالب غير موجود'}, status=400)
+
+    status = (data.get('status') or 'present').strip()
+    try:
+        result = AttendanceService.record_manual(
+            student=student, group=group, on_date=on_date, status=status, supervisor=request.user,
+        )
+    except Exception:
+        logger.exception('manual_attendance failed')
+        return JsonResponse({'success': False, 'message': SERVER_ERROR_MESSAGE}, status=500)
+
+    if result['success']:
+        ActivityLog.log(
+            user=request.user, action='attendance_manual',
+            description=result['message'],
+            target_model='Attendance',
+            target_id=(result['attendance'] or {}).get('attendance_id'),
+            request=request,
+        )
+        return JsonResponse(result)
+    return JsonResponse(result, status=400)
+
+
 #: ``date.weekday()`` -> the English day names stored on ``GroupSchedule``.
 _WEEKDAY_NAMES = [
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
@@ -102,18 +178,46 @@ def session_detail(request, session_id):
     """
     تفاصيل الحصة
     """
-    session = get_object_or_404(Session, pk=session_id)
-    attendances = session.attendances.select_related('student').all()
+    from apps.students.models import StudentGroupEnrollment
+
+    session = get_object_or_404(Session.objects.select_related('group', 'group__teacher'), pk=session_id)
+    attendances = list(session.attendances.select_related('student').order_by('student__full_name'))
 
     # The group's own day for this session, not the legacy first-day column —
     # a group meeting several days a week has a different time on each.
     day_name = _WEEKDAY_NAMES[session.session_date.weekday()]
     schedule_entry = session.group.get_schedule_for_day(day_name)
 
+    # Roster = every active student in the group, with their row for this
+    # lesson if one exists. A student the scanner never saw still needs a
+    # line here, or the desk has nothing to mark them on.
+    by_student = {a.student_id: a for a in attendances}
+    roster = []
+    for enr in (
+        StudentGroupEnrollment.objects
+        .filter(group=session.group, is_active=True, student__deleted_at__isnull=True)
+        .select_related('student').order_by('student__full_name')
+    ):
+        roster.append({'student': enr.student, 'attendance': by_student.pop(enr.student_id, None)})
+    # Rows for students no longer enrolled still show — history is history.
+    for att in by_student.values():
+        roster.append({'student': att.student, 'attendance': att, 'unenrolled': True})
+
+    counts = {
+        'present': sum(1 for a in attendances if a.status == 'present'),
+        'late': sum(1 for a in attendances if a.status == 'late'),
+        'absent': sum(1 for a in attendances if a.status == 'absent'),
+        'exception': sum(1 for a in attendances if a.status == 'exception'),
+    }
+
     return render(request, 'attendance/session_detail.html', {
         'session': session,
         'attendances': attendances,
+        'roster': roster,
+        'counts': counts,
         'schedule_entry': schedule_entry,
+        # ``is_supervisor`` is a method — a bare reference is always truthy.
+        'can_mark': request.user.is_supervisor() and not session.is_cancelled,
     })
 
 

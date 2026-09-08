@@ -232,6 +232,7 @@ def student_detail(request, student_id):
         'recent_attendance': recent_attendance,
         'attendance_stats': attendance_stats,
         'available_groups': available_groups,
+        'today': timezone.localdate(),
     }
     context.update(_payment_statement(student))
 

@@ -12,6 +12,8 @@ urlpatterns = [
 
     # API: معالجة كود الطالب (النظام الجديد)
     path('api/process-code/', views.process_student_code, name='process_student_code'),
+    # تسجيل حضور يدوي (اليوم أو بأثر رجعي)
+    path('api/manual/', views.manual_attendance, name='manual_attendance'),
 
     # API: إحصائيات اليوم
     path('api/today-stats/', views.today_stats, name='today_stats'),

@@ -119,6 +119,7 @@ class ActivityLog(models.Model):
         ('student_delete', 'حذف طالب'),
         ('student_toggle', 'تغيير حالة طالب'),
         ('attendance_scan', 'تسجيل حضور'),
+        ('attendance_manual', 'تسجيل حضور يدوي'),
         ('session_cancel', 'إلغاء حصة'),
         ('teacher_checkin', 'تسجيل حضور مدرس'),
         ('payment_create', 'إنشاء دفعة'),
