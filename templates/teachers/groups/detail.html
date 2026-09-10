@@ -234,10 +234,10 @@
         color: #9ca3af;
         text-decoration: line-through;
     }
-    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-not_enrolled):not(.cell-exception) {
+    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-exception) {
         cursor: pointer;
     }
-    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-not_enrolled):not(.cell-exception):hover {
+    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-exception):hover {
         outline: 2px solid #2563eb;
         outline-offset: -2px;
     }
@@ -685,8 +685,8 @@
         </div>
         {% if user.is_supervisor %}
         {% comment %}
-        Manual attendance. Tapping a cell opens a small chooser (حاضر / متأخر /
-        غائب / مسح) and saves at once. A lesson the scanner never recorded has
+        Manual attendance. Tapping a cell — blank/striped ones included —
+        opens a small chooser (حاضر / متأخر / غائب / مسح) and saves at once. A lesson the scanner never recorded has
         no column to tap, so "إضافة حصة بتاريخ" creates the Session row for a
         past date (today by default) and reloads with that column in range.
         {% endcomment %}
@@ -731,7 +731,7 @@
             <span class="cell cell-exception">س</span> استثناء
             <span class="cell cell-no_record">—</span> بلا سجل
             <span class="cell cell-cancelled">//</span> ملغاة
-            <span class="cell cell-not_enrolled"></span> لم يكن مسجلاً بعد
+            <span class="cell cell-not_enrolled"></span> قبل تاريخ تسجيله (يمكن الضغط للتسجيل)
         </div>
         {% else %}
         <div class="empty-state">
@@ -814,7 +814,11 @@
             var cell = event.target.closest('td.cell');
             if (!cell) { return; }
             var state = cell.dataset.state;
-            if (state === 'cancelled' || state === 'not_enrolled' || state === 'exception') { return; }
+            // 'not_enrolled' is tappable on purpose: it only means the lesson
+            // predates the enrollment date — exactly the student who came
+            // without a card and was entered later. Marking them moves the
+            // anchor back on reload.
+            if (state === 'cancelled' || state === 'exception') { return; }
             event.stopPropagation();
             openChooser(cell);
         });

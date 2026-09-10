@@ -120,17 +120,61 @@ class RecordManualServiceTests(ManualAttendanceBase):
         self.assertFalse(result['success'])
         self.assertIn('ملغاة', result['message'])
 
-    def test_new_session_inside_or_before_closed_cycle_refused(self):
-        start = self.today - timedelta(days=30)
+    def test_backdated_lesson_joins_the_cycle_covering_its_date(self):
+        # The exact shape of a migrated group: two legacy calendar-month
+        # cycles (the second one closed *in the future*), plus the real open
+        # cycle that started on the 3rd and overlaps the second.
+        aug1 = date(2026, 8, 1)
+        c1 = GroupCycle.objects.create(group=self.group, index=1, sessions_planned=8, is_legacy=True,
+                                       started_on=aug1, closed_on=date(2026, 8, 31))
+        c2 = GroupCycle.objects.create(group=self.group, index=2, sessions_planned=8, is_legacy=True,
+                                       started_on=date(2026, 9, 1), closed_on=date(2026, 9, 30))
+        c3 = GroupCycle.objects.create(group=self.group, index=3, sessions_planned=8,
+                                       started_on=date(2026, 9, 3))
+        existing = Session.objects.create(group=self.group, session_date=date(2026, 8, 24), cycle=c1, sequence_in_cycle=1)
+        open_existing = Session.objects.create(group=self.group, session_date=date(2026, 9, 3), cycle=c3, sequence_in_cycle=1)
+
+        def created(day):
+            session, was_created, error = AttendanceService.ensure_manual_session(self.group, day)
+            self.assertIsNone(error, error)
+            self.assertTrue(was_created)
+            return session
+
+        # Inside the closed August cycle → joins it, numbered by date.
+        s_aug20 = created(date(2026, 8, 20))
+        self.assertEqual(s_aug20.cycle, c1)
+        self.assertEqual(s_aug20.sequence_in_cycle, 1)
+        existing.refresh_from_db()
+        self.assertEqual(existing.sequence_in_cycle, 2)
+        c1.refresh_from_db(); self.assertEqual(c1.started_on, aug1)  # untouched
+        # Only the legacy September cycle covers the 2nd.
+        self.assertEqual(created(date(2026, 9, 2)).cycle, c2)
+        # Both cover the 5th — the open cycle wins.
+        s_sep5 = created(date(2026, 9, 5))
+        self.assertEqual(s_sep5.cycle, c3)
+        self.assertEqual(s_sep5.sequence_in_cycle, 2)
+        open_existing.refresh_from_db(); self.assertEqual(open_existing.sequence_in_cycle, 1)
+        # Before the first cycle ever started → refused, nothing written.
+        session, was_created, error = AttendanceService.ensure_manual_session(self.group, date(2026, 7, 15))
+        self.assertIsNone(session); self.assertIn('أول دورة', error)
+        self.assertFalse(Session.objects.filter(session_date=date(2026, 7, 15)).exists())
+        # A marked lesson in a closed cycle never opens a Payment.
+        self.assertTrue(self.record(on_date=date(2026, 8, 20))['success'])
+        self.assertFalse(Payment.objects.exists())
+
+    def test_gap_after_last_closed_cycle_joins_the_open_cycle(self):
         GroupCycle.objects.create(group=self.group, index=1, sessions_planned=4,
-                                  started_on=start, closed_on=self.today - timedelta(days=10))
-        for days_back in (20, 45):  # inside the closed cycle, and before it ever started
-            result = self.record(on_date=self.today - timedelta(days=days_back))
-            self.assertFalse(result['success'])
-            self.assertIn('مغلقة', result['message'])
-        self.assertFalse(Session.objects.exists())
-        # After the close is the open cycle — allowed.
-        self.assertTrue(self.record(on_date=self.today - timedelta(days=5))['success'])
+                                  started_on=self.today - timedelta(days=40), closed_on=self.today - timedelta(days=20))
+        result = self.record(on_date=self.today - timedelta(days=10))
+        self.assertTrue(result['success'], result)
+        session = Session.objects.get(session_date=self.today - timedelta(days=10))
+        self.assertIsNone(session.cycle.closed_on)
+        self.assertEqual(session.cycle.index, 2)
+
+    def test_group_without_any_cycle_yet_gets_one(self):
+        result = self.record(on_date=self.today - timedelta(days=3))
+        self.assertTrue(result['success'], result)
+        self.assertEqual(GroupCycle.objects.filter(group=self.group).count(), 1)
 
     def test_existing_session_in_closed_cycle_marks_without_opening_a_payment(self):
         start = self.today - timedelta(days=30)
@@ -267,15 +311,18 @@ class ManualAttendanceEndpointTests(ManualAttendanceBase):
         r = self.post_json({'group_id': self.group.pk, 'date': (self.today + timedelta(days=1)).isoformat()})
         self.assertEqual(r.status_code, 400)
 
-    def test_session_only_refuses_a_date_in_a_closed_cycle(self):
+    def test_session_only_before_first_cycle_is_400(self):
         GroupCycle.objects.create(group=self.group, index=1, sessions_planned=4,
                                   started_on=self.today - timedelta(days=30),
                                   closed_on=self.today - timedelta(days=10))
         self.client.force_login(self.supervisor)
-        r = self.post_json({'group_id': self.group.pk, 'date': (self.today - timedelta(days=20)).isoformat()})
+        r = self.post_json({'group_id': self.group.pk, 'date': (self.today - timedelta(days=60)).isoformat()})
         self.assertEqual(r.status_code, 400)
-        self.assertIn('مغلقة', r.json()['message'])
-        self.assertEqual(Session.objects.count(), 0)
+        self.assertIn('أول دورة', r.json()['message'])
+        # Inside the closed cycle is fine now.
+        r = self.post_json({'group_id': self.group.pk, 'date': (self.today - timedelta(days=20)).isoformat()})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(Session.objects.count(), 1)
 
 
 class ManualAttendanceScreensTests(ManualAttendanceBase):
@@ -326,6 +373,9 @@ class ManualAttendanceScreensTests(ManualAttendanceBase):
         self.assertIn(f'<tr data-student-id="{self.student.pk}">', html)
         self.assertIn('id="add-session-form"', html)
         self.assertIn('ManualAttendance.mark', html)
+        # Blank striped cells (lesson before the enrollment date) must be tappable.
+        self.assertNotIn("state === 'not_enrolled'", html)
+        self.assertNotIn(':not(.cell-not_enrolled)', html)
 
     def test_group_page_is_desk_only(self):
         # The group page itself is supervisor-gated, so the grid controls

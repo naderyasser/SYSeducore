@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from .models import Attendance, Session
@@ -515,14 +515,23 @@ class AttendanceService:
         cycle-assigning it when the scanner never did.
 
         Returns ``(session, created, error)`` — ``error`` is a message and the
-        session ``None`` when the date is in the future or falls at or before
-        the close of a settled cycle: ``assign_to_cycle`` numbers into the
-        *open* cycle, so a lesson inserted back there would renumber the open
-        cycle around a date that was already billed in the closed one (and a
-        date before the first cycle ever would drag ``started_on`` back).
+        session ``None`` when the date is in the future or precedes the
+        group's first cycle.
+
+        Which cycle a backdated lesson lands in is decided by *date*, not by
+        whichever cycle happens to be open: the latest cycle that started on
+        or before the date. If that cycle still covers the date (open, or
+        closed on/after it) the session joins it — a closed one included,
+        renumbered in place. This is recording history, not rebilling: the
+        migrated calendar-month cycles cover every date the desk will ever
+        backfill, and refusing them (as the first version did) refused every
+        backdate the centre tried. A closed cycle's Payment is never touched —
+        ``record_manual`` skips the counter for it. Only when the date falls
+        in a gap after the last closed cycle does it join the open one via
+        :func:`assign_to_cycle`.
         Shared by the student mark and the group page's "إضافة حصة بتاريخ".
         """
-        from apps.teachers.cycles import assign_to_cycle
+        from apps.teachers.cycles import assign_to_cycle, _renumber
         from apps.teachers.models import GroupCycle
 
         if on_date > timezone.localdate():
@@ -532,10 +541,35 @@ class AttendanceService:
             session = Session.objects.filter(group=group, session_date=on_date).first()
             if session is not None:
                 return session, False, None
-            if GroupCycle.objects.filter(group=group, closed_on__gte=on_date).exists():
-                return None, False, 'هذا التاريخ يقع في دورة مغلقة تمت تسويتها — لا يمكن إضافة حصة جديدة فيه'
+
+            # Prefer the open cycle when it covers the date — a migrated
+            # closed calendar-month cycle can overlap the real open one.
+            covering = (
+                GroupCycle.objects.filter(group=group, started_on__lte=on_date)
+                .filter(models.Q(closed_on__isnull=True) | models.Q(closed_on__gte=on_date))
+                .order_by(models.F('closed_on').asc(nulls_first=True), '-index')
+                .first()
+            )
+            # Before the group's first cycle: refused only when that cycle is
+            # already closed (settled history has nowhere to put the lesson).
+            # An open first cycle simply starts earlier — assign_to_cycle
+            # pulls ``started_on`` back, as it does for the celery backfill.
+            earliest = (
+                GroupCycle.objects.filter(group=group, started_on__isnull=False)
+                .order_by('started_on', 'index').first()
+            )
+            if (covering is None and earliest is not None
+                    and earliest.closed_on is not None and on_date < earliest.started_on):
+                return None, False, f'التاريخ قبل بداية أول دورة للمجموعة ({earliest.started_on:%Y-%m-%d})'
+
             session = Session.objects.create(group=group, session_date=on_date, teacher_attended=False)
-            assign_to_cycle(session)
+            if covering is not None and covering.closed_on is not None:
+                session.cycle = covering
+                session.save(update_fields=['cycle'])
+                _renumber(covering)
+                session.refresh_from_db(fields=['sequence_in_cycle'])
+            else:
+                assign_to_cycle(session)
         return session, True, None
 
     @staticmethod
@@ -558,8 +592,9 @@ class AttendanceService:
           * the date is in the future;
           * the student has no active enrollment in the group;
           * the session for that date is cancelled;
-          * the date needs a *new* session but falls at or before the close of
-            a settled cycle (see :meth:`ensure_manual_session`);
+          * the date precedes the group's first cycle (see
+            :meth:`ensure_manual_session` for how a backdated lesson picks
+            its cycle);
           * the existing row is an ``exception`` (revoke it first).
 
         Returns a dict: ``success``, ``message``, and on success ``session_id``,
