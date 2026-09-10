@@ -1556,7 +1556,7 @@ function renderDossier(d) {
             <div class="dossier-header">
                 <div class="dossier-avatar">${escHtml(initials)}</div>
                 <div class="dossier-info">
-                    <div class="dossier-name">${escHtml(d.full_name)}${d.plan_label ? ` <span class="plan-badge plan-badge-bundle plan-badge-lg"><i class="bi bi-box-seam"></i> ${escHtml(d.plan_label)}</span>` : ''}</div>
+                    <div class="dossier-name">${escHtml(d.full_name)}${d.plan_label ? ` <span class="plan-badge plan-badge-bundle plan-badge-lg" title="${d.bundle_paid ? 'الباقة مدفوعة — لا قيود مالية على الحصص الفردية' : 'الباقة غير مدفوعة'}"><i class="bi bi-box-seam"></i> ${escHtml(d.plan_label)} ${d.bundle_paid ? '✓ مدفوعة' : '✗ غير مدفوعة'}</span>` : ''}</div>
                     <div class="dossier-meta">
                         <span class="dossier-code">${escHtml(d.student_code)}</span>
                         ${d.education && d.education !== '-' ? ' · ' + escHtml(d.education) : ''}
@@ -1697,6 +1697,14 @@ function displayResult(data, code) {
             </div>`;
         }
 
+        // ── Admin override for *time* rejections ──
+        // The 10-minute ban is off (a late scan is accepted as متأخر). What
+        // the scanner still refuses on time is: after the lesson ended,
+        // before the early window, or no lesson matching now. The desk can
+        // record the student anyway — a manual mark, logged under their name,
+        // that skips the time and financial checks like every manual mark.
+        detailHtml += renderOverrideActions(data);
+
         // Render dossier below the error details when student data is available
         if (data.dossier) {
             detailHtml += renderDossier(data.dossier);
@@ -1713,6 +1721,57 @@ function displayResult(data, code) {
     window._resultTimer = setTimeout(() => {
         resultDisplay.classList.remove('show');
     }, hideDelay);
+}
+
+// ── Admin override (تجاوز إداري) ──
+const OVERRIDE_TIME_TYPES = {session_ended: 'late', too_late: 'late', too_early: 'present'};
+
+function renderOverrideActions(data) {
+    const studentId = data.student_id || data.dossier?.student_id;
+    if (!studentId) { return ''; }
+    const candidates = [];  // {groupId, groupName, status}
+    (data.skipped || []).forEach(s => {
+        if (s.group_id && OVERRIDE_TIME_TYPES[s.error_type]) {
+            candidates.push({groupId: s.group_id, groupName: s.group_name, status: OVERRIDE_TIME_TYPES[s.error_type]});
+        }
+    });
+    if (!candidates.length && OVERRIDE_TIME_TYPES[data.error_type] && data.group_id) {
+        const g = (data.dossier?.enrollments || []).find(e => e.group_id === data.group_id);
+        candidates.push({groupId: data.group_id, groupName: g ? g.group_name : '', status: OVERRIDE_TIME_TYPES[data.error_type]});
+    }
+    if (!candidates.length && (data.error_type === 'no_session_today' || data.error_type === 'wrong_schedule' || data.error_type === 'no_session')) {
+        (data.dossier?.enrollments || []).forEach(e => candidates.push({groupId: e.group_id, groupName: e.group_name, status: 'present'}));
+    }
+    if (!candidates.length) { return ''; }
+    const buttons = candidates.map(c => `
+        <button class="btn btn-outline-dark btn-lg flex-fill" style="min-width:160px;"
+                onclick="scannerOverride(${Number(studentId)}, ${Number(c.groupId)}, '${c.status}', this)">
+            <i class="bi bi-shield-lock me-1"></i> تجاوز إداري: تسجيل${c.status === 'late' ? ' متأخر' : ''} في ${escHtml(c.groupName || 'المجموعة')}
+        </button>`).join('');
+    return `
+        <div class="scanner-actions" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">${buttons}</div>`;
+}
+
+async function scannerOverride(studentId, groupId, status, button) {
+    if (!confirm('تسجيل حضور الطالب بتجاوز إداري؟ سيُسجَّل باسمك في سجل النشاط.')) { return; }
+    if (button) { button.disabled = true; }
+    try {
+        const result = await ManualAttendance.mark({groupId: groupId, studentId: studentId, status: status});
+        if (!result.success) { alert(result.message || 'تعذّر التسجيل'); return; }
+        clearTimeout(window._resultTimer);
+        resultCard.className = 'result-card success';
+        resultIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
+        resultTitle.textContent = 'تم التسجيل بتجاوز إداري';
+        resultMessage.textContent = result.message || 'تم تسجيل الحضور';
+        resultDetails.innerHTML = '';
+        playSound('success');
+        await loadTodayStats();
+        window._resultTimer = setTimeout(() => resultDisplay.classList.remove('show'), 8000);
+    } catch (error) {
+        if (error.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); }
+    } finally {
+        if (button) { button.disabled = false; }
+    }
 }
 
 // ── Scanner Quick-Action Handlers ──

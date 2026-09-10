@@ -87,12 +87,18 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
         columns.sort(key=lambda c: c['date'])
 
     # Q3 — the full attendance matrix in one flat query
-    cells_by_key = {
-        (student_id, session_id): status
-        for student_id, session_id, status in Attendance.objects
-        .filter(session_id__in=session_ids)
-        .values_list('student_id', 'session_id', 'status')
-    }
+    cells_by_key = {}
+    locked_keys = set()
+    for student_id, session_id, status, exception_record_id in (
+        Attendance.objects.filter(session_id__in=session_ids)
+        .values_list('student_id', 'session_id', 'status', 'exception_record_id')
+    ):
+        cells_by_key[(student_id, session_id)] = status
+        # A row linked to an approved ExceptionRecord is managed by
+        # grant/revoke — the grid must not offer to overwrite it. A manual
+        # "عذر" (same status, no record) stays editable.
+        if exception_record_id is not None:
+            locked_keys.add((student_id, session_id))
 
     # Q4 — first ACTUAL attendance date per student (present/late/exception)
     # .order_by() is mandatory: Attendance.Meta.ordering = ['-scan_time']
@@ -118,6 +124,7 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
         anchor = min(enrolled_date, first_att) if first_att else enrolled_date
 
         row_cells = []
+        locked_cells = []
         for col in columns:
             if col['unrecorded']:
                 state = CELL_UNRECORDED
@@ -128,6 +135,7 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
             else:
                 state = cells_by_key.get((sid, col['session_id']), CELL_NO_RECORD)
             row_cells.append(state)
+            locked_cells.append((sid, col['session_id']) in locked_keys)
 
         rows.append({
             'student': enr.student,
@@ -136,6 +144,7 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
             'first_attended': first_att,
             'anchor_date': anchor,
             'cells': row_cells,
+            'locked': locked_cells,
         })
 
     return {'columns': columns, 'rows': rows}

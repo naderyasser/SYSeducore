@@ -299,6 +299,8 @@ class AttendanceService:
                 'error_type': rejection['type'],
                 'severity': SEVERITY_MAP.get(rejection['type'], 'error'),
                 'student_name': student.full_name,
+                'student_id': student.student_id,
+                'group_id': rejection.get('group_id'),
                 'dossier': dossier(),
             }
             # Also check financial status so scanner can show action buttons
@@ -338,8 +340,10 @@ class AttendanceService:
 
             if not time_check['allowed']:
                 skipped.append({
+                    'group_id': matching_group.group_id,
                     'group_name': matching_group.group_name,
                     'reason': time_check['reason'],
+                    'error_type': time_check.get('error_type'),
                 })
                 continue
 
@@ -451,6 +455,7 @@ class AttendanceService:
                 'error_type': 'skipped',
                 'severity': 'warning',
                 'student_name': student.full_name,
+                'student_id': student.student_id,
                 'skipped': skipped,
                 'dossier': dossier(),
             }
@@ -503,10 +508,12 @@ class AttendanceService:
             'dossier': dossier(),
         }
     
-    #: Statuses the desk may write by hand. ``exception`` is deliberately
-    #: absent — it is owned by grant/revoke_exception and carries a link the
-    #: manual path must not overwrite.
-    MANUAL_STATUSES = ('present', 'late', 'absent')
+    #: Statuses the desk may write by hand. A manual ``exception`` ("عذر") is
+    #: an attendance row with no ``exception_record`` — it consumes a cycle
+    #: session exactly like present/late/absent (``_consumed_sessions``
+    #: counts all four). Rows *linked* to an ExceptionRecord are owned by
+    #: grant/revoke_exception and are never overwritten here.
+    MANUAL_STATUSES = ('present', 'late', 'absent', 'exception')
 
     @staticmethod
     def ensure_manual_session(group, on_date):
@@ -637,7 +644,8 @@ class AttendanceService:
           * the date precedes the group's first cycle (see
             :meth:`ensure_manual_session` for how a backdated lesson picks
             its cycle);
-          * the existing row is an ``exception`` (revoke it first).
+          * the existing row is linked to an approved ExceptionRecord
+            (revoke it first).
 
         Returns a dict: ``success``, ``message``, and on success ``session_id``,
         ``created`` (True for a fresh attendance row), ``attendance`` (or
@@ -678,9 +686,9 @@ class AttendanceService:
             attendance = Attendance.objects.select_for_update().filter(
                 student=student, session=session,
             ).first()
-            if attendance is not None and attendance.status == 'exception':
+            if attendance is not None and attendance.exception_record_id is not None:
                 return {'success': False,
-                        'message': 'هذا اليوم مسجل كاستثناء — ألغِ الاستثناء أولاً ثم سجّل الحضور يدويًا'}
+                        'message': 'هذا اليوم مسجل باستثناء معتمد — ألغِ الاستثناء أولاً ثم سجّل الحضور يدويًا'}
 
             # The row's timestamp is the *lesson's* moment, not the moment the
             # desk typed it: every "recent attendance" list and the student
@@ -805,6 +813,7 @@ class AttendanceService:
             group, mins, time_str = earliest_upcoming
             return {
                 'type': 'too_early',
+                'group_id': group.group_id,
                 'message': f'مبكر جداً! حصة {group.group_name} للطالب {name} تبدأ الساعة {time_str} (بعد {mins} دقيقة)',
             }
 
@@ -812,6 +821,7 @@ class AttendanceService:
             group, mins, time_str = most_recent_ended
             return {
                 'type': 'too_late',
+                'group_id': group.group_id,
                 'message': f'الحصة انتهت! حصة {group.group_name} للطالب {name} كانت الساعة {time_str} (منذ {mins} دقيقة)',
             }
 
@@ -992,6 +1002,7 @@ class AttendanceService:
         بناء ملف الطالب الشامل — يُعرض بعد كل مسح ناجح
         يشمل: البيانات الشخصية، المجموعات، حالة الدفع، إحصائيات الحضور
         """
+        from .entitlement import bundle_paid
         current_month = timezone.localdate().replace(day=1)
 
         enrollments = list(
@@ -1111,6 +1122,7 @@ class AttendanceService:
             'education': student.get_education_display_full(),
             'plan': student.subscription_plan,
             'plan_label': student.plan_badge_label,
+            'bundle_paid': bool(student.is_bundle and bundle_paid(student)),
             'student_phone': student.student_phone or None,
             'parent_phone': student.parent_phone or None,
             # Dial-ready form for wa.me — computed server-side by the single

@@ -144,6 +144,21 @@ def _consumed_sessions(student, cycle, anchor_session=None):
     ).count()
 
 
+def bundle_paid(student):
+    """
+    "الباقة مدفوعة" — there is no bundle-payment entity, so this is defined
+    in data as: the student has a *paid* Payment on any cycle that is still
+    open, on any of their groups. That is how the desk records a bundle —
+    once, on one of the five groups — and it self-expires: when that group's
+    cycle rolls, the reference payment sits on a closed cycle and every
+    group blocks again until the bundle is paid anew.
+    """
+    return Payment.objects.filter(
+        student=student, status='paid',
+        cycle__isnull=False, cycle__closed_on__isnull=True,
+    ).exists()
+
+
 def evaluate(enrollment, cycle, *, payment=None, today=None):
     """
     Decide whether ``enrollment.student`` may attend ``enrollment.group``
@@ -175,6 +190,12 @@ def evaluate(enrollment, cycle, *, payment=None, today=None):
 
     if enrollment.financial_status == 'exempt':
         return {'allowed': True, 'exempt': True}
+
+    # A bundle student ("باقة 5 مواد") pays once for all their groups: while
+    # that bundle payment is on an open cycle, no per-group check applies.
+    # An unpaid bundle falls through to the normal grace/exception/block path.
+    if getattr(student, 'is_bundle', False) and bundle_paid(student):
+        return {'allowed': True, 'bundle': True}
 
     if cycle is None:
         # sessions_per_month == 0 on this group: not billed by cycle at all.

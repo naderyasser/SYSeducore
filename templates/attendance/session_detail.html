@@ -68,7 +68,7 @@
               <span class="badge bg-success">حاضر <span data-count="present">{{ counts.present }}</span></span>
               <span class="badge bg-warning text-dark">متأخر <span data-count="late">{{ counts.late }}</span></span>
               <span class="badge bg-danger">غائب <span data-count="absent">{{ counts.absent }}</span></span>
-              {% if counts.exception %}<span class="badge bg-primary">استثناء {{ counts.exception }}</span>{% endif %}
+              <span class="badge bg-primary">استثناء/عذر <span data-count="exception">{{ counts.exception }}</span></span>
             </div>
           </div>
           {% if can_mark %}
@@ -104,7 +104,7 @@
                       {% if att.status == 'present' %}حاضر
                       {% elif att.status == 'late' %}متأخر
                       {% elif att.status == 'absent' %}غائب
-                      {% elif att.status == 'exception' %}استثناء
+                      {% elif att.status == 'exception' %}استثناء{% if not att.exception_record_id %} (عذر){% endif %}
                       {% else %}— بلا سجل
                       {% endif %}
                     </span>
@@ -112,8 +112,8 @@
                   <td class="scan-time">{% if att %}{{ att.scan_time|time:"H:i" }}{% else %}—{% endif %}</td>
                   {% if can_mark %}
                   <td>
-                    {% if att.status == 'exception' %}
-                    <span class="text-muted small">يُدار من الاستثناءات</span>
+                    {% if att.exception_record_id %}
+                    <span class="text-muted small">استثناء معتمد — يُدار من الاستثناءات</span>
                     {% elif row.unenrolled %}
                     <span class="text-muted small">أُزيل من المجموعة</span>
                     {% else %}
@@ -121,6 +121,7 @@
                       <button type="button" class="btn btn-outline-success{% if att.status == 'present' %} is-current{% endif %}" data-mark="present">حاضر</button>
                       <button type="button" class="btn btn-outline-warning{% if att.status == 'late' %} is-current{% endif %}" data-mark="late">متأخر</button>
                       <button type="button" class="btn btn-outline-danger{% if att.status == 'absent' %} is-current{% endif %}" data-mark="absent">غائب</button>
+                      <button type="button" class="btn btn-outline-primary{% if att.status == 'exception' %} is-current{% endif %}" data-mark="exception">عذر</button>
                       <button type="button" class="btn btn-outline-secondary" data-mark="clear" title="مسح السجل"><i class="bi bi-eraser"></i></button>
                     </div>
                     {% endif %}
@@ -208,11 +209,11 @@
     'use strict';
     var GROUP_ID = {{ session.group.group_id }};
     var DATE = '{{ session.session_date|date:"Y-m-d" }}';
-    var LABELS = {present: 'حاضر', late: 'متأخر', absent: 'غائب', '': '— بلا سجل'};
+    var LABELS = {present: 'حاضر', late: 'متأخر', absent: 'غائب', exception: 'استثناء (عذر)', '': '— بلا سجل'};
 
     function recount() {
         var rows = document.querySelectorAll('#session-roster tbody tr[data-student-id]');
-        ['present', 'late', 'absent'].forEach(function (status) {
+        ['present', 'late', 'absent', 'exception'].forEach(function (status) {
             var n = 0;
             rows.forEach(function (r) { if (r.dataset.status === status) { n += 1; } });
             var el = document.querySelector('[data-count="' + status + '"]');

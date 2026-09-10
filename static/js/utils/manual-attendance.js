@@ -20,6 +20,7 @@
         present: 'حاضر',
         late: 'متأخر',
         absent: 'غائب',
+        exception: 'عذر',
         clear: 'مسح السجل'
     };
 

@@ -235,10 +235,10 @@
         color: #9ca3af;
         text-decoration: line-through;
     }
-    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-exception) {
+    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not([data-locked]) {
         cursor: pointer;
     }
-    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not(.cell-exception):hover {
+    .attendance-grid.is-editable td.cell:not(.cell-cancelled):not([data-locked]):hover {
         outline: 2px solid #2563eb;
         outline-offset: -2px;
     }
@@ -716,8 +716,8 @@
                     <tr data-student-id="{{ row.student.student_id }}">
                         <th class="sticky-name">{{ row.student.full_name }} {% plan_badge row.student %}</th>
                         {% for cell in row.cells %}
-                        {% with col=session_columns|index:forloop.counter0 %}
-                        <td class="cell cell-{{ cell }}" data-state="{{ cell }}" data-date="{{ col.date|date:'Y-m-d' }}"{% if col.session_id %} data-session-id="{{ col.session_id }}"{% endif %}>{{ cell|cell_glyph }}</td>
+                        {% with col=session_columns|index:forloop.counter0 locked=row.locked|index:forloop.counter0 %}
+                        <td class="cell cell-{{ cell }}" data-state="{{ cell }}" data-date="{{ col.date|date:'Y-m-d' }}"{% if col.session_id %} data-session-id="{{ col.session_id }}"{% endif %}{% if locked %} data-locked="1" title="استثناء معتمد — يُدار من صفحة الاستثناءات"{% endif %}>{{ cell|cell_glyph }}</td>
                         {% endwith %}
                         {% endfor %}
                     </tr>
@@ -729,7 +729,7 @@
             <span class="cell cell-present">✓</span> حاضر
             <span class="cell cell-late">م</span> متأخر
             <span class="cell cell-absent">✗</span> غائب
-            <span class="cell cell-exception">س</span> استثناء
+            <span class="cell cell-exception">س</span> استثناء / عذر
             <span class="cell cell-no_record">—</span> بلا سجل
             <span class="cell cell-cancelled">//</span> ملغاة
             <span class="cell cell-not_enrolled"></span> قبل تاريخ تسجيله (يمكن الضغط للتسجيل)
@@ -750,7 +750,7 @@
 (function () {
     'use strict';
     var GROUP_ID = {{ group.group_id }};
-    var GLYPH = {present: '✓', late: 'م', absent: '✗', no_record: '—'};
+    var GLYPH = {present: '✓', late: 'م', absent: '✗', exception: 'س', no_record: '—'};
     var grid = document.querySelector('.attendance-grid');
     var chooser = null;
 
@@ -783,7 +783,7 @@
         chooser = document.createElement('div');
         chooser.className = 'cell-chooser';
         chooser.setAttribute('role', 'menu');
-        [['present', 'حاضر', 'success'], ['late', 'متأخر', 'warning'], ['absent', 'غائب', 'danger']].forEach(function (opt) {
+        [['present', 'حاضر', 'success'], ['late', 'متأخر', 'warning'], ['absent', 'غائب', 'danger'], ['exception', 'عذر', 'primary']].forEach(function (opt) {
             var b = document.createElement('button');
             b.type = 'button';
             b.className = 'btn btn-sm btn-' + (current === opt[0] ? '' : 'outline-') + opt[2];
@@ -791,7 +791,7 @@
             b.addEventListener('click', function () { closeChooser(); save(cell, opt[0]); });
             chooser.appendChild(b);
         });
-        if (current === 'present' || current === 'late' || current === 'absent') {
+        if (current === 'present' || current === 'late' || current === 'absent' || current === 'exception') {
             var clear = document.createElement('button');
             clear.type = 'button';
             clear.className = 'btn btn-sm btn-outline-secondary';
@@ -819,7 +819,9 @@
             // predates the enrollment date — exactly the student who came
             // without a card and was entered later. Marking them moves the
             // anchor back on reload.
-            if (state === 'cancelled' || state === 'exception') { return; }
+            // A cell linked to an approved ExceptionRecord is locked; a
+            // manual "عذر" (same colour, no record) is editable like any other.
+            if (state === 'cancelled' || cell.dataset.locked) { return; }
             event.stopPropagation();
             openChooser(cell);
         });

@@ -110,8 +110,8 @@ class RecordManualServiceTests(ManualAttendanceBase):
         self.assertIn('غير مسجل', result['message'])
 
     def test_invalid_status_refused(self):
-        self.assertFalse(self.record(status='exception')['success'])
         self.assertFalse(self.record(status='banana')['success'])
+        self.assertFalse(self.record(status='')['success'])
 
     def test_cancelled_session_refused(self):
         Session.objects.create(group=self.group, session_date=self.today, is_cancelled=True,
@@ -591,3 +591,120 @@ class SubscriptionPlanBadgeTests(ManualAttendanceBase):
         self.assertIn(r.status_code, (200, 302))
         self.student.refresh_from_db()
         self.assertEqual(self.student.subscription_plan, 'regular')
+
+
+class ManualExcuseTests(ManualAttendanceBase):
+    def test_manual_excuse_is_an_unlinked_exception_row_and_stays_editable(self):
+        result = self.record(status='exception')
+        self.assertTrue(result['success'], result)
+        att = Attendance.objects.get(student=self.student)
+        self.assertEqual(att.status, 'exception')
+        self.assertIsNone(att.exception_record_id)
+        # Counts as a consumed session like the other three.
+        self.assertEqual(Payment.objects.get(student=self.student).sessions_attended, 1)
+        # Can be changed again.
+        self.assertTrue(self.record(status='present')['success'])
+        att.refresh_from_db()
+        self.assertEqual(att.status, 'present')
+
+    def test_linked_exception_is_still_locked_everywhere(self):
+        session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today))
+        exc = ExceptionRecord.objects.create(
+            student=self.student, group=self.group, exception_type='payment',
+            reason_type='other', approved_by=self.supervisor,
+        )
+        Attendance.objects.create(student=self.student, session=session, status='exception',
+                                  exception_record=exc, supervisor=self.supervisor)
+        other = Student.objects.create(
+            student_code='MAN030', full_name='عذر يدوي', gender='male',
+            parent_phone='01098765430', student_phone='01011111130',
+        )
+        StudentGroupEnrollment.objects.create(student=other, group=self.group, is_active=True)
+        Attendance.objects.create(student=other, session=session, status='exception', supervisor=self.supervisor)
+
+        self.assertFalse(self.record(status='present')['success'])
+        self.client.force_login(self.supervisor)
+        html = self.client.get(reverse('teachers:group_detail', args=[self.group.pk])).content.decode()
+        self.assertEqual(html.count('data-locked="1"'), 1)
+        html = self.client.get(reverse('attendance:session_detail', args=[session.pk])).content.decode()
+        self.assertIn('استثناء معتمد', html)
+        self.assertIn('data-mark="exception"', html)  # the manual one keeps its buttons
+        self.assertIn('استثناء (عذر)', html)
+
+
+class BundleBypassTests(ManualAttendanceBase):
+    def setUp(self):
+        super().setUp()
+        from apps.teachers.cycles import open_cycle_for
+        self.group_b = create_group_with_schedule(
+            group_name='مجموعة ب', teacher=self.teacher, room=self.room,
+            schedule_day=self.today.strftime('%A'), schedule_time=time(18, 0),
+            duration_minutes=120, standard_fee=Decimal('200.00'),
+            center_percentage=Decimal('30.00'), sessions_per_month=4,
+        )
+        self.enr_b = StudentGroupEnrollment.objects.create(student=self.student, group=self.group_b, is_active=True)
+        # Group A's open cycle carries the (bundle) payment; B has nothing.
+        self.cycle_a = open_cycle_for(self.group)
+        self.cycle_a.started_on = self.today; self.cycle_a.save(update_fields=['started_on'])
+        self.cycle_b = open_cycle_for(self.group_b)
+        self.cycle_b.started_on = self.today; self.cycle_b.save(update_fields=['started_on'])
+
+    def _pay_a(self, cycle=None):
+        return Payment.objects.create(
+            student=self.student, group=self.group, cycle=cycle or self.cycle_a,
+            month=self.today.replace(day=1), amount_due=Decimal('600'), amount_paid=Decimal('600'),
+            status='paid', sessions_total=4,
+        )
+
+    def test_regular_student_is_blocked_on_the_unpaid_group(self):
+        self._pay_a()
+        check = AttendanceService.check_financial_status(self.student, self.group_b)
+        self.assertFalse(check['allowed'])
+        self.assertEqual(check['error_type'], 'payment_required')
+
+    def test_bundle_student_with_paid_open_cycle_passes_every_group(self):
+        self.student.subscription_plan = 'bundle_5'; self.student.save(update_fields=['subscription_plan'])
+        self._pay_a()
+        check = AttendanceService.check_financial_status(self.student, self.group_b)
+        self.assertTrue(check['allowed'], check)
+        self.assertTrue(check.get('bundle'))
+        self.assertTrue(AttendanceService.build_student_dossier(self.student)['bundle_paid'])
+
+    def test_bundle_student_with_payment_on_a_closed_cycle_is_blocked_again(self):
+        self.student.subscription_plan = 'bundle_5'; self.student.save(update_fields=['subscription_plan'])
+        closed = GroupCycle.objects.create(group=self.group, index=99, sessions_planned=4,
+                                           started_on=self.today - timedelta(days=60),
+                                           closed_on=self.today - timedelta(days=30))
+        self._pay_a(cycle=closed)
+        check = AttendanceService.check_financial_status(self.student, self.group_b)
+        self.assertFalse(check['allowed'])
+        self.assertFalse(AttendanceService.build_student_dossier(self.student)['bundle_paid'])
+
+    def test_unpaid_bundle_student_falls_through_to_normal_rules(self):
+        self.student.subscription_plan = 'bundle_5'; self.student.save(update_fields=['subscription_plan'])
+        check = AttendanceService.check_financial_status(self.student, self.group_b)
+        self.assertFalse(check['allowed'])
+        self.assertEqual(check['error_type'], 'payment_required')
+
+
+class ScannerOverrideTests(ManualAttendanceBase):
+    def test_time_rejections_carry_ids_for_the_override(self):
+        from unittest.mock import patch
+        from datetime import datetime
+        # Scan two hours after the lesson ended (16:00 + 120 min → 18:00; scan at 21:00 local).
+        tz = timezone.get_current_timezone()
+        late_now = timezone.make_aware(datetime.combine(self.today, time(21, 0)), tz)
+        with patch('apps.attendance.services.timezone.now', return_value=late_now):
+            result = AttendanceService.process_scan('MAN001', self.supervisor)
+        self.assertFalse(result['success'])
+        self.assertEqual(result['error_type'], 'too_late')
+        self.assertEqual(result['student_id'], self.student.pk)
+        self.assertEqual(result['group_id'], self.group.pk)
+        self.assertEqual(result['dossier']['student_id'], self.student.pk)
+
+    def test_scanner_page_ships_the_override(self):
+        self.client.force_login(self.supervisor)
+        html = self.client.get(reverse('attendance:scanner')).content.decode()
+        self.assertIn('function scannerOverride(', html)
+        self.assertIn('renderOverrideActions(data)', html)
+        self.assertIn('تجاوز إداري', html)
