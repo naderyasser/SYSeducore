@@ -480,3 +480,44 @@ class SessionDeleteTests(ManualAttendanceBase):
         html = self.client.get(reverse('attendance:session_detail', args=[session.pk])).content.decode()
         self.assertNotIn('delete-session-btn', html)
         self.assertNotIn('cancel-session-btn', html)
+
+
+class ScannerClientRequestsTests(ManualAttendanceBase):
+    def test_today_attendees_lists_exactly_what_the_counter_counts(self):
+        session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today))
+        other = Student.objects.create(
+            student_code='MAN009', full_name='طالبة متأخرة', gender='female',
+            parent_phone='01098765409', student_phone='01011111109',
+        )
+        StudentGroupEnrollment.objects.create(student=other, group=self.group, is_active=True)
+        Attendance.objects.create(student=self.student, session=session, status='present', supervisor=self.supervisor)
+        Attendance.objects.create(student=other, session=session, status='late', supervisor=self.supervisor)
+        absent = Student.objects.create(
+            student_code='MAN010', full_name='غائب', gender='male',
+            parent_phone='01098765410', student_phone='01011111110',
+        )
+        Attendance.objects.create(student=absent, session=session, status='absent', supervisor=self.supervisor)
+
+        self.assertEqual(self.client.get(reverse('attendance:today_attendees')).status_code, 401)
+        self.client.force_login(self.teacher_user)
+        r = self.client.get(reverse('attendance:today_attendees'))
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        stats = self.client.get(reverse('attendance:today_stats')).json()
+        self.assertEqual(data['count'], stats['present'])
+        self.assertEqual(data['count'], 2)
+        names = {a['full_name'] for a in data['attendees']}
+        self.assertEqual(names, {'طالب يدوي', 'طالبة متأخرة'})
+        row = next(a for a in data['attendees'] if a['status'] == 'late')
+        self.assertEqual(row['status_display'], 'متأخر')
+        self.assertEqual(row['group_name'], self.group.group_name)
+        self.assertEqual(row['session_id'], session.pk)
+
+    def test_scanner_counter_opens_the_list_and_no_longer_threatens_a_10_minute_ban(self):
+        self.client.force_login(self.supervisor)
+        html = self.client.get(reverse('attendance:scanner')).content.decode()
+        self.assertIn('onclick="showTodayAttendees()"', html)
+        self.assertIn('id="attendeesModal"', html)
+        self.assertNotIn('ممنوع الدخول', html)
+        self.assertNotIn('قاعدة الـ 10 دقائق', html)
+        self.assertIn('ولا يُمنع الدخول', html)

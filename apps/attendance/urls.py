@@ -17,6 +17,7 @@ urlpatterns = [
 
     # API: إحصائيات اليوم
     path('api/today-stats/', views.today_stats, name='today_stats'),
+    path('api/today-attendees/', views.today_attendees, name='today_attendees'),
 
     # API: حصص اليوم
     path('api/today-sessions/', views.today_sessions, name='today_sessions'),

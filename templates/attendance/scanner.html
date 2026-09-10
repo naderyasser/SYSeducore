@@ -46,6 +46,13 @@
         flex-shrink: 0;
     }
 
+    .stat-card-clickable { cursor: pointer; transition: box-shadow .15s, transform .15s; }
+    .stat-card-clickable:hover, .stat-card-clickable:focus-visible { box-shadow: 0 6px 18px rgba(37,99,235,.18); transform: translateY(-1px); outline: none; }
+    .attendees-table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    .attendees-table th, .attendees-table td { padding: 8px 10px; border-bottom: 1px solid #eef0f3; text-align: right; white-space: nowrap; }
+    .attendees-table thead th { background: #f9fafb; color: #6b7280; font-weight: 600; position: sticky; top: 0; }
+    .attendees-wrap { max-height: min(60vh, 520px); overflow: auto; }
+    .attendees-search { margin-bottom: 10px; }
     .stat-card .stat-icon.blue { background: #dbeafe; color: #2563eb; }
     .stat-card .stat-icon.green { background: #dcfce7; color: #16a34a; }
     .stat-card .stat-icon.orange { background: #fef3c7; color: #d97706; }
@@ -980,12 +987,12 @@
 
     <!-- Stats Row -->
     <div class="stats-row" id="statsRow">
-        <div class="stat-card">
+        <div class="stat-card stat-card-clickable" role="button" tabindex="0" onclick="showTodayAttendees()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();showTodayAttendees();}" title="عرض أسماء الحاضرين اليوم">
             <div class="stat-icon blue">
                 <i class="bi bi-people"></i>
             </div>
             <div class="stat-info">
-                <div class="stat-label">الحضور اليوم</div>
+                <div class="stat-label">الحضور اليوم <i class="bi bi-box-arrow-up-left small"></i></div>
                 <div class="stat-value" id="todayPresent">0</div>
                 <div class="stat-change positive" id="todayPresentChange">+0 عن الأمس</div>
             </div>
@@ -1129,9 +1136,15 @@
             <!-- Rules Card -->
             <div class="rules-card">
                 <h5><i class="bi bi-exclamation-triangle"></i> قواعد الحضور</h5>
+                {% comment %}
+                The "10-minute rule = no entry" item used to sit here. The centre
+                asked for the block to go, and BLOCK_LATE_ENTRY has been off
+                since: a late student is recorded "متأخر" and let in, so the
+                card must not promise a rule the system no longer enforces.
+                {% endcomment %}
                 <div class="rule-item">
                     <i class="bi bi-clock"></i>
-                    <span><strong>قاعدة الـ 10 دقائق:</strong> التأخر أكثر من 10 دقائق = ممنوع الدخول</span>
+                    <span><strong>التأخير:</strong> يُسجَّل "متأخر" بعد 10 دقائق ولا يُمنع الدخول</span>
                 </div>
                 <div class="rule-item">
                     <i class="bi bi-cash-coin"></i>
@@ -1200,6 +1213,33 @@
             <button class="btn btn-warning" id="confirmGraceBtn" onclick="confirmGrace()">
                 <i class="bi bi-check-lg me-1"></i>تأكيد المهلة
             </button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="attendeesModal">
+    <div class="modal-content" style="max-width: 720px;">
+        <div class="modal-header">
+            <h5><i class="bi bi-people"></i> الحاضرون اليوم <span class="badge bg-primary ms-1" id="attendeesCount">0</span></h5>
+            <button class="modal-close" onclick="closeAttendeesModal()" aria-label="إغلاق">
+                <i class="bi bi-x"></i>
+            </button>
+        </div>
+        <div class="modal-body">
+            <input type="search" class="form-control attendees-search" id="attendeesSearch" placeholder="بحث بالاسم أو الكود أو المجموعة…" oninput="filterAttendees()">
+            <div class="attendees-wrap">
+                <table class="attendees-table" id="attendeesTable">
+                    <thead>
+                        <tr><th>#</th><th>الطالب</th><th>الكود</th><th>المجموعة</th><th>الحالة</th><th>الوقت</th></tr>
+                    </thead>
+                    <tbody id="attendeesBody">
+                        <tr><td colspan="6" class="text-center text-muted py-4">جارٍ التحميل…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeAttendeesModal()">إغلاق</button>
         </div>
     </div>
 </div>
@@ -2228,7 +2268,7 @@ function showTodaySessions() {
 function showRules() {
     alert(`قواعد الحضور:
 
-• قاعدة الـ 10 دقائق: التأخر أكثر من 10 دقائق = ممنوع الدخول
+• التأخير: يُسجَّل "متأخر" بعد 10 دقائق ولا يُمنع الدخول
 
 • الشهر الأول: يجب الدفع أولاً قبل الدخول
 
@@ -2238,6 +2278,58 @@ function showRules() {
 function exportTodayReport() {
     document.getElementById('exportModal').classList.add('show');
     document.getElementById('exportDate').valueAsDate = new Date();
+}
+
+// ── Today's attendees (the names behind the counter) ──
+let attendeesCache = [];
+
+function renderAttendees(rows) {
+    const body = document.getElementById('attendeesBody');
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">لا يوجد حضور مطابق</td></tr>';
+        return;
+    }
+    body.innerHTML = rows.map((a, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td><a href="/students/${a.student_id}/" class="text-reset">${escHtml(a.full_name)}</a></td>
+            <td dir="ltr">${escHtml(a.student_code)}</td>
+            <td><a href="/attendance/session/${a.session_id}/" class="text-reset">${escHtml(a.group_name)}</a></td>
+            <td><span class="badge ${a.status === 'late' ? 'bg-warning text-dark' : 'bg-success'}">${escHtml(a.status_display)}</span></td>
+            <td dir="ltr">${escHtml(a.time)}</td>
+        </tr>`).join('');
+}
+
+function filterAttendees() {
+    const q = (document.getElementById('attendeesSearch').value || '').trim().toLowerCase();
+    if (!q) { renderAttendees(attendeesCache); return; }
+    renderAttendees(attendeesCache.filter(a =>
+        (a.full_name || '').toLowerCase().includes(q) ||
+        (a.student_code || '').toLowerCase().includes(q) ||
+        (a.group_name || '').toLowerCase().includes(q)));
+}
+
+async function showTodayAttendees() {
+    document.getElementById('attendeesModal').classList.add('show');
+    document.getElementById('attendeesSearch').value = '';
+    document.getElementById('attendeesBody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">جارٍ التحميل…</td></tr>';
+    try {
+        const response = await fetch('{% url "attendance:today_attendees" %}');
+        if (response.status === 401) { window.location.href = '/accounts/login/'; return; }
+        if (!response.ok) throw new Error('خطأ في الخادم');
+        const data = await response.json();
+        attendeesCache = data.attendees || [];
+        document.getElementById('attendeesCount').textContent = data.count || 0;
+        document.getElementById('todayPresent').textContent = data.count || 0;
+        renderAttendees(attendeesCache);
+    } catch (error) {
+        console.error('Error loading attendees:', error);
+        document.getElementById('attendeesBody').innerHTML = '<tr><td colspan="6" class="text-center text-danger py-4">تعذّر تحميل القائمة</td></tr>';
+    }
+}
+
+function closeAttendeesModal() {
+    document.getElementById('attendeesModal').classList.remove('show');
 }
 
 function closeExportModal() {

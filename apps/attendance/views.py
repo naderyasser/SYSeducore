@@ -396,6 +396,40 @@ def today_stats(request):
 
 @ajax_login_required
 @require_http_methods(["GET"])
+def today_attendees(request):
+    """
+    API: من حضر اليوم — the names behind the "الحضور اليوم" counter.
+    Same filter as :func:`today_stats` so the list is exactly as long as
+    the number on the card. Newest scan first.
+    """
+    today = timezone.localdate()
+    rows = (
+        Attendance.objects.filter(session__session_date=today, status__in=['present', 'late'])
+        .select_related('student', 'session__group')
+        .order_by('-scan_time')
+    )
+    return JsonResponse({
+        'success': True,
+        'date': today.isoformat(),
+        'count': rows.count(),
+        'attendees': [
+            {
+                'student_id': a.student_id,
+                'full_name': a.student.full_name,
+                'student_code': a.student.student_code,
+                'group_name': a.session.group.group_name,
+                'session_id': a.session_id,
+                'status': a.status,
+                'status_display': a.get_status_display(),
+                'time': timezone.localtime(a.scan_time).strftime('%H:%M'),
+            }
+            for a in rows
+        ],
+    })
+
+
+@ajax_login_required
+@require_http_methods(["GET"])
 def today_sessions(request):
     """
     API Endpoint: حصص اليوم مع عدد الحضور
