@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load plan_badge %}
 {% load money_format %}
 {% load l10n %}
 {% block title %}المدفوعات{% endblock %}
@@ -369,7 +370,7 @@
                     <i class="bi bi-person-fill"></i>
                 </div>
                 <div class="student-info">
-                    <h6>{{ payment.student.full_name }}</h6>
+                    <h6>{{ payment.student.full_name }} {% plan_badge payment.student %}</h6>
                     <small>
                         <i class="bi bi-hash"></i>{{ payment.student.student_code }}
                         &nbsp;|&nbsp;

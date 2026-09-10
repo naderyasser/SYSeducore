@@ -17,7 +17,7 @@ class StudentForm(forms.ModelForm):
         model = Student
         fields = [
             'student_code', 'full_name', 'gender',
-            'education_stage', 'education_year', 'education_type',
+            'education_stage', 'education_year', 'education_type', 'subscription_plan',
             'student_phone', 'parent_phone', 'parent_name',
             'date_of_birth', 'school_name', 'address', 'is_active'
         ]
@@ -79,6 +79,9 @@ class StudentForm(forms.ModelForm):
         # Education fields
         self.fields['education_stage'].required = False
         self.fields['education_year'].required = False
+        # Optional on the wire: every other form that posts a student (the
+        # booking registration, older clients) never sends it → "عادي".
+        self.fields['subscription_plan'].required = False
         
         # Clean phone numbers on initial display (remove +20 prefix)
         if self.instance and self.instance.pk:
@@ -104,6 +107,9 @@ class StudentForm(forms.ModelForm):
             cleaned.get('education_stage'), cleaned.get('education_year'),
         )
         return cleaned
+
+    def clean_subscription_plan(self):
+        return self.cleaned_data.get('subscription_plan') or 'regular'
 
     def clean_student_code(self):
         code = self.cleaned_data.get('student_code')

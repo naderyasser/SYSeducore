@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load plan_badge %}
 
 {% block title %}تفاصيل الحصة{% endblock %}
 
@@ -91,6 +92,7 @@
                 <tr data-student-id="{{ row.student.student_id }}" data-status="{{ att.status|default:'' }}">
                   <td>
                     <a href="{% url 'students:detail' student_id=row.student.student_id %}" class="text-reset text-decoration-none">{{ row.student.full_name }}</a>
+                    {% plan_badge row.student %}
                     {% if row.unenrolled %}<span class="badge bg-secondary ms-1">غير مسجل حاليًا</span>{% endif %}
                   </td>
                   <td>

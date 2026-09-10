@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load plan_badge %}
 {% load money_format %}
 {% load dict_filters %}
 
@@ -603,7 +604,7 @@
                         {% for row in students_rows %}
                         <tr id="enrollment-{{ row.enrollment.id }}">
                             <td>
-                                <div class="student-name">{{ row.student.full_name }}</div>
+                                <div class="student-name">{{ row.student.full_name }} {% plan_badge row.student %}</div>
                             </td>
                             <td>{{ row.student.student_code }}</td>
                             <td dir="ltr">
@@ -713,7 +714,7 @@
                 <tbody>
                     {% for row in students_rows %}
                     <tr data-student-id="{{ row.student.student_id }}">
-                        <th class="sticky-name">{{ row.student.full_name }}</th>
+                        <th class="sticky-name">{{ row.student.full_name }} {% plan_badge row.student %}</th>
                         {% for cell in row.cells %}
                         {% with col=session_columns|index:forloop.counter0 %}
                         <td class="cell cell-{{ cell }}" data-state="{{ cell }}" data-date="{{ col.date|date:'Y-m-d' }}"{% if col.session_id %} data-session-id="{{ col.session_id }}"{% endif %}>{{ cell|cell_glyph }}</td>

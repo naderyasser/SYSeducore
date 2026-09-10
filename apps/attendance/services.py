@@ -1109,6 +1109,8 @@ class AttendanceService:
             'full_name': student.full_name,
             'gender': student.get_gender_display(),
             'education': student.get_education_display_full(),
+            'plan': student.subscription_plan,
+            'plan_label': student.plan_badge_label,
             'student_phone': student.student_phone or None,
             'parent_phone': student.parent_phone or None,
             # Dial-ready form for wa.me — computed server-side by the single

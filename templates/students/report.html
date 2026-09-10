@@ -102,6 +102,7 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
         <h2 class="sec"><i class="bi bi-person-vcard"></i> البيانات الأساسية</h2>
         <div class="info-grid">
             <div><div class="k">الاسم</div><div class="v">{{ student.full_name }}</div></div>
+            <div><div class="k">خطة الاشتراك</div><div class="v">{{ student.get_subscription_plan_display }}</div></div>
             <div><div class="k">النوع</div><div class="v">{% if student.gender == 'male' %}ولد{% elif student.gender == 'female' %}بنت{% else %}—{% endif %}</div></div>
             <div><div class="k">تاريخ الميلاد</div><div class="v">{{ student.date_of_birth|date:"Y-m-d"|default:"—" }}</div></div>
             <div><div class="k">رقم الطالب</div><div class="v">{{ student.student_phone|default:"—" }}</div></div>

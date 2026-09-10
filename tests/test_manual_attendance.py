@@ -521,3 +521,73 @@ class ScannerClientRequestsTests(ManualAttendanceBase):
         self.assertNotIn('ممنوع الدخول', html)
         self.assertNotIn('قاعدة الـ 10 دقائق', html)
         self.assertIn('ولا يُمنع الدخول', html)
+
+
+class SubscriptionPlanBadgeTests(ManualAttendanceBase):
+    def setUp(self):
+        super().setUp()
+        self.student.subscription_plan = 'bundle_5'
+        self.student.save(update_fields=['subscription_plan'])
+        self.plain = Student.objects.create(
+            student_code='MAN020', full_name='طالب عادي', gender='male',
+            parent_phone='01098765420', student_phone='01011111120',
+        )
+        StudentGroupEnrollment.objects.create(student=self.plain, group=self.group, is_active=True)
+
+    def test_default_is_regular_and_badge_text_empty(self):
+        self.assertEqual(self.plain.subscription_plan, 'regular')
+        self.assertFalse(self.plain.is_bundle)
+        self.assertEqual(self.plain.plan_badge_label, '')
+        self.assertEqual(self.student.plan_badge_label, 'باقة 5 مواد')
+
+    def test_badge_on_every_screen_and_only_for_bundle_students(self):
+        session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today))
+        Attendance.objects.create(student=self.student, session=session, status='present', supervisor=self.supervisor)
+        Attendance.objects.create(student=self.plain, session=session, status='present', supervisor=self.supervisor)
+        from apps.payments.models import Payment as P
+        for st in (self.student, self.plain):
+            P.objects.create(student=st, group=self.group, month=self.today.replace(day=1),
+                             amount_due=Decimal('200'), amount_paid=0)
+        self.client.force_login(self.supervisor)
+        pages = [
+            reverse('students:list'),
+            reverse('students:detail', args=[self.student.pk]),
+            reverse('payments:list'),
+            reverse('teachers:group_detail', args=[self.group.pk]),
+            reverse('attendance:session_detail', args=[session.pk]),
+        ]
+        for url in pages:
+            html = self.client.get(url).content.decode()
+            self.assertEqual(html.count('plan-badge-bundle'), html.count('باقة 5 مواد') and html.count('plan-badge-bundle'), url)
+            self.assertIn('باقة 5 مواد', html, url)
+        # The regular student's page carries no badge at all.
+        html = self.client.get(reverse('students:detail', args=[self.plain.pk])).content.decode()
+        self.assertNotIn('plan-badge-bundle', html)
+        # Group page: exactly two badges (students table + grid header), not four.
+        html = self.client.get(reverse('teachers:group_detail', args=[self.group.pk])).content.decode()
+        self.assertEqual(html.count('plan-badge-bundle'), 2)
+
+    def test_report_and_scanner_dossier_carry_the_plan(self):
+        self.client.force_login(self.supervisor)
+        html = self.client.get(reverse('students:report', args=[self.student.pk])).content.decode()
+        self.assertIn('باقة 5 مواد', html)
+        dossier = AttendanceService.build_student_dossier(self.student)
+        self.assertEqual(dossier['plan'], 'bundle_5')
+        self.assertEqual(dossier['plan_label'], 'باقة 5 مواد')
+        self.assertEqual(AttendanceService.build_student_dossier(self.plain)['plan_label'], '')
+
+    def test_form_saves_the_plan(self):
+        self.client.force_login(self.supervisor)
+        html = self.client.get(reverse('students:update', args=[self.student.pk])).content.decode()
+        self.assertIn('id="id_subscription_plan"', html)
+        self.assertIn('value="bundle_5" selected', html)
+        r = self.client.post(reverse('students:update', args=[self.student.pk]), {
+            'student_code': self.student.student_code, 'full_name': self.student.full_name,
+            'gender': 'male', 'education_stage': '', 'education_year': '', 'education_type': 'general',
+            'subscription_plan': 'regular', 'student_phone': '01011111111',
+            'parent_phone': '01098765432', 'parent_name': '', 'date_of_birth': '',
+            'school_name': '', 'address': '', 'is_active': 'on',
+        })
+        self.assertIn(r.status_code, (200, 302))
+        self.student.refresh_from_db()
+        self.assertEqual(self.student.subscription_plan, 'regular')

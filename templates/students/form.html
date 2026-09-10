@@ -394,6 +394,16 @@
                             </select>
                         </div>
 
+                        <div class="col-md-4">
+                            <label for="id_subscription_plan" class="form-label">خطة الاشتراك</label>
+                            <select name="subscription_plan" id="id_subscription_plan" class="form-select">
+                                {% for value, label in form.fields.subscription_plan.choices %}
+                                <option value="{{ value }}" {% if form.subscription_plan.value|default:'regular' == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">"باقة 5 مواد" للمرحلة الإعدادية — تظهر كشارة بجوار الاسم في كل الشاشات.</div>
+                        </div>
+
                         <!-- school_name hidden -->
                         <input type="hidden" name="school_name" id="id_school_name" value="{{ form.school_name.value|default:'' }}">
                     </div>

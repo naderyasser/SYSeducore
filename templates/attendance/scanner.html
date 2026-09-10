@@ -1556,7 +1556,7 @@ function renderDossier(d) {
             <div class="dossier-header">
                 <div class="dossier-avatar">${escHtml(initials)}</div>
                 <div class="dossier-info">
-                    <div class="dossier-name">${escHtml(d.full_name)}</div>
+                    <div class="dossier-name">${escHtml(d.full_name)}${d.plan_label ? ` <span class="plan-badge plan-badge-bundle plan-badge-lg"><i class="bi bi-box-seam"></i> ${escHtml(d.plan_label)}</span>` : ''}</div>
                     <div class="dossier-meta">
                         <span class="dossier-code">${escHtml(d.student_code)}</span>
                         ${d.education && d.education !== '-' ? ' · ' + escHtml(d.education) : ''}
@@ -2284,20 +2284,41 @@ function exportTodayReport() {
 let attendeesCache = [];
 
 function renderAttendees(rows) {
+    // Built with the DOM rather than an HTML string: names and group names
+    // are user data, and a link is a node, not text to be escaped.
     const body = document.getElementById('attendeesBody');
+    body.replaceChildren();
     if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">لا يوجد حضور مطابق</td></tr>';
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = 6; td.className = 'text-center text-muted py-4'; td.textContent = 'لا يوجد حضور مطابق';
+        tr.appendChild(td); body.appendChild(tr);
         return;
     }
-    body.innerHTML = rows.map((a, i) => `
-        <tr>
-            <td>${i + 1}</td>
-            <td><a href="/students/${a.student_id}/" class="text-reset">${escHtml(a.full_name)}</a></td>
-            <td dir="ltr">${escHtml(a.student_code)}</td>
-            <td><a href="/attendance/session/${a.session_id}/" class="text-reset">${escHtml(a.group_name)}</a></td>
-            <td><span class="badge ${a.status === 'late' ? 'bg-warning text-dark' : 'bg-success'}">${escHtml(a.status_display)}</span></td>
-            <td dir="ltr">${escHtml(a.time)}</td>
-        </tr>`).join('');
+    const cell = (content, opts = {}) => {
+        const td = document.createElement('td');
+        if (opts.dir) td.dir = opts.dir;
+        if (content instanceof Node) td.appendChild(content); else td.textContent = content;
+        return td;
+    };
+    const link = (href, text) => {
+        const a = document.createElement('a');
+        a.href = href; a.className = 'text-reset'; a.textContent = text;
+        return a;
+    };
+    rows.forEach((a, i) => {
+        const tr = document.createElement('tr');
+        tr.appendChild(cell(String(i + 1)));
+        tr.appendChild(cell(link('/students/' + encodeURIComponent(a.student_id) + '/', a.full_name || '')));
+        tr.appendChild(cell(a.student_code || '', {dir: 'ltr'}));
+        tr.appendChild(cell(link('/attendance/session/' + encodeURIComponent(a.session_id) + '/', a.group_name || '')));
+        const badge = document.createElement('span');
+        badge.className = 'badge ' + (a.status === 'late' ? 'bg-warning text-dark' : 'bg-success');
+        badge.textContent = a.status_display || '';
+        tr.appendChild(cell(badge));
+        tr.appendChild(cell(a.time || '', {dir: 'ltr'}));
+        body.appendChild(tr);
+    });
 }
 
 function filterAttendees() {

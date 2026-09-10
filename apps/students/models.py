@@ -45,6 +45,14 @@ class Student(SoftDeleteModel):
         ('experimental', 'تجريبي'),
     ]
 
+    #: خطة الاشتراك — الطالب العادي يدفع كل مجموعة على حدة؛ طالب "باقة 5 مواد"
+    #: (المرحلة الإعدادية) له تسعير/متابعة مختلفان، فلا بد أن يُميَّز بشارة
+    #: في كل شاشة يظهر فيها اسمه: الحسابات، الدفع، الحضور، الماسح.
+    SUBSCRIPTION_PLAN_CHOICES = [
+        ('regular', 'عادي'),
+        ('bundle_5', 'باقة 5 مواد'),
+    ]
+
     student_id = models.AutoField(primary_key=True)
     student_code = models.CharField(
         max_length=10,
@@ -82,6 +90,13 @@ class Student(SoftDeleteModel):
         choices=EDUCATION_TYPE_CHOICES,
         default='general',
         verbose_name="نوع التعليم"
+    )
+    subscription_plan = models.CharField(
+        max_length=20,
+        choices=SUBSCRIPTION_PLAN_CHOICES,
+        default='regular',
+        verbose_name="خطة الاشتراك",
+        help_text="باقة 5 مواد: للمرحلة الإعدادية — تظهر كشارة بجوار اسم الطالب في كل الشاشات",
     )
 
     groups = models.ManyToManyField(
@@ -166,6 +181,16 @@ class Student(SoftDeleteModel):
 
     def __str__(self):
         return self.full_name
+
+    @property
+    def is_bundle(self):
+        """طالب باقة (وليس اشتراكًا عاديًا)."""
+        return self.subscription_plan != 'regular'
+
+    @property
+    def plan_badge_label(self):
+        """نص الشارة — فارغ للطالب العادي حتى لا تُرسم شارة بلا معنى."""
+        return self.get_subscription_plan_display() if self.is_bundle else ''
 
     def get_education_display_full(self):
         """عرض المرحلة الدراسية كاملة"""
