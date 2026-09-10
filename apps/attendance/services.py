@@ -573,6 +573,48 @@ class AttendanceService:
         return session, True, None
 
     @staticmethod
+    def delete_session(session):
+        """
+        Hard-delete a lesson and every attendance row on it, then repair
+        what pointed at it: the cycle is renumbered (closed or open — this is
+        erasing a row that should never have existed, not rebilling) and the
+        payment counter of every student who had a row is recomputed, because
+        ``Payment.entitlement_start_session`` is SET_NULL and the anchor must
+        be re-derived from the sessions that remain.
+
+        Refuses — returns ``(False, message)`` — when the lesson is on one of
+        the group's scheduled weekdays within the last ``SESSION_BACKFILL_DAYS``
+        days: ``auto_mark_absent_sessions`` would recreate it within minutes
+        and mark everyone absent. Cancelling is the right tool there; a
+        cancelled row is what stops the recovery pass.
+        """
+        from apps.attendance.tasks import SESSION_BACKFILL_DAYS
+        from apps.teachers.cycles import _renumber
+
+        group = session.group
+        today = timezone.localdate()
+        age = (today - session.session_date).days
+        if 0 <= age <= SESSION_BACKFILL_DAYS and group.get_schedule_for_day(session.session_date.strftime('%A')):
+            return False, (
+                'هذه الحصة في موعد المجموعة خلال الأيام الأخيرة — النظام سيعيد إنشاءها تلقائيًا. '
+                'استخدم "إلغاء الحصة" بدلاً من الحذف.'
+            )
+
+        with transaction.atomic():
+            student_ids = list(
+                Attendance.objects.filter(session=session).values_list('student_id', flat=True)
+            )
+            Attendance.objects.filter(session=session).delete()
+            cycle = session.cycle
+            session.delete()
+            if cycle is not None:
+                _renumber(cycle)
+            if group.sessions_per_month and (cycle is None or cycle.closed_on is None):
+                for student in Student.objects.filter(pk__in=student_ids):
+                    AttendanceService.update_payment_sessions(student, group)
+        return True, len(student_ids)
+
+    @staticmethod
     def record_manual(student, group, on_date, status, supervisor):
         """
         تسجيل حضور يدوي — بديل/مكمل للباركود.

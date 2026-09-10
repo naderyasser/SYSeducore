@@ -2,6 +2,7 @@ import json
 import logging
 
 from django.shortcuts import render, get_object_or_404
+from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.views.decorators.http import require_http_methods
@@ -218,6 +219,7 @@ def session_detail(request, session_id):
         'schedule_entry': schedule_entry,
         # ``is_supervisor`` is a method — a bare reference is always truthy.
         'can_mark': request.user.is_supervisor() and not session.is_cancelled,
+        'can_manage': request.user.is_supervisor(),
     })
 
 
@@ -302,6 +304,40 @@ def cancel_session(request, session_id):
     )
 
     return JsonResponse({'success': True, 'notified': notified})
+
+
+@ajax_supervisor_required
+@require_http_methods(["POST"])
+def delete_session(request, session_id):
+    """
+    حذف حصة نهائيًا مع سجلات الحضور والغياب المرتبطة بها — مشرف أو مدير.
+    Refused (409) for a scheduled lesson in the last few days — see
+    :meth:`AttendanceService.delete_session`; cancel it instead.
+    """
+    try:
+        session = Session.objects.select_related('group').get(pk=session_id)
+    except Session.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'الحصة غير موجودة'}, status=404)
+
+    label = f'{session.group.group_name} بتاريخ {session.session_date}'
+    session_pk = session.pk
+    try:
+        ok, payload = AttendanceService.delete_session(session)
+    except Exception:
+        logger.exception('delete_session failed')
+        return JsonResponse({'success': False, 'message': SERVER_ERROR_MESSAGE}, status=500)
+    if not ok:
+        return JsonResponse({'success': False, 'message': payload}, status=409)
+
+    ActivityLog.log(
+        user=request.user, action='session_delete',
+        description=f'حذف حصة {label} ({payload} سجل حضور)',
+        target_model='Session', target_id=session_pk, request=request,
+    )
+    return JsonResponse({
+        'success': True, 'removed_attendances': payload,
+        'redirect': reverse('teachers:group_detail', args=[session.group_id]),
+    })
 
 
 @ajax_login_required

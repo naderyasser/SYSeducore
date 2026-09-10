@@ -397,3 +397,86 @@ class ManualAttendanceScreensTests(ManualAttendanceBase):
         r = self.client.get(url)
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('manualAttendanceModal', r.content.decode())
+
+
+class SessionDeleteTests(ManualAttendanceBase):
+    url = lambda self, pk: reverse('attendance:delete_session', args=[pk])
+
+    def _old_session(self, days_back=10, **kw):
+        # Older than SESSION_BACKFILL_DAYS so the recovery pass will not recreate it.
+        return assign_to_cycle(Session.objects.create(
+            group=self.group, session_date=self.today - timedelta(days=days_back), **kw))
+
+    def test_delete_removes_rows_renumbers_and_recounts(self):
+        s1 = self._old_session(14)
+        s2 = self._old_session(7)
+        self.record(on_date=s1.session_date)
+        self.record(on_date=s2.session_date)
+        payment = Payment.objects.get(student=self.student, group=self.group)
+        self.assertEqual(payment.sessions_attended, 2)
+        self.assertEqual(payment.entitlement_start_session, s1)
+
+        self.client.force_login(self.supervisor)
+        r = self.client.post(self.url(s1.pk))
+        self.assertEqual(r.status_code, 200, r.content)
+        data = r.json()
+        self.assertEqual(data['removed_attendances'], 1)
+        self.assertFalse(Session.objects.filter(pk=s1.pk).exists())
+        self.assertFalse(Attendance.objects.filter(session_id=s1.pk).exists())
+        s2.refresh_from_db()
+        self.assertEqual(s2.sequence_in_cycle, 1)
+        payment.refresh_from_db()
+        self.assertEqual(payment.sessions_attended, 1)
+        self.assertEqual(payment.entitlement_start_session, s2)
+        log = ActivityLog.objects.get(action='session_delete')
+        self.assertEqual(log.target_id, s1.pk)
+        self.assertIn(data['redirect'], reverse('teachers:group_detail', args=[self.group.pk]))
+
+    def test_recent_scheduled_lesson_must_be_cancelled_not_deleted(self):
+        # Today is one of the group's scheduled weekdays (fixture) → inside the backfill window.
+        session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today))
+        self.client.force_login(self.supervisor)
+        r = self.client.post(self.url(session.pk))
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('إلغاء الحصة', r.json()['message'])
+        self.assertTrue(Session.objects.filter(pk=session.pk).exists())
+
+    def test_recent_unscheduled_lesson_can_be_deleted(self):
+        # Yesterday is not a scheduled weekday (fixture schedules today's weekday only).
+        session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today - timedelta(days=1)))
+        self.client.force_login(self.supervisor)
+        self.assertEqual(self.client.post(self.url(session.pk)).status_code, 200)
+        self.assertFalse(Session.objects.filter(pk=session.pk).exists())
+
+    def test_delete_in_closed_cycle_renumbers_without_touching_payments(self):
+        closed = GroupCycle.objects.create(group=self.group, index=1, sessions_planned=4,
+                                           started_on=self.today - timedelta(days=40),
+                                           closed_on=self.today - timedelta(days=20))
+        a = Session.objects.create(group=self.group, session_date=self.today - timedelta(days=30), cycle=closed, sequence_in_cycle=1)
+        b = Session.objects.create(group=self.group, session_date=self.today - timedelta(days=25), cycle=closed, sequence_in_cycle=2)
+        Attendance.objects.create(student=self.student, session=a, status='present', supervisor=self.supervisor)
+        self.client.force_login(self.supervisor)
+        self.assertEqual(self.client.post(self.url(a.pk)).status_code, 200)
+        b.refresh_from_db()
+        self.assertEqual(b.sequence_in_cycle, 1)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_permissions_and_missing(self):
+        session = self._old_session()
+        self.assertEqual(self.client.post(self.url(session.pk)).status_code, 401)
+        self.client.force_login(self.teacher_user)
+        self.assertEqual(self.client.post(self.url(session.pk)).status_code, 403)
+        self.client.force_login(self.supervisor)
+        self.assertEqual(self.client.get(self.url(session.pk)).status_code, 405)
+        self.assertEqual(self.client.post(self.url(999999)).status_code, 404)
+
+    def test_session_page_shows_cancel_and_delete_to_desk_only(self):
+        session = self._old_session()
+        self.client.force_login(self.supervisor)
+        html = self.client.get(reverse('attendance:session_detail', args=[session.pk])).content.decode()
+        self.assertIn('id="cancel-session-btn"', html)
+        self.assertIn('id="delete-session-btn"', html)
+        self.client.force_login(self.teacher_user)
+        html = self.client.get(reverse('attendance:session_detail', args=[session.pk])).content.decode()
+        self.assertNotIn('delete-session-btn', html)
+        self.assertNotIn('cancel-session-btn', html)

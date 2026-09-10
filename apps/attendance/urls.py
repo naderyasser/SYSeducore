@@ -32,6 +32,7 @@ urlpatterns = [
 
     # إلغاء الحصة
     path('api/cancel-session/<int:session_id>/', views.cancel_session, name='cancel_session'),
+    path('api/delete-session/<int:session_id>/', views.delete_session, name='delete_session'),
 
     # Scanner Quick Actions
     path('api/scanner-pay-now/', views.scanner_pay_now, name='scanner_pay_now'),
