@@ -8,6 +8,10 @@ from .models import (
 )
 from .pricing import base_fee as _fee_for, base_fee
 
+#: Reason stamped on a line excluded because its payment left the period —
+#: how a refresh tells its own exclusions from the desk's.
+AUTO_EXCLUDED_REASON = 'لم يعد له دفعة في هذه الفترة'
+
 
 class SettlementService:
 
@@ -251,6 +255,12 @@ class SettlementService:
                 line = TeacherSettlementLine(
                     settlement=settlement, group_id=group_id, student_id=student_id,
                 )
+            elif line.is_excluded and line.override_reason == AUTO_EXCLUDED_REASON:
+                # Excluded by an earlier refresh because its payment had gone;
+                # the payment is back, so is the line. An exclusion the desk
+                # made by hand carries its own reason and is left alone.
+                line.is_excluded = False
+                line.override_reason = ''
 
             # The most recent payment represents the line (its cycle is the one
             # shown); the money and the sessions are the sum over the period.
@@ -305,7 +315,7 @@ class SettlementService:
             if key not in seen_keys and not line.is_excluded:
                 line.is_excluded = True
                 if not line.override_reason:
-                    line.override_reason = 'لم يعد له دفعة في هذه الفترة'
+                    line.override_reason = AUTO_EXCLUDED_REASON
                 line.apply()
                 line.save(force_locked=True)
 

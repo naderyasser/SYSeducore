@@ -18,6 +18,10 @@
     .settle-table .excluded-row { opacity: 0.5; text-decoration: line-through; }
     .group-title { background: #eef2ff; padding: 8px 14px; border-radius: 8px; font-weight: 700; margin: 16px 0 6px; }
     .system-value { color: #6b7280; font-size: 0.78rem; }
+    @keyframes savedOk { from { background: #d1fae5; } to { background: transparent; } }
+    @keyframes savedErr { from { background: #fee2e2; } to { background: transparent; } }
+    .settle-table tr.saved-ok td { animation: savedOk 1.2s ease-out; }
+    .settle-table tr.saved-err td { animation: savedErr 1.6s ease-out; }
 </style>
 {% endblock %}
 
@@ -68,6 +72,7 @@
                 <th>تواريخ الحصص</th>
                 <th>حساب النظام</th>
                 <th>مبلغ التسوية</th>
+                <th>بعد التعديل</th>
                 <th>نسبة المركز %</th>
                 <th>مستبعد</th>
                 <th>مجاني</th>
@@ -84,6 +89,7 @@
                 <td><small>{{ line.session_dates|join:", " }}</small></td>
                 <td class="system-value">{{ line.computed_amount|egp }}</td>
                 <td class="editable"><input type="number" step="0.01" class="form-control form-control-sm f-amount" value="{{ line.amount_override|default_if_none:'' }}" placeholder="{{ line.computed_amount }}" {% if settlement.status == 'approved' %}disabled{% endif %}></td>
+                <td class="v-effective fw-bold">{{ line.effective_amount|egp }}</td>
                 <td class="editable"><input type="number" step="0.01" class="form-control form-control-sm f-pct" value="{{ line.percentage_override|default_if_none:'' }}" placeholder="{{ line.group_center_percentage }}" {% if settlement.status == 'approved' %}disabled{% endif %}></td>
                 <td><input type="checkbox" class="form-check-input f-excluded" {% if line.is_excluded %}checked{% endif %} {% if settlement.status == 'approved' %}disabled{% endif %}></td>
                 <td><input type="checkbox" class="form-check-input f-free" {% if line.is_free %}checked{% endif %} {% if settlement.status == 'approved' %}disabled{% endif %}></td>
@@ -119,6 +125,20 @@ function updateTiles(totals) {
     document.getElementById('tileTeacher').textContent = formatEgp(totals.teacher_share);
 }
 
+// Saves still in flight. "إعادة الحساب" / "اعتماد" reload the page, and a
+// reload started while the blur-save of the value just typed was still
+// running aborted it — the number snapped back as if it had never been saved.
+const pendingSaves = new Set();
+function afterPendingSaves() {
+    return Promise.allSettled([...pendingSaves]);
+}
+
+function flashRow(row, ok) {
+    row.classList.remove('saved-ok', 'saved-err');
+    void row.offsetWidth;
+    row.classList.add(ok ? 'saved-ok' : 'saved-err');
+}
+
 function saveLine(row) {
     const lineId = row.dataset.lineId;
     const body = new URLSearchParams({
@@ -128,32 +148,45 @@ function saveLine(row) {
         is_free: row.querySelector('.f-free').checked ? '1' : '0',
         override_reason: row.querySelector('.f-reason').value,
     });
-    fetch(`/api/payments/settlements/lines/${lineId}/`, {
+    // The body MUST go out form-encoded: sent as a bare string, fetch labels
+    // it text/plain, Django leaves request.POST empty, and the view "saved"
+    // the line unchanged — every edit on this sheet was silently dropped.
+    const req = fetch(`/api/payments/settlements/lines/${lineId}/`, {
         method: 'POST',
-        headers: { 'X-CSRFToken': csrfToken },
+        headers: {
+            'X-CSRFToken': csrfToken,
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        },
         body: body.toString(),
     })
     .then(r => r.json())
     .then(data => {
-        if (!data.success) { alert(data.message || 'فشل الحفظ'); return; }
+        if (!data.success) { flashRow(row, false); alert(data.message || 'فشل الحفظ'); return; }
+        flashRow(row, true);
+        row.querySelector('.v-effective').textContent = formatEgp(data.line.effective_amount);
         row.querySelector('.v-center').textContent = formatEgp(data.line.line_center_share);
         row.querySelector('.v-teacher').textContent = formatEgp(data.line.line_teacher_share);
         row.classList.toggle('excluded-row', data.line.is_excluded);
         updateTiles(data.totals);
     })
-    .catch(() => alert('فشل الاتصال بالخادم'));
+    .catch(() => { flashRow(row, false); alert('فشل الاتصال بالخادم'); })
+    .finally(() => pendingSaves.delete(req));
+    pendingSaves.add(req);
+    return req;
 }
 
 if (!isApproved) {
     document.querySelectorAll('#settlementRoot tbody tr').forEach(row => {
         row.querySelectorAll('input').forEach(input => {
-            const evt = input.type === 'checkbox' ? 'change' : 'blur';
-            input.addEventListener(evt, () => saveLine(row));
+            // 'change', not 'blur': it fires on Enter as well as on leaving
+            // the field, and not at all when nothing was changed.
+            input.addEventListener('change', () => saveLine(row));
         });
     });
 }
 
-document.getElementById('btnRefresh').addEventListener('click', () => {
+document.getElementById('btnRefresh').addEventListener('click', async () => {
+    await afterPendingSaves();
     fetch(`/api/payments/settlements/${settlementId}/refresh/`, {
         method: 'POST', headers: { 'X-CSRFToken': csrfToken },
     })
@@ -164,8 +197,9 @@ document.getElementById('btnRefresh').addEventListener('click', () => {
 
 const btnApprove = document.getElementById('btnApprove');
 if (btnApprove) {
-    btnApprove.addEventListener('click', () => {
+    btnApprove.addEventListener('click', async () => {
         if (!confirm('اعتماد هذا الكشف؟ لن يمكن تعديله بعدها إلا بإعادة الفتح.')) return;
+        await afterPendingSaves();
         fetch(`/api/payments/settlements/${settlementId}/approve/`, {
             method: 'POST', headers: { 'X-CSRFToken': csrfToken },
         })
