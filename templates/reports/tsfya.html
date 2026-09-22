@@ -44,76 +44,77 @@
         </div>
     </div>
 
-    <!-- Summary Cards -->
+    {% with m=report_month|date:'Y-m' %}
+    <!-- Summary Cards — each opens the students behind it -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
-            <div class="card bg-primary bg-opacity-10 border-primary h-100">
+            <a href="?month={{ m }}#records" class="drill-card card bg-primary bg-opacity-10 border-primary h-100">
                 <div class="card-body text-center">
                     <h2 class="fw-bold text-primary">{{ total_students }}</h2>
                     <small class="text-muted">إجمالي الطلاب</small>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-3">
-            <div class="card bg-success bg-opacity-10 border-success h-100">
+            <a href="?month={{ m }}&status=paid#records" class="drill-card card bg-success bg-opacity-10 border-success h-100">
                 <div class="card-body text-center">
                     <h2 class="fw-bold text-success">{{ paid_count }}</h2>
                     <small class="text-muted">مدفوع</small>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-3">
-            <div class="card bg-warning bg-opacity-10 border-warning h-100">
+            <a href="?month={{ m }}&status=partial#records" class="drill-card card bg-warning bg-opacity-10 border-warning h-100">
                 <div class="card-body text-center">
                     <h2 class="fw-bold text-warning">{{ partial_count }}</h2>
                     <small class="text-muted">مدفوع جزئياً</small>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-3">
-            <div class="card bg-danger bg-opacity-10 border-danger h-100">
+            <a href="?month={{ m }}&status=unpaid#records" class="drill-card card bg-danger bg-opacity-10 border-danger h-100">
                 <div class="card-body text-center">
                     <h2 class="fw-bold text-danger">{{ unpaid_count }}</h2>
                     <small class="text-muted">غير مدفوع</small>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 
     <!-- Financial Totals Row -->
     <div class="row g-3 mb-4">
         <div class="col-md-4">
-            <div class="card shadow-sm">
+            <a href="?month={{ m }}#records" class="drill-card card shadow-sm">
                 <div class="card-body text-center">
                     <h4 class="text-primary fw-bold">{{ total_due|egp }}</h4>
                     <small class="text-muted">إجمالي المستحق</small>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm">
+            <a href="?month={{ m }}&status=collected#records" class="drill-card card shadow-sm">
                 <div class="card-body text-center">
                     <h4 class="text-success fw-bold">{{ total_paid|egp }}</h4>
                     <small class="text-muted">إجمالي المدفوع</small>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4">
-            <div class="card shadow-sm">
+            <a href="?month={{ m }}&status=owing#records" class="drill-card card shadow-sm">
                 <div class="card-body text-center">
                     <h4 class="text-danger fw-bold">{{ total_remaining|egp }}</h4>
                     <small class="text-muted">المتبقي</small>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 
     <!-- Collection Rate -->
     <div class="row mb-4">
         <div class="col-md-6">
-            <div class="card shadow-sm">
+            <a href="?month={{ m }}&status=split#records" class="drill-card card shadow-sm" title="اضغط لعرض مين دفع ومين ما دفعش">
                 <div class="card-body">
-                    <h6 class="card-title mb-3">نسبة التحصيل</h6>
+                    <h6 class="card-title mb-3">نسبة التحصيل <small class="text-muted">— اضغط لعرض مين دفع ومين ما دفعش</small></h6>
                     <div class="progress" style="height: 28px;">
                         <div class="progress-bar bg-success fw-bold {% if collection_rate < 30 %}bg-danger{% elif collection_rate < 70 %}bg-warning{% endif %}"
                              style="width: {% if collection_rate > 100 %}100{% else %}{{ collection_rate|floatformat:0 }}{% endif %}%">
@@ -121,7 +122,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 
@@ -152,25 +153,25 @@
                             <tbody>
                                 {% for g in group_breakdown %}
                                 <tr>
-                                    <td class="fw-semibold">{{ g.group_name }}</td>
+                                    <td class="fw-semibold"><a class="drill-link" href="?month={{ m }}&group={{ g.group_id }}#records">{{ g.group_name }}</a></td>
                                     <td class="text-muted">{{ g.teacher_name }}</td>
-                                    <td class="text-center">{{ g.total_students }}</td>
-                                    <td class="text-center"><span class="badge bg-success">{{ g.paid }}</span></td>
-                                    <td class="text-center"><span class="badge bg-warning text-dark">{{ g.partial }}</span></td>
-                                    <td class="text-center"><span class="badge bg-danger">{{ g.unpaid }}</span></td>
-                                    <td class="text-end">{{ g.due|egp }}</td>
-                                    <td class="text-end">{{ g.paid_amount|egp }}</td>
+                                    <td class="text-center"><a class="drill-link" href="?month={{ m }}&group={{ g.group_id }}#records">{{ g.total_students }}</a></td>
+                                    <td class="text-center"><a href="?month={{ m }}&group={{ g.group_id }}&status=paid#records" class="badge bg-success text-decoration-none">{{ g.paid }}</a></td>
+                                    <td class="text-center"><a href="?month={{ m }}&group={{ g.group_id }}&status=partial#records" class="badge bg-warning text-dark text-decoration-none">{{ g.partial }}</a></td>
+                                    <td class="text-center"><a href="?month={{ m }}&group={{ g.group_id }}&status=unpaid#records" class="badge bg-danger text-decoration-none">{{ g.unpaid }}</a></td>
+                                    <td class="text-end"><a class="drill-link" href="?month={{ m }}&group={{ g.group_id }}#records">{{ g.due|egp }}</a></td>
+                                    <td class="text-end"><a class="drill-link" href="?month={{ m }}&group={{ g.group_id }}&status=collected#records">{{ g.paid_amount|egp }}</a></td>
                                     <td class="text-end fw-bold {% if g.remaining > 0 %}text-danger{% else %}text-success{% endif %}">
-                                        {{ g.remaining|egp }}
+                                        <a class="drill-link" href="?month={{ m }}&group={{ g.group_id }}&status=owing#records">{{ g.remaining|egp }}</a>
                                     </td>
                                     <td>
-                                        <div class="d-flex align-items-center gap-2">
+                                        <a class="d-flex align-items-center gap-2 text-decoration-none" href="?month={{ m }}&group={{ g.group_id }}&status=split#records" title="مين دفع ومين ما دفعش">
                                             <div class="progress flex-grow-1" style="height: 6px;">
                                                 <div class="progress-bar {% if g.collection_rate >= 80 %}bg-success{% elif g.collection_rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}"
                                                      style="width: {% if g.collection_rate > 100 %}100{% else %}{{ g.collection_rate|floatformat:0 }}{% endif %}%"></div>
                                             </div>
                                             <small class="text-muted">{{ g.collection_rate|floatformat:0 }}%</small>
-                                        </div>
+                                        </a>
                                     </td>
                                 </tr>
                                 {% empty %}
@@ -187,11 +188,56 @@
     </div>
 
     <!-- Per-Student Payment List -->
-    <div class="row">
+    <div class="row" id="records">
         <div class="col-12">
+            {% if drill.status == 'split' %}
+            <div class="row g-3 mb-3">
+                <div class="col-lg-6">
+                    <div class="card shadow-sm border-success h-100">
+                        <div class="card-header bg-success bg-opacity-10 fw-bold text-success">
+                            <i class="bi bi-check-circle me-1"></i>دفعوا ({{ split_paid|length }}){% if drill.group %} — {{ drill.group.group_name }}{% endif %}
+                        </div>
+                        <ul class="list-group list-group-flush split-list">
+                            {% for p in split_paid %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><a href="{% url 'students:detail' p.student.student_id %}#payments">{{ p.student.full_name }}</a>
+                                    <small class="text-muted d-block">{{ p.group.group_name }}</small></span>
+                                <span class="text-end small">{{ p.amount_paid|egp }}{% if p.status == 'partial' %}<span class="badge bg-warning text-dark ms-1">جزئي</span>{% endif %}
+                                    {% if p.paid_on %}<small class="text-muted d-block">{{ p.paid_on|date:'Y-m-d' }}</small>{% endif %}</span>
+                            </li>
+                            {% empty %}<li class="list-group-item text-muted">لا أحد</li>{% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card shadow-sm border-danger h-100">
+                        <div class="card-header bg-danger bg-opacity-10 fw-bold text-danger">
+                            <i class="bi bi-x-circle me-1"></i>ما دفعوش ({{ split_unpaid|length }}){% if drill.group %} — {{ drill.group.group_name }}{% endif %}
+                        </div>
+                        <ul class="list-group list-group-flush split-list">
+                            {% for p in split_unpaid %}
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span><a href="{% url 'students:detail' p.student.student_id %}#payments">{{ p.student.full_name }}</a>
+                                    <small class="text-muted d-block">{{ p.group.group_name }}</small></span>
+                                <span class="text-danger small">{{ p.remaining|egp }}</span>
+                            </li>
+                            {% empty %}<li class="list-group-item text-muted">لا أحد</li>{% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
             <div class="card shadow-sm">
-                <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>سجل المدفوعات — {{ report_month|date:'F Y' }}</h5>
+                    {% if drill.active %}
+                    <div class="drill-banner">
+                        <i class="bi bi-funnel-fill"></i>
+                        {% if drill.label %}{{ drill.label }}{% endif %}{% if drill.label and drill.group %} · {% endif %}{% if drill.group %}{{ drill.group.group_name }}{% endif %}
+                        — {{ page_obj.paginator.count }} سجل
+                        <a href="?month={{ m }}#records" class="ms-2">إلغاء التصفية ✕</a>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -206,7 +252,7 @@
                                     <th class="text-end">المدفوع</th>
                                     <th class="text-end">المتبقي</th>
                                     <th class="text-center">الحصص</th>
-                                    <th>آخر تحديث</th>
+                                    <th>تاريخ الدفع</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -235,8 +281,10 @@
                                     </td>
                                     <td class="text-center">{{ p.sessions_attended }} / {{ p.sessions_total }}</td>
                                     <td class="text-muted small">
-                                        {% if p.payment_date %}
-                                            {{ p.payment_date|date:'Y-m-d H:i' }}
+                                        {% if p.paid_on %}
+                                            {{ p.paid_on|date:'Y-m-d' }}
+                                        {% elif p.payment_date %}
+                                            {{ p.payment_date|date:'Y-m-d' }}
                                         {% else %}
                                             —
                                         {% endif %}
@@ -257,7 +305,7 @@
                         <ul class="pagination justify-content-center mb-0">
                             {% if page_obj.has_previous %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&month={{ report_month|date:'Y-m' }}">السابق</a>
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}&month={{ m }}{% if drill.status %}&status={{ drill.status }}{% endif %}{% if drill.group %}&group={{ drill.group.group_id }}{% endif %}#records">السابق</a>
                             </li>
                             {% endif %}
                             <li class="page-item disabled">
@@ -265,7 +313,7 @@
                             </li>
                             {% if page_obj.has_next %}
                             <li class="page-item">
-                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&month={{ report_month|date:'Y-m' }}">التالي</a>
+                                <a class="page-link" href="?page={{ page_obj.next_page_number }}&month={{ m }}{% if drill.status %}&status={{ drill.status }}{% endif %}{% if drill.group %}&group={{ drill.group.group_id }}{% endif %}#records">التالي</a>
                             </li>
                             {% endif %}
                         </ul>
@@ -275,5 +323,6 @@
             </div>
         </div>
     </div>
+    {% endwith %}
 </div>
 {% endblock %}

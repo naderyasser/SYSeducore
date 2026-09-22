@@ -1158,8 +1158,20 @@ def monthly_financial_summary(request):
             'collection_rate': round(_rate(g_paid_amt, g_due), 1),
         })
 
+    # --- Drill-down: every figure on the page links here ---
+    # Client: "لما يشوف التحصيل 59%، عايز لما يدوس عليها تفتحله مين اللي دفعوا
+    # ومين اللي ما دفعش. كل رقم في التقرير عايزه clickable". The figures
+    # link back to this page with ``status``/``group``; the records table
+    # below is filtered to exactly the rows behind the figure clicked.
+    records_qs, drill = _drill_payments(payments_qs, request.GET)
+    if drill['status'] == 'split':
+        split_paid = list(records_qs.filter(status__in=['paid', 'partial']).order_by('group__group_name', 'student__full_name'))
+        split_unpaid = list(records_qs.filter(status='unpaid').order_by('group__group_name', 'student__full_name'))
+    else:
+        split_paid = split_unpaid = None
+
     # --- Payment records (paginated) ---
-    paginator = Paginator(payments_qs, 30)
+    paginator = Paginator(records_qs, 30)
     page_number = request.GET.get('page', 1)
     page_obj = paginator.get_page(page_number)
 
@@ -1180,10 +1192,53 @@ def monthly_financial_summary(request):
         'collection_rate': round(_rate(total_paid, total_due), 1),
         'group_breakdown': group_breakdown,
         'page_obj': page_obj,
+        'drill': drill,
+        'split_paid': split_paid,
+        'split_unpaid': split_unpaid,
         'monthly_data_json': json.dumps(group_breakdown, ensure_ascii=False, default=str),
     }
 
     return render(request, 'reports/tsfya.html', context)
+
+
+#: What each drill-down ``status`` means, and how the records table says it.
+DRILL_STATUSES = {
+    'paid': ('مدفوع بالكامل', Q(status='paid')),
+    'partial': ('مدفوع جزئياً', Q(status='partial')),
+    'unpaid': ('غير مدفوع', Q(status='unpaid')),
+    'owing': ('عليهم مبالغ متبقية', Q(status__in=['unpaid', 'partial'])),
+    'collected': ('دفعوا (كامل أو جزئي)', Q(amount_paid__gt=0)),
+    'split': ('مين دفع ومين ما دفعش', Q()),
+}
+
+
+def _drill_payments(payments_qs, params):
+    """
+    Narrow a report's payments to the rows behind one clicked figure.
+
+    ``status`` is a key of :data:`DRILL_STATUSES`; ``group`` a group id.
+    Returns ``(queryset, drill)`` where ``drill`` describes the active filter
+    for the page (label, group, and whether any filter is on).
+    """
+    status = params.get('status') or ''
+    if status not in DRILL_STATUSES:
+        status = ''
+    group = None
+    group_id = params.get('group')
+    if group_id and str(group_id).isdigit():
+        group = Group.all_objects.filter(pk=int(group_id)).select_related('teacher').first()
+
+    qs = payments_qs
+    if status:
+        qs = qs.filter(DRILL_STATUSES[status][1])
+    if group is not None:
+        qs = qs.filter(group=group)
+    return qs, {
+        'status': status,
+        'label': DRILL_STATUSES[status][0] if status else '',
+        'group': group,
+        'active': bool(status or group),
+    }
 
 
 # ==================== Comprehensive (cumulative) report ====================
@@ -1362,8 +1417,69 @@ def comprehensive_report(request):
         ])
         return response
 
+    # ── Drill-down: the rows behind any figure ──
+    # Client: "عايز يدوس على اي رقم (المستحق، المحصل، المتبقي، حضور، غياب)
+    # ويعرف التفاصيل: مين دفع، مين حضر، مين غاب، المجموعة فيها مين".
+    from urllib.parse import urlencode as _urlencode
+    range_params = {'date_from': date_from.isoformat(), 'date_to': date_to.isoformat()}
+    if teacher_id is not None:
+        range_params['teacher'] = teacher_id
+    base_params = dict(range_params)
+    if group_id is not None:
+        base_params['group'] = group_id
+    detail_kind = request.GET.get('detail') or ''
+    detail_title, detail_page, detail_type = '', None, ''
+    payment_kinds = {
+        'due': ('كل المستحقات', Q()),
+        'paid': ('مين دفع', Q(amount_paid__gt=0)),
+        'remaining': ('مين عليه متبقي', Q(status__in=['unpaid', 'partial'])),
+        'unpaid': ('مين ما دفعش خالص', Q(status='unpaid')),
+    }
+    attendance_kinds = {
+        'attended': ('مين حضر', Q(status__in=['present', 'late'])),
+        'present': ('حضور في الميعاد', Q(status='present')),
+        'late': ('مين اتأخر', Q(status='late')),
+        'absent': ('مين غاب', Q(status='absent')),
+    }
+    if detail_kind in payment_kinds:
+        detail_title, cond = payment_kinds[detail_kind]
+        detail_type = 'payments'
+        rows = payments.filter(cond).select_related('cycle').order_by('group__group_name', 'student__full_name')
+        detail_page = Paginator(rows, 50).get_page(request.GET.get('dpage'))
+    elif detail_kind in attendance_kinds:
+        detail_title, cond = attendance_kinds[detail_kind]
+        detail_type = 'attendance'
+        rows = (
+            attendances.filter(cond)
+            .select_related('student', 'session', 'session__group')
+            .order_by('-session__session_date', 'session__group__group_name', 'student__full_name')
+        )
+        detail_page = Paginator(rows, 50).get_page(request.GET.get('dpage'))
+    elif detail_kind == 'members':
+        from apps.students.models import StudentGroupEnrollment
+        detail_title, detail_type = 'الطلاب المشتركين', 'members'
+        rows = StudentGroupEnrollment.objects.filter(
+            is_active=True, student__deleted_at__isnull=True,
+        ).select_related('student', 'group', 'group__teacher')
+        if group_id is not None:
+            rows = rows.filter(group__group_id=group_id)
+        if teacher_id is not None:
+            rows = rows.filter(group__teacher__teacher_id=teacher_id)
+        rows = rows.order_by('group__group_name', 'student__full_name')
+        detail_page = Paginator(rows, 50).get_page(request.GET.get('dpage'))
+    else:
+        detail_kind = ''
+
     context = {
         'page_title': 'التقرير الشامل',
+        'range_qs': _urlencode(range_params),
+        'base_qs': _urlencode(base_params),
+        'detail_kind': detail_kind,
+        'detail_title': detail_title,
+        'detail_type': detail_type,
+        'detail_page': detail_page,
+        'selected_group_obj': groups_by_id.get(group_id) if group_id is not None else None,
+        'att_attended': attended,
         'date_from': date_from,
         'date_to': date_to,
         'default_from': default_from,

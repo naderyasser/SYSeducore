@@ -108,33 +108,37 @@
 </div>
 
 <div class="kpi-grid">
-    <div class="kpi due">
+    <a href="?{{ base_qs }}&detail=due#details" class="kpi due drill-card">
         <div class="label">إجمالي المستحق</div>
         <div class="value">{{ total_due|floatformat:0 }}</div>
         <div class="unit">ج.م</div>
-    </div>
-    <div class="kpi paid">
+    </a>
+    <a href="?{{ base_qs }}&detail=paid#details" class="kpi paid drill-card">
         <div class="label">إجمالي المحصل</div>
         <div class="value">{{ total_paid|floatformat:0 }}</div>
         <div class="unit">ج.م</div>
-    </div>
-    <div class="kpi remaining">
+    </a>
+    <a href="?{{ base_qs }}&detail=remaining#details" class="kpi remaining drill-card">
         <div class="label">المتبقي</div>
         <div class="value">{{ total_remaining|floatformat:0 }}</div>
         <div class="unit">ج.م</div>
-    </div>
-    <div class="kpi rate">
+    </a>
+    <a href="?{{ base_qs }}&detail=unpaid#details" class="kpi rate drill-card" title="مين ما دفعش">
         <div class="label">نسبة التحصيل</div>
         <div class="value">{{ collection_rate }}%</div>
-    </div>
-    <div class="kpi">
+    </a>
+    <a href="?{{ base_qs }}&detail=members#details" class="kpi drill-card">
         <div class="label">عدد الطلاب</div>
         <div class="value">{{ total_students }}</div>
-    </div>
+    </a>
     <div class="kpi">
         <div class="label">نسبة الحضور</div>
-        <div class="value">{{ attendance_rate }}%</div>
-        <div class="unit">{{ att_present }} حاضر / {{ att_late }} متأخر / {{ att_absent }} غائب</div>
+        <div class="value"><a class="drill-link" href="?{{ base_qs }}&detail=attended#details">{{ attendance_rate }}%</a></div>
+        <div class="unit">
+            <a class="drill-link" href="?{{ base_qs }}&detail=present#details">{{ att_present }} حاضر</a> /
+            <a class="drill-link" href="?{{ base_qs }}&detail=late#details">{{ att_late }} متأخر</a> /
+            <a class="drill-link" href="?{{ base_qs }}&detail=absent#details">{{ att_absent }} غائب</a>
+        </div>
     </div>
 </div>
 
@@ -158,17 +162,17 @@
             {% for row in breakdown %}
             <tr>
                 <td class="name">
-                    {{ row.group_name }}
+                    <a class="drill-link" href="{% url 'teachers:group_detail' row.group_id %}">{{ row.group_name }}</a>
                     {% if not row.is_active %}<span class="closed-badge">(مغلقة)</span>{% endif %}
                 </td>
                 <td class="name">{{ row.teacher_name }}</td>
-                <td>{{ row.students }}</td>
-                <td>{{ row.due|floatformat:0 }}</td>
-                <td>{{ row.paid|floatformat:0 }}</td>
-                <td>{{ row.remaining|floatformat:0 }}</td>
-                <td>{{ row.collection_rate }}%</td>
-                <td>{{ row.present }}</td>
-                <td>{{ row.absent }}</td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=members#details">{{ row.students }}</a></td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=due#details">{{ row.due|floatformat:0 }}</a></td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=paid#details">{{ row.paid|floatformat:0 }}</a></td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=remaining#details">{{ row.remaining|floatformat:0 }}</a></td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=unpaid#details">{{ row.collection_rate }}%</a></td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=attended#details">{{ row.present }}</a></td>
+                <td><a class="drill-link" href="?{{ range_qs }}&group={{ row.group_id }}&detail=absent#details">{{ row.absent }}</a></td>
                 <td>{{ row.attendance_rate }}%</td>
             </tr>
             {% empty %}
@@ -185,7 +189,7 @@
                 <td>{{ total_paid|floatformat:0 }}</td>
                 <td>{{ total_remaining|floatformat:0 }}</td>
                 <td>{{ collection_rate }}%</td>
-                <td>{{ att_present }}</td>
+                <td>{{ att_attended }}</td>
                 <td>{{ att_absent }}</td>
                 <td>{{ attendance_rate }}%</td>
             </tr>
@@ -193,4 +197,70 @@
         {% endif %}
     </table>
 </div>
+
+{% if detail_kind %}
+<div class="table-card mt-4" id="details">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 border-bottom">
+        <h5 class="mb-0"><i class="bi bi-list-ul me-2"></i>{{ detail_title }}
+            {% if selected_group_obj %}— {{ selected_group_obj.group_name }}{% endif %}
+            <small class="text-muted">({{ detail_page.paginator.count }})</small></h5>
+        <a href="?{{ base_qs }}" class="btn btn-sm btn-outline-secondary">إغلاق التفاصيل ✕</a>
+    </div>
+    <div class="table-responsive">
+    <table class="comp">
+        {% if detail_type == 'payments' %}
+        <thead><tr><th class="name">الطالب</th><th class="name">المجموعة</th><th>الدورة / الشهر</th><th>المستحق</th><th>المدفوع</th><th>المتبقي</th><th>الحالة</th><th>تاريخ الدفع</th></tr></thead>
+        <tbody>
+            {% for p in detail_page %}
+            <tr>
+                <td class="name"><a href="{% url 'students:detail' p.student.student_id %}#payments">{{ p.student.full_name }}</a></td>
+                <td class="name">{{ p.group.group_name }}</td>
+                <td>{% if p.cycle %}دورة {{ p.cycle.index }}{% else %}{{ p.month|date:"Y-m" }}{% endif %}</td>
+                <td>{{ p.amount_due|floatformat:0 }}</td>
+                <td>{{ p.amount_paid|floatformat:0 }}</td>
+                <td>{{ p.remaining|floatformat:0 }}</td>
+                <td>{% if p.status == 'paid' %}<span class="badge bg-success">مدفوع</span>{% elif p.status == 'partial' %}<span class="badge bg-warning text-dark">جزئي</span>{% else %}<span class="badge bg-danger">غير مدفوع</span>{% endif %}</td>
+                <td>{% if p.paid_on %}{{ p.paid_on|date:"Y-m-d" }}{% else %}—{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="8" class="text-muted py-4">لا توجد سجلات</td></tr>{% endfor %}
+        </tbody>
+        {% elif detail_type == 'attendance' %}
+        <thead><tr><th>التاريخ</th><th class="name">الطالب</th><th class="name">المجموعة</th><th>الحالة</th></tr></thead>
+        <tbody>
+            {% for a in detail_page %}
+            <tr>
+                <td>{{ a.session.session_date|date:"Y-m-d" }}</td>
+                <td class="name"><a href="{% url 'students:detail' a.student.student_id %}">{{ a.student.full_name }}</a></td>
+                <td class="name">{{ a.session.group.group_name }}</td>
+                <td>{% if a.status == 'present' %}<span class="badge bg-success">حاضر</span>{% elif a.status == 'late' %}<span class="badge bg-warning text-dark">متأخر</span>{% elif a.status == 'absent' %}<span class="badge bg-danger">غائب</span>{% else %}<span class="badge bg-info">عذر</span>{% endif %}</td>
+            </tr>
+            {% empty %}<tr><td colspan="4" class="text-muted py-4">لا توجد سجلات</td></tr>{% endfor %}
+        </tbody>
+        {% else %}
+        <thead><tr><th class="name">الطالب</th><th>الكود</th><th class="name">المجموعة</th><th class="name">المدرس</th><th>تاريخ الاشتراك</th></tr></thead>
+        <tbody>
+            {% for e in detail_page %}
+            <tr>
+                <td class="name"><a href="{% url 'students:detail' e.student.student_id %}">{{ e.student.full_name }}</a></td>
+                <td>{{ e.student.student_code }}</td>
+                <td class="name">{{ e.group.group_name }}</td>
+                <td class="name">{{ e.group.teacher.full_name|default:"—" }}</td>
+                <td>{{ e.enrolled_at|date:"Y-m-d" }}</td>
+            </tr>
+            {% empty %}<tr><td colspan="5" class="text-muted py-4">لا يوجد طلاب</td></tr>{% endfor %}
+        </tbody>
+        {% endif %}
+    </table>
+    </div>
+    {% if detail_page.has_other_pages %}
+    <nav class="p-3">
+        <ul class="pagination justify-content-center mb-0">
+            {% if detail_page.has_previous %}<li class="page-item"><a class="page-link" href="?{{ base_qs }}&detail={{ detail_kind }}&dpage={{ detail_page.previous_page_number }}#details">السابق</a></li>{% endif %}
+            <li class="page-item disabled"><span class="page-link">صفحة {{ detail_page.number }} من {{ detail_page.paginator.num_pages }}</span></li>
+            {% if detail_page.has_next %}<li class="page-item"><a class="page-link" href="?{{ base_qs }}&detail={{ detail_kind }}&dpage={{ detail_page.next_page_number }}#details">التالي</a></li>{% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

@@ -131,3 +131,52 @@ class RoomSlotTests(AttendanceTestMixin, TestCase):
                               'start_time': '10:00', 'duration': '60'})
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(self.group.schedules.count(), 2)
+
+
+class ReportDrillDownTests(AttendanceTestMixin, TestCase):
+    """"كل رقم في التقرير عايزه clickable" — التصفية الشهرية والتقرير الشامل."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+        from apps.payments.models import Payment
+        from apps.students.models import Student, StudentGroupEnrollment
+        get_user_model().objects.create_user(username='boss', password='pw12345!', role='admin')
+        self.client.login(username='boss', password='pw12345!')
+        self.month = timezone.localdate().replace(day=1)
+        self.other = Student.objects.create(student_code='ATT002', full_name='طالب مديون',
+                                            parent_phone='01099999999')
+        StudentGroupEnrollment.objects.create(student=self.other, group=self.group, is_active=True)
+        Payment.objects.create(student=self.student, group=self.group, month=self.month,
+                               amount_due=Decimal('200'), amount_paid=Decimal('200'), status='paid')
+        Payment.objects.create(student=self.other, group=self.group, month=self.month,
+                               amount_due=Decimal('200'), amount_paid=Decimal('0'), status='unpaid')
+
+    def _tsfya(self, **params):
+        return self.client.get(reverse('reports:tsfya'), {'month': self.month.strftime('%Y-%m'), **params})
+
+    def test_every_tile_links_to_its_rows(self):
+        body = self._tsfya().content.decode()
+        for status in ('paid', 'partial', 'unpaid', 'collected', 'owing', 'split'):
+            self.assertIn(f'status={status}#records', body, status)
+
+    def test_unpaid_drill_lists_only_the_unpaid(self):
+        r = self._tsfya(status='unpaid')
+        records = [p.student.full_name for p in r.context['page_obj']]
+        self.assertEqual(records, ['طالب مديون'])
+        self.assertContains(r, 'إلغاء التصفية')
+
+    def test_collection_rate_opens_who_paid_and_who_did_not(self):
+        r = self._tsfya(status='split', group=str(self.group.pk))
+        self.assertEqual([p.student.full_name for p in r.context['split_paid']], ['طالب حضور'])
+        self.assertEqual([p.student.full_name for p in r.context['split_unpaid']], ['طالب مديون'])
+
+    def test_comprehensive_detail_absent_and_members(self):
+        self._attend(day_offset=0, status='absent')
+        url = reverse('reports:comprehensive')
+        r = self.client.get(url, {'detail': 'absent'})
+        self.assertEqual([a.student.full_name for a in r.context['detail_page']], ['طالب حضور'])
+        r = self.client.get(url, {'detail': 'members', 'group': self.group.pk})
+        self.assertEqual(r.context['detail_page'].paginator.count, 2)
+        r = self.client.get(url, {'detail': 'unpaid'})
+        self.assertEqual([p.student.full_name for p in r.context['detail_page']], ['طالب مديون'])
