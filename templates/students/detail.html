@@ -549,13 +549,14 @@
                     <table class="attendance-table payments-table">
                         <thead>
                             <tr>
-                                <th>الشهر / الدورة</th>
+                                <th>الدورة</th>
                                 <th>المجموعة</th>
                                 <th>المطلوب</th>
                                 <th>المدفوع</th>
                                 <th>المتبقي</th>
                                 <th>الحالة</th>
-                                <th>التواريخ</th>
+                                <th>تاريخ الدفع</th>
+                                <th>الحركات</th>
                                 <th>الإيصال</th>
                             </tr>
                         </thead>
@@ -563,7 +564,14 @@
                             {% for payment in payments %}
                             <tr>
                                 <td class="table-num">
-                                    {% if payment.cycle %}دورة {{ payment.cycle.index }}{% else %}{{ payment.month|date:"Y-m" }}{% endif %}
+                                    {% if payment.cycle %}
+                                        <strong>دورة {{ payment.cycle.index }}</strong>
+                                        <small class="d-block text-muted text-nowrap">
+                                            {% if payment.cycle.started_on %}{{ payment.cycle.started_on|date:"Y-m-d" }} ←
+                                            {% if payment.cycle.closed_on %}{{ payment.cycle.closed_on|date:"Y-m-d" }}{% else %}جارية{% endif %}{% else %}لم تبدأ{% endif %}
+                                        </small>
+                                        <small class="d-block text-muted">{{ payment.sessions_attended }}/{{ payment.sessions_total }} حصة</small>
+                                    {% else %}{{ payment.month|date:"Y-m" }}{% endif %}
                                 </td>
                                 <td>{{ payment.group.group_name }}</td>
                                 <td class="table-num">{{ payment.amount_due|egp }}</td>
@@ -580,6 +588,15 @@
                                     <span class="badge bg-warning">جزئي</span>
                                     {% else %}
                                     <span class="badge bg-danger">غير مدفوع</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    {% if payment.paid_on %}
+                                    <strong class="text-success"><i class="bi bi-calendar-check me-1"></i>{{ payment.paid_on|date:"Y-m-d" }}</strong>
+                                    {% elif payment.amount_paid > 0 %}
+                                    <strong>{{ payment.payment_date|date:"Y-m-d" }}</strong>
+                                    {% else %}
+                                    <span class="text-muted">لم يدفع</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -604,7 +621,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="8" class="text-center py-4 text-muted">
+                                <td colspan="9" class="text-center py-4 text-muted">
                                     <i class="bi bi-wallet2" style="font-size: 2rem;"></i>
                                     <p class="mt-2 mb-0">لا توجد مدفوعات مسجلة لهذا الطالب</p>
                                 </td>

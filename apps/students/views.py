@@ -109,19 +109,23 @@ def student_list(request):
     paginator = Paginator(students, STUDENTS_PER_PAGE)
     page_obj = paginator.get_page(request.GET.get('page'))
 
-    # Add payment status for current month (use localtime to match scanner) —
-    # only for the students actually on this page.
+    # "مدفوع" means paid for what the student is attending *now*: the open
+    # cycle of each of their groups (8 lessons, not a calendar month), or the
+    # current month for a group billed by month. Checking ``month=`` alone
+    # showed a student who paid on the 28th as unpaid three days later.
     current_month = timezone.localdate().replace(day=1)
     page_student_ids = [s.student_id for s in page_obj.object_list]
-    paid_student_ids = set(
-        Payment.objects.filter(
-            student_id__in=page_student_ids,
-            month=current_month,
-            status='paid'
-        ).values_list('student_id', flat=True)
-    )
+    statuses = {}
+    for student_id, status in Payment.objects.filter(
+        student_id__in=page_student_ids,
+    ).filter(
+        Q(cycle__isnull=False, cycle__closed_on__isnull=True)
+        | Q(cycle__isnull=True, month=current_month)
+    ).values_list('student_id', 'status'):
+        statuses.setdefault(student_id, []).append(status)
     for student in page_obj.object_list:
-        student.has_paid_current_month = student.student_id in paid_student_ids
+        own = statuses.get(student.student_id, [])
+        student.has_paid_current_month = bool(own) and all(st == 'paid' for st in own)
 
     # Querystring without 'page' so pagination links keep the active filters
     querydict = request.GET.copy()

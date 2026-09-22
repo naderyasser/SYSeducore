@@ -215,7 +215,7 @@ class GroupForm(forms.ModelForm):
         """
         sessions = self.cleaned_data.get('sessions_per_month')
         if sessions is not None and sessions < 1:
-            raise forms.ValidationError('عدد الحصص في الشهر يجب أن يكون 1 على الأقل')
+            raise forms.ValidationError('عدد حصص الدورة يجب أن يكون 1 على الأقل')
         if sessions is not None and sessions > MAX_SESSIONS_PER_CYCLE:
             raise forms.ValidationError(
                 f'الدورة المحاسبية {MAX_SESSIONS_PER_CYCLE} حصص كحد أقصى'

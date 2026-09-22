@@ -1632,11 +1632,11 @@ function renderDossier(d) {
     if (fin) {
         financialHtml = `
             <div class="dossier-section">
-                <div class="dossier-section-title">${detailLink('student', d.student_id, 'ملخص مالي', '#payments')}</div>
+                <div class="dossier-section-title">${detailLink('student', d.student_id, 'ملخص مالي (الدورة الحالية)', '#payments')}</div>
                 <div class="dossier-summary-grid">
                     <div class="dossier-sum-item"><span class="dossier-sum-value paid">${formatEgp(fin.total_paid)}</span><span class="dossier-sum-label">مدفوع</span></div>
                     <div class="dossier-sum-item"><span class="dossier-sum-value remaining">${formatEgp(fin.total_remaining)}</span><span class="dossier-sum-label">متبقي</span></div>
-                    ${fin.overdue_months > 0 ? `<div class="dossier-sum-item"><span class="dossier-sum-value overdue">${fin.overdue_months}</span><span class="dossier-sum-label">شهور متأخرة</span></div>` : ''}
+                    ${fin.overdue_months > 0 ? `<div class="dossier-sum-item"><span class="dossier-sum-value overdue">${fin.overdue_months}</span><span class="dossier-sum-label">دورات متأخرة</span></div>` : ''}
                 </div>
             </div>`;
     }
@@ -1669,11 +1669,11 @@ function renderDossier(d) {
             <div class="dossier-stats">
                 <a class="dossier-stat" href="${d.student_id ? detailUrl('studentReport', d.student_id) : '#'}" target="_blank" rel="noopener" title="تقرير الحضور">
                     <span class="dossier-stat-val">${d.attendance_month?.total ?? 0}</span>
-                    <span class="dossier-stat-lbl">حضور الشهر</span>
+                    <span class="dossier-stat-lbl">حضور آخر 30 يوم</span>
                 </a>
                 <div class="dossier-stat">
                     <span class="dossier-stat-val">${d.attendance_month?.last_month ?? '-'}</span>
-                    <span class="dossier-stat-lbl">الشهر السابق</span>
+                    <span class="dossier-stat-lbl">الـ30 يوم قبلها</span>
                 </div>
                 <div class="dossier-stat">
                     <span class="dossier-stat-val">${d.attendance_month?.rate != null ? d.attendance_month.rate + '%' : '-'}</span>

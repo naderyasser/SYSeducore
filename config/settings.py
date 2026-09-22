@@ -367,9 +367,12 @@ if crontab is not None:
             'task': 'apps.notifications.tasks.send_session_reminders_task',
             'schedule': crontab(minute='*/15'),
         },
+        # Every 10 minutes: the next cycle ("8 حصص = شهر") must open right
+        # after the 8th lesson, not up to six hours later — a session
+        # recorded in that gap landed in the finished cycle.
         'roll-group-cycles': {
             'task': 'apps.attendance.tasks.roll_group_cycles',
-            'schedule': crontab(hour='*/6'),  # Every 6 hours
+            'schedule': crontab(minute='*/10'),
         },
     }
 else:

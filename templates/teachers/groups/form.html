@@ -226,8 +226,9 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">عدد الحصص في الشهر</label>
+                            <label class="form-label">عدد حصص الدورة (الباقة)</label>
                             {{ form.sessions_per_month }}
+                            <small class="text-muted d-block">لما الطالب يخلص العدد ده تتفتح دورة جديدة تلقائياً — مش مربوطة بأول الشهر.</small>
                             {% if form.sessions_per_month.errors %}
                             <div class="text-danger small mt-1">{{ form.sessions_per_month.errors.0 }}</div>
                             {% endif %}

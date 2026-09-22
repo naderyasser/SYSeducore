@@ -55,36 +55,39 @@ def _calculate_age(dob):
 
 def _count_overdue_months(student):
     """
-    Number of distinct months (before the current one) the student still owes
-    money for.
+    How many finished billing periods the student still owes money for: a
+    *closed* cycle left unpaid, or — for a group billed by calendar month —
+    a past month. The open cycle is the current bill, not an arrear.
 
-    Counting payment *rows* made a student enrolled in three groups with one
-    unpaid month look three months overdue in the scanner dossier.
+    (Name kept for its callers; billing is by cycle of lessons now, and
+    counting calendar months made a cycle that straddled two months look
+    like two debts.)
     """
     current_month = timezone.localdate().replace(day=1)
-    return Payment.objects.filter(
-        student=student,
-        month__lt=current_month,
-        status__in=['unpaid', 'partial'],
+    unpaid = Payment.objects.filter(student=student, status__in=['unpaid', 'partial'])
+    closed_cycles = unpaid.filter(
+        cycle__isnull=False, cycle__closed_on__isnull=False,
+    ).count()
+    past_months = unpaid.filter(
+        cycle__isnull=True, month__lt=current_month,
     ).values('month').distinct().count()
+    return closed_cycles + past_months
 
 
 def _count_last_month_attendance(student):
-    """Count attendance records from last month."""
+    """Lessons attended in the 30 days before the last 30 (days 31-60 ago)
+    — the comparison figure beside "آخر 30 يوم". Absences are not attendance."""
     now = timezone.localdate()
-    first_of_current = now.replace(day=1)
-    last_month_end = first_of_current - timedelta(days=1)
-    last_month_start = last_month_end.replace(day=1)
     return Attendance.objects.filter(
         student=student,
-        session__session_date__gte=last_month_start,
-        session__session_date__lte=last_month_end,
-    ).count()
+        session__session_date__gte=now - timedelta(days=59),
+        session__session_date__lt=now - timedelta(days=29),
+    ).exclude(status='absent').count()
 
 
 def _calculate_attendance_rate(student):
     """
-    Percentage of sessions attended this month out of the sessions that
+    Percentage of sessions attended in the last 30 days out of the sessions that
     actually took place in the groups the student is enrolled in.
 
     Numerator and denominator must describe the *same* set of sessions:
@@ -92,7 +95,7 @@ def _calculate_attendance_rate(student):
     upper date bound, produced rates above 100%.
     """
     now = timezone.localdate()
-    current_month = now.replace(day=1)
+    current_month = now - timedelta(days=29)   # last 30 days, like the dossier
     enrolled_group_ids = list(
         student.group_enrollments.filter(is_active=True).values_list('group_id', flat=True)
     )
@@ -1215,13 +1218,19 @@ class AttendanceService:
                 },
             })
 
-        # إحصائيات الحضور هذا الشهر
-        month_attendances = Attendance.objects.filter(
+        # إحصائيات آخر 30 يوم — البيع بالحصص لا بالشهر، فنافذة متحركة تعني
+        # نفس الشيء في أي يوم من الشهر. الغياب لا يُعدّ "حضوراً".
+        window_start = timezone.localdate() - timedelta(days=29)
+        total_this_month = Attendance.objects.filter(
             student=student,
-            session__session_date__gte=current_month
+            session__session_date__gte=window_start,
+        ).exclude(status='absent').count()
+        last_att = (
+            Attendance.objects.filter(student=student)
+            .exclude(status='absent')
+            .select_related('session__group')
+            .order_by('-scan_time').first()
         )
-        total_this_month = month_attendances.count()
-        last_att = month_attendances.order_by('-scan_time').first()
         last_scan_iso = (
             timezone.localtime(last_att.scan_time).isoformat()
             if last_att else None

@@ -445,7 +445,7 @@
             {% else %}
             <div class="btn-pay done">
                 <i class="bi bi-check-circle-fill"></i>
-                تم التسديد في {{ payment.payment_date|date:"Y-m-d"|default:"—" }}
+                تم التسديد في {% if payment.paid_on %}{{ payment.paid_on|date:"Y-m-d" }}{% else %}{{ payment.payment_date|date:"Y-m-d"|default:"—" }}{% endif %}
             </div>
             {% endif %}
 

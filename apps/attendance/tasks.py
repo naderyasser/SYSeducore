@@ -183,7 +183,7 @@ def auto_mark_absent_sessions():
 @shared_task
 def roll_group_cycles():
     """
-    Celery task: runs every 6 hours.
+    Celery task: runs every 10 minutes.
 
     Session-based billing at the **group** level: every student enrolled in
     a group shares the same cycle and renews together (replaces the old
@@ -200,8 +200,8 @@ def roll_group_cycles():
         enrollment that doesn't already have a Payment on it (a package —
         see ``apps.payments.pricing`` — may already have pre-paid it).
 
-    A group's cycle can only close a handful of times per run (weekly
-    groups cannot complete two 4-session cycles inside 6 hours), so this
+    A group's cycle closes at most once per run (no group holds a whole
+    cycle of lessons inside 10 minutes), so this
     stays cheap without needing the old task's single-giant-query batching
     — a few queries per group, over ~dozens of groups.
     """
