@@ -116,6 +116,19 @@ class QuickSearchTests(TestCase):
         data = r.json()
         self.assertEqual(data['students']['items'][0]['label'], self.student.full_name)
 
+    def test_two_words_with_a_name_between_and_a_spelling_variant(self):
+        # "ادم وائل" must find "آدم محمد وائل": words in order but not
+        # adjacent, and ا typed for آ.
+        from apps.students.models import StudentGroupEnrollment
+        adam = Student.objects.create(student_code='STU7777', full_name='آدم محمد وائل',
+                                      parent_phone='01233334444')
+        StudentGroupEnrollment.objects.create(student=adam, group=self.group, is_active=True)
+        items = self.client.get(self.url, {'q': 'ادم وائل'}).json()['students']['items']
+        self.assertEqual([i['label'] for i in items], ['آدم محمد وائل'])
+        # Where he is enrolled, and the click opens his payment history.
+        self.assertEqual(items[0]['groups'], [self.group.group_name])
+        self.assertTrue(items[0]['url'].endswith('#payments'))
+
     def test_short_term_returns_nothing_rather_than_everything(self):
         r = self.client.get(self.url, {'q': 'م'})
         self.assertEqual(r.json(), {'q': 'م', 'groups': [], 'teachers': [], 'students': []})

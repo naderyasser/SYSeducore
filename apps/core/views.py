@@ -69,22 +69,63 @@ def _groups(term):
     ]
 
 
+#: Letters Arabic spells more than one way — "ادم" must find "آدم", and a
+#: name typed with ه must find the one saved with ة.
+_ARABIC_VARIANTS = {
+    'ا': '[اأإآ]', 'أ': '[اأإآ]', 'إ': '[اأإآ]', 'آ': '[اأإآ]',
+    'ة': '[ةه]', 'ه': '[ةه]',
+    'ي': '[يى]', 'ى': '[يى]',
+}
+
+
+def _name_pattern(word):
+    """A case-insensitive regex for ``word`` that tolerates Arabic spelling
+    variants; every other character is matched literally."""
+    import re
+    return ''.join(_ARABIC_VARIANTS.get(ch, re.escape(ch)) for ch in word)
+
+
 def _students(term):
-    rows = (
+    """
+    Students by code, phone or name. A name is matched word by word, in any
+    order and with anything between — "ادم وائل" finds "آدم محمد وائل" —
+    where the old single substring match needed the exact adjacent words.
+
+    Each result names the groups the student is in, and opens their payment
+    history: the desk searches a student to see "هو مشترك فين" and what he
+    has paid (client, 2026-09-22).
+    """
+    from apps.students.models import StudentGroupEnrollment
+
+    words = term.split()
+    name_q = Q()
+    for word in words:
+        name_q &= Q(full_name__iregex=_name_pattern(word))
+    rows = list(
         Student.objects.filter(
-            Q(full_name__icontains=term)
+            name_q
             | Q(student_code__icontains=term)
             | Q(parent_phone__icontains=term)
             | Q(student_phone__icontains=term)
         )
         .order_by('-is_active', 'full_name')[: LIMIT + 1]
     )
+    groups_by_student = {}
+    for enr in (
+        StudentGroupEnrollment.objects.filter(
+            student_id__in=[s.pk for s in rows], is_active=True,
+        )
+        .select_related('group')
+        .order_by('group__group_name')
+    ):
+        groups_by_student.setdefault(enr.student_id, []).append(enr.group.group_name)
     return [
         {
             'label': s.full_name,
             'hint': s.student_code,
+            'groups': groups_by_student.get(s.pk, []),
             'inactive': not s.is_active,
-            'url': reverse('students:detail', kwargs={'student_id': s.pk}),
+            'url': reverse('students:detail', kwargs={'student_id': s.pk}) + '#payments',
         }
         for s in rows
     ]

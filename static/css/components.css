@@ -441,6 +441,15 @@
 .quick-search-item .qs-hint  { color: #6b7280; font-size: 0.78rem; white-space: nowrap; unicode-bidi: plaintext; }
 .quick-search-item.is-inactive .qs-label { color: #9ca3af; text-decoration: line-through; }
 .quick-search-item.qs-more { color: #2563eb; font-size: 0.82rem; }
+/* A student row carries the groups they are in, on a line of its own. */
+.quick-search-item .qs-groups {
+    flex-basis: 100%;
+    order: 3;
+    color: #059669;
+    font-size: 0.76rem;
+    white-space: normal;
+}
+.quick-search-item:has(.qs-groups) { flex-wrap: wrap; row-gap: 2px; }
 
 .quick-search-item:hover,
 .quick-search-item.is-active { background: #eef2ff; color: #1e3a8a; }

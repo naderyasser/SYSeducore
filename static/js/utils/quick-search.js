@@ -54,6 +54,9 @@
                             '" href="' + esc(row.url) + '" data-index="' + i + '">' +
                             '<span class="qs-label">' + esc(row.label) + '</span>' +
                             (row.hint ? '<span class="qs-hint">' + esc(row.hint) + '</span>' : '') +
+                            (row.groups ? '<span class="qs-groups">' + (row.groups.length
+                                ? '<i class="bi bi-collection"></i> ' + row.groups.map(esc).join(' · ')
+                                : 'غير مشترك في أي مجموعة') + '</span>' : '') +
                             '</a>';
                 });
                 if (block.more && data.more_urls && data.more_urls[sec.key]) {
