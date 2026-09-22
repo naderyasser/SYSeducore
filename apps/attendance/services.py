@@ -516,6 +516,113 @@ class AttendanceService:
     MANUAL_STATUSES = ('present', 'late', 'absent', 'exception')
 
     @staticmethod
+    def upcoming_lessons(group, days=28, today=None):
+        """
+        The group's scheduled lessons from today for ``days`` days, each as
+        ``{'date', 'day_ar', 'time', 'room', 'session_id', 'cancelled',
+        'reason'}`` — what the group page lists so one lesson can be called
+        off without touching the rest of the schedule.
+
+        Future lessons have no ``Session`` row (rows are materialized on the
+        day), so the list is built from the weekly ``GroupSchedule`` and
+        matched against any rows that do exist — a lesson already cancelled
+        ahead of time is such a row.
+        """
+        from datetime import timedelta as _td
+        from apps.teachers.models import WEEK_DAYS_AR as _AR
+
+        today = today or timezone.localdate()
+        entries = {e.day_of_week: e for e in group.get_schedule_entries()}
+        if not entries:
+            return []
+        until = today + _td(days=days)
+        existing = {
+            s.session_date: s
+            for s in Session.objects.filter(
+                group=group, session_date__gte=today, session_date__lt=until,
+            )
+        }
+        names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        out = []
+        for offset in range(days):
+            day = today + _td(days=offset)
+            entry = entries.get(names[day.weekday()])
+            if entry is None:
+                continue
+            session = existing.get(day)
+            out.append({
+                'date': day,
+                'day_ar': _AR.get(entry.day_of_week, entry.day_of_week),
+                'time': entry.start_time,
+                'room': entry.room.name if getattr(entry, 'room', None) else '',
+                'session_id': session.session_id if session else None,
+                'cancelled': bool(session and session.is_cancelled),
+                'reason': session.cancellation_reason if session else '',
+            })
+        return out
+
+    @staticmethod
+    def cancel_lesson_on(group, on_date, reason=''):
+        """
+        Call off the group's lesson on ``on_date`` (today or later) — one
+        lesson, the rest of the schedule untouched.
+
+        With no ``Session`` row yet (the usual case for a future date) the row
+        is created already cancelled and outside any cycle, so it never
+        counts; on the day, the scanner and the session task find it and
+        leave it alone. Returns ``(session, error)``.
+        """
+        if on_date < timezone.localdate():
+            return None, 'لا يمكن إلغاء حصة فاتت من هنا — افتح الحصة نفسها لإلغائها'
+        names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+        if group.get_schedule_for_day(names[on_date.weekday()]) is None:
+            return None, 'لا توجد حصة لهذه المجموعة في هذا اليوم'
+        with transaction.atomic():
+            session, created = Session.objects.get_or_create(
+                group=group, session_date=on_date,
+                defaults={
+                    'teacher_attended': False,
+                    'is_cancelled': True,
+                    'cancellation_reason': reason,
+                },
+            )
+            if not created:
+                if session.is_cancelled:
+                    return session, None
+                session.is_cancelled = True
+                session.cancellation_reason = reason
+                session.save(update_fields=['is_cancelled', 'cancellation_reason'])
+                if session.cycle_id:
+                    from apps.teachers.cycles import renumber_cycle
+                    renumber_cycle(session.cycle)
+        return session, None
+
+    @staticmethod
+    def restore_lesson(session):
+        """
+        Undo :meth:`cancel_lesson_on` for a lesson that has not happened yet.
+        A row that only existed to carry the cancellation is removed; a real
+        session is un-cancelled and counted in its cycle again. Returns an
+        error message or ``None``.
+        """
+        if session.session_date < timezone.localdate():
+            return 'لا يمكن استعادة حصة فاتت'
+        if not session.is_cancelled:
+            return None
+        if session.cycle_id is None and not session.attendances.exists():
+            session.delete()
+            return None
+        session.is_cancelled = False
+        session.cancellation_reason = ''
+        session.save(update_fields=['is_cancelled', 'cancellation_reason'])
+        from apps.teachers.cycles import assign_to_cycle, renumber_cycle
+        if session.cycle_id:
+            renumber_cycle(session.cycle)
+        else:
+            assign_to_cycle(session)
+        return None
+
+    @staticmethod
     def ensure_manual_session(group, on_date):
         """
         The ``Session`` row for ``group`` on ``on_date``, creating and

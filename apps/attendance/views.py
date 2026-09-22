@@ -308,6 +308,74 @@ def cancel_session(request, session_id):
 
 @ajax_supervisor_required
 @require_http_methods(["POST"])
+def cancel_upcoming_lesson(request, group_id):
+    """
+    إلغاء حصة واحدة قادمة من صفحة المجموعة (تاريخ اليوم أو بعده) دون المساس
+    بباقي جدول المجموعة — طلب العميل: "يلغي حصة واحدة بس مش المجموعة كلها".
+    """
+    from datetime import date as _date
+    from apps.teachers.models import Group
+
+    try:
+        group = Group.objects.get(pk=group_id)
+    except Group.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'المجموعة غير موجودة'}, status=404)
+    try:
+        on_date = _date.fromisoformat(request.POST.get('date', ''))
+    except ValueError:
+        return JsonResponse({'success': False, 'message': 'تاريخ غير صالح'}, status=400)
+    reason = (request.POST.get('reason') or '').strip()[:255]
+
+    try:
+        session, error = AttendanceService.cancel_lesson_on(group, on_date, reason)
+    except ValueError as exc:   # renumbering a closed cycle
+        return JsonResponse({'success': False, 'message': str(exc)}, status=409)
+    if error:
+        return JsonResponse({'success': False, 'message': error}, status=400)
+
+    notified = 0
+    try:
+        from apps.notifications.tasks import notify_session_cancelled
+        notified, _ = notify_session_cancelled(session, reason)
+    except Exception:  # noqa: BLE001
+        logger.exception('cancellation notice failed for session %s', session.pk)
+
+    ActivityLog.log(
+        user=request.user, action='session_cancel',
+        description=(
+            f'إلغاء حصة {group.group_name} بتاريخ {on_date}'
+            + (f' — السبب: {reason}' if reason else '')
+        ),
+        target_model='Session', target_id=session.pk, request=request,
+    )
+    return JsonResponse({'success': True, 'notified': notified, 'session_id': session.pk})
+
+
+@ajax_supervisor_required
+@require_http_methods(["POST"])
+def restore_upcoming_lesson(request, session_id):
+    """التراجع عن إلغاء حصة قادمة."""
+    try:
+        session = Session.objects.select_related('group').get(pk=session_id)
+    except Session.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'الحصة غير موجودة'}, status=404)
+    label = f'{session.group.group_name} بتاريخ {session.session_date}'
+    try:
+        error = AttendanceService.restore_lesson(session)
+    except ValueError as exc:
+        return JsonResponse({'success': False, 'message': str(exc)}, status=409)
+    if error:
+        return JsonResponse({'success': False, 'message': error}, status=400)
+    ActivityLog.log(
+        user=request.user, action='group_update',
+        description=f'استعادة حصة {label} بعد إلغائها',
+        target_model='Session', target_id=session_id, request=request,
+    )
+    return JsonResponse({'success': True})
+
+
+@ajax_supervisor_required
+@require_http_methods(["POST"])
 def delete_session(request, session_id):
     """
     حذف حصة نهائيًا مع سجلات الحضور والغياب المرتبطة بها — مشرف أو مدير.

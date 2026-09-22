@@ -632,6 +632,14 @@ def group_create(request):
     return render(request, 'teachers/groups/form.html', {'form': form, 'rooms': rooms})
 
 
+
+
+def _upcoming_lessons(group, today):
+    """The next four weeks of the group's lessons, for "إلغاء حصة واحدة"."""
+    from apps.attendance.services import AttendanceService
+    return AttendanceService.upcoming_lessons(group, days=28, today=today)
+
+
 @supervisor_required
 def group_detail(request, group_id):
     """
@@ -748,6 +756,7 @@ def group_detail(request, group_id):
         # open — with no cycle there are no Payment rows to add up.
         'collected_total': collected_total if open_cycle else None,
         'outstanding_total': outstanding_total if open_cycle else None,
+        'upcoming_lessons': _upcoming_lessons(group, today),
     }
     return render(request, 'teachers/groups/detail.html', context)
 
