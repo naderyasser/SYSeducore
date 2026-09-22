@@ -7,6 +7,9 @@ services:
   db:
     image: postgres:15-alpine
     container_name: educore_db
+    # 2026-09-12: was missing, so this container did NOT come back after the
+    # hard reset and the stack sat down until it was started by hand.
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${DB_NAME:-educore}
       POSTGRES_USER: ${DB_USER:-educore}
@@ -27,6 +30,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: educore_redis
+    # 2026-09-12: was missing, so this container did NOT come back after the
+    # hard reset and the stack sat down until it was started by hand.
+    restart: unless-stopped
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -46,6 +52,9 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: educore_web
+    # 2026-09-12: was missing, so this container did NOT come back after the
+    # hard reset and the stack sat down until it was started by hand.
+    restart: unless-stopped
     command: >
       sh -c "python manage.py migrate --no-input &&
              python manage.py collectstatic --no-input &&
