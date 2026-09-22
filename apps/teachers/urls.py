@@ -16,6 +16,8 @@ urlpatterns = [
     path('rooms/create/', views.room_create, name='room_create'),
     path('rooms/<int:room_id>/', views.room_detail, name='room_detail'),
     path('rooms/<int:room_id>/edit/', views.room_update, name='room_update'),
+    path('rooms/<int:room_id>/slots/add/', views.room_slot_create, name='room_slot_create'),
+    path('rooms/slots/<int:schedule_id>/', views.room_slot_update, name='room_slot_update'),
     path('rooms/<int:room_id>/delete/', views.room_delete, name='room_delete'),
 
     # Groups

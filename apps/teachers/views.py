@@ -11,6 +11,7 @@ from django.db.models import Count, Prefetch, Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from apps.core import education
 from apps.accounts.decorators import (
@@ -23,6 +24,7 @@ from .models import (
     WEEK_DAYS,
     WEEK_DAYS_AR,
     Group,
+    GroupSchedule,
     Room,
     Subject,
     Teacher,
@@ -543,7 +545,150 @@ def room_update(request, room_id):
         messages.error(request, 'لم يتم حفظ التعديلات — يرجى تصحيح الأخطاء في النموذج')
     else:
         form = RoomForm(instance=room)
-    return render(request, 'teachers/rooms/form.html', {'form': form, 'room': room})
+    return render(request, 'teachers/rooms/form.html', {
+        'form': form,
+        'room': room,
+        # The room's timetable is edited here too: name and capacity alone
+        # were "not enough" (client, 2026-09-22).
+        'slots': (
+            GroupSchedule.objects.filter(room=room, group__deleted_at__isnull=True)
+            .select_related('group', 'group__teacher')
+            .order_by('day_of_week', 'start_time')
+        ),
+        # This room is always listed, active or not — a select missing it
+        # would silently move every slot to the first room on save.
+        'all_rooms': Room.objects.filter(Q(is_active=True) | Q(pk=room.pk)).order_by('name'),
+        'active_groups': (
+            Group.objects.filter(is_active=True).select_related('teacher').order_by('group_name')
+        ),
+        'days': GroupSchedule.DAYS_CHOICES,
+    })
+
+
+def _parse_slot_fields(data):
+    """``(day, start_time, duration)`` from a slot form, or raise ValueError."""
+    from datetime import datetime as _dt
+    day = (data.get('day') or '').strip()
+    if day not in dict(GroupSchedule.DAYS_CHOICES):
+        raise ValueError('اختر يوماً صحيحاً')
+    try:
+        start = _dt.strptime((data.get('start_time') or '').strip(), '%H:%M').time()
+    except ValueError:
+        raise ValueError('وقت البداية غير صالح')
+    try:
+        duration = int(data.get('duration') or 0)
+    except (TypeError, ValueError):
+        raise ValueError('المدة غير صالحة')
+    if not 15 <= duration <= 360:
+        raise ValueError('المدة يجب أن تكون بين 15 و 360 دقيقة')
+    return day, start, duration
+
+
+def _save_slot(slot):
+    """Validate (room overlap + one row per group per day) and save one
+    ``GroupSchedule`` row, then keep the group's legacy columns in step."""
+    slot.full_clean()
+    slot.save()
+    group = slot.group
+    group.sync_legacy_schedule_fields()
+    group.save(skip_validation=True,
+               update_fields=['schedule_day', 'schedule_time', 'duration_minutes'])
+
+
+def _slot_error(exc):
+    if isinstance(exc, ValidationError):
+        msgs = []
+        for value in getattr(exc, 'message_dict', {'': exc.messages}).values():
+            msgs.extend(value)
+        text = ' '.join(msgs)
+        if 'already exists' in text or 'موجود' in text:
+            return 'المجموعة لها موعد بالفعل في هذا اليوم — عدّل الموعد الموجود بدلاً من إضافة آخر'
+        return text or 'تعذّر الحفظ'
+    return str(exc)
+
+
+@supervisor_required
+@require_POST
+def room_slot_update(request, schedule_id):
+    """
+    تعديل موعد واحد في جدول القاعة — طلب العميل: "يحذف مدرس من قاعة في وقت
+    معين، مش يحذف المجموعة كلها"، و"تعديل القاعة بيعدل الاسم والسعة بس".
+
+    ``action``:
+      * ``update``   — يوم/وقت/مدة/قاعة جديدة للموعد (مع فحص التعارض).
+      * ``unassign`` — إخلاء القاعة من هذا الموعد: الحصة تبقى في جدول
+        المجموعة بدون قاعة، والقاعة تصبح متاحة في هذا الوقت.
+      * ``delete``   — حذف هذا اليوم من جدول المجموعة (يُرفض لو كان الموعد
+        الوحيد للمجموعة — المجموعة لا بد لها من موعد).
+    """
+    slot = get_object_or_404(GroupSchedule.objects.select_related('group', 'room'), pk=schedule_id)
+    group = slot.group
+    old_room = slot.room
+    before = f'{slot.get_day_of_week_display()} {slot.start_time:%H:%M}' + (f' ({old_room.name})' if old_room else '')
+    action = request.POST.get('action', 'update')
+
+    try:
+        with transaction.atomic():
+            if action == 'unassign':
+                slot.room = None
+                _save_slot(slot)
+                description = f'إخلاء القاعة "{old_room.name if old_room else "-"}" من موعد {group.group_name} — {before}'
+            elif action == 'delete':
+                if group.schedules.count() <= 1:
+                    return JsonResponse({
+                        'success': False,
+                        'message': 'هذا الموعد الوحيد للمجموعة — عدّله أو احذف المجموعة من صفحتها',
+                    }, status=400)
+                slot.delete()
+                group.sync_legacy_schedule_fields()
+                group.save(skip_validation=True,
+                           update_fields=['schedule_day', 'schedule_time', 'duration_minutes'])
+                description = f'حذف موعد {group.group_name} — {before}'
+            else:
+                day, start, duration = _parse_slot_fields(request.POST)
+                room_id = request.POST.get('room_id')
+                slot.day_of_week, slot.start_time, slot.duration = day, start, duration
+                slot.room = Room.objects.get(pk=room_id) if room_id else None
+                _save_slot(slot)
+                after = f'{slot.get_day_of_week_display()} {slot.start_time:%H:%M}' + (f' ({slot.room.name})' if slot.room else '')
+                description = f'تعديل موعد {group.group_name}: {before} ← {after}'
+    except (ValidationError, ValueError, Room.DoesNotExist) as exc:
+        message = 'القاعة غير موجودة' if isinstance(exc, Room.DoesNotExist) else _slot_error(exc)
+        return JsonResponse({'success': False, 'message': message}, status=400)
+
+    ActivityLog.log(
+        user=request.user, action='room_update', description=description,
+        target_model='Room', target_id=(old_room.pk if old_room else None), request=request,
+    )
+    return JsonResponse({'success': True})
+
+
+@supervisor_required
+@require_POST
+def room_slot_create(request, room_id):
+    """حجز القاعة لمجموعة في يوم ووقت — إضافة موعد جديد للمجموعة، أو نقل
+    موعدها الموجود في نفس اليوم إلى هذه القاعة وهذا الوقت."""
+    room = get_object_or_404(Room, pk=room_id)
+    try:
+        group = Group.objects.get(pk=request.POST.get('group_id'))
+        day, start, duration = _parse_slot_fields(request.POST)
+        with transaction.atomic():
+            slot = GroupSchedule.objects.filter(group=group, day_of_week=day).first()
+            if slot is None:
+                slot = GroupSchedule(group=group, day_of_week=day)
+            slot.start_time, slot.duration, slot.room = start, duration, room
+            _save_slot(slot)
+    except (Group.DoesNotExist, ValueError, TypeError):
+        return JsonResponse({'success': False, 'message': 'اختر المجموعة واليوم والوقت'}, status=400)
+    except ValidationError as exc:
+        return JsonResponse({'success': False, 'message': _slot_error(exc)}, status=400)
+
+    ActivityLog.log(
+        user=request.user, action='room_update',
+        description=f'حجز القاعة "{room.name}" لـ {group.group_name} — {slot.get_day_of_week_display()} {start:%H:%M}',
+        target_model='Room', target_id=room.pk, request=request,
+    )
+    return JsonResponse({'success': True})
 
 
 @admin_required

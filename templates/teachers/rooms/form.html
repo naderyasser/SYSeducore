@@ -56,4 +56,141 @@
         </div>
     </div>
 </div>
+
+{% if room %}
+{% comment %}
+The room's timetable, editable in place: move a slot to another day/time/room,
+free the room from one slot (the group keeps the lesson, without a room), drop
+one day from a group's week, or book the room for a group. Every change goes
+through the same room-overlap check as the group form.
+{% endcomment %}
+<div class="card mt-4" id="room-slots">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>مواعيد القاعة — مين بيستخدمها ومتى</h5>
+        <small class="text-muted">التعديل هنا يغيّر موعد المجموعة نفسه</small>
+    </div>
+    <div class="card-body">
+        {% if slots %}
+        <div class="table-responsive">
+            <table class="table align-middle room-slots-table">
+                <thead>
+                    <tr><th>المجموعة / المدرس</th><th>اليوم</th><th>من</th><th>المدة (دقيقة)</th><th>القاعة</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for slot in slots %}
+                    <tr data-slot-id="{{ slot.schedule_id }}">
+                        <td>
+                            <a href="{% url 'teachers:group_detail' slot.group.group_id %}" class="fw-bold text-decoration-none">{{ slot.group.group_name }}</a>
+                            <small class="d-block text-muted">{{ slot.group.teacher.full_name|default:"—" }}</small>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm f-day">
+                                {% for value, label in days %}<option value="{{ value }}" {% if value == slot.day_of_week %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                            </select>
+                        </td>
+                        <td><input type="time" class="form-control form-control-sm f-time" value="{{ slot.start_time|time:'H:i' }}"></td>
+                        <td><input type="number" class="form-control form-control-sm f-duration" min="15" max="360" step="5" value="{{ slot.duration }}" style="width:90px"></td>
+                        <td>
+                            <select class="form-select form-select-sm f-room">
+                                {% for r in all_rooms %}<option value="{{ r.room_id }}" {% if r.room_id == room.room_id %}selected{% endif %}>{{ r.name }}</option>{% endfor %}
+                                <option value="">بدون قاعة</option>
+                            </select>
+                        </td>
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-sm btn-primary" onclick="slotAction(this, 'update')" title="حفظ الموعد"><i class="bi bi-check-lg"></i> حفظ</button>
+                            <button type="button" class="btn btn-sm btn-outline-warning" onclick="slotAction(this, 'unassign')" title="المجموعة تفضل في معادها، والقاعة تفضى"><i class="bi bi-box-arrow-left"></i> إخلاء القاعة</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="slotAction(this, 'delete')" title="حذف هذا اليوم من جدول المجموعة"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <p class="text-muted mb-3">لا توجد مواعيد محجوزة في هذه القاعة.</p>
+        {% endif %}
+
+        <h6 class="mt-3"><i class="bi bi-plus-circle me-1"></i>حجز القاعة لمجموعة</h6>
+        <form id="slot-add-form" class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small mb-1">المجموعة</label>
+                <select name="group_id" class="form-select form-select-sm" required>
+                    <option value="">— اختر —</option>
+                    {% for g in active_groups %}<option value="{{ g.group_id }}">{{ g.group_name }}{% if g.teacher %} — {{ g.teacher.full_name }}{% endif %}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">اليوم</label>
+                <select name="day" class="form-select form-select-sm" required>
+                    {% for value, label in days %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">من</label>
+                <input type="time" name="start_time" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-1">المدة</label>
+                <input type="number" name="duration" class="form-control form-control-sm" min="15" max="360" step="5" value="120" required>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-sm btn-success w-100"><i class="bi bi-plus-lg"></i> حجز</button>
+            </div>
+            <div class="col-12"><small class="text-muted">لو المجموعة لها موعد في نفس اليوم، يتنقل للقاعة والوقت دول.</small></div>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if room %}
+<script>
+function slotPost(url, params) {
+    return fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        },
+        body: new URLSearchParams(params).toString(),
+    }).then(function (r) { return r.json(); });
+}
+
+function slotAction(button, action) {
+    var row = button.closest('tr');
+    var name = row.querySelector('td a').textContent.trim();
+    if (action === 'unassign' && !confirm('إخلاء القاعة من موعد "' + name + '"؟ الحصة تفضل في جدول المجموعة بدون قاعة.')) { return; }
+    if (action === 'delete' && !confirm('حذف هذا اليوم من جدول "' + name + '"؟')) { return; }
+    var params = {action: action};
+    if (action === 'update') {
+        params.day = row.querySelector('.f-day').value;
+        params.start_time = row.querySelector('.f-time').value;
+        params.duration = row.querySelector('.f-duration').value;
+        params.room_id = row.querySelector('.f-room').value;
+    }
+    button.disabled = true;
+    slotPost('{% url "teachers:room_slot_update" 0 %}'.replace('/0/', '/' + row.dataset.slotId + '/'), params)
+        .then(function (data) {
+            if (!data.success) { alert(data.message || 'تعذّر الحفظ'); button.disabled = false; return; }
+            location.hash = 'room-slots';
+            location.reload();
+        })
+        .catch(function () { alert('فشل الاتصال بالخادم'); button.disabled = false; });
+}
+
+document.getElementById('slot-add-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var form = e.target, button = form.querySelector('button');
+    button.disabled = true;
+    slotPost('{% url "teachers:room_slot_create" room.room_id %}', Object.fromEntries(new FormData(form)))
+        .then(function (data) {
+            if (!data.success) { alert(data.message || 'تعذّر الحجز'); button.disabled = false; return; }
+            location.hash = 'room-slots';
+            location.reload();
+        })
+        .catch(function () { alert('فشل الاتصال بالخادم'); button.disabled = false; });
+});
+</script>
+{% endif %}
 {% endblock %}
