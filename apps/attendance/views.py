@@ -754,6 +754,7 @@ def scanner_grace_period(request):
         body = _json.loads(request.body) if request.content_type == 'application/json' else request.POST
         student_id = body.get('student_id')
         group_id = body.get('group_id')
+        notes = str(body.get('notes') or '').strip()[:500]
 
         try:
             days = int(body.get('days', 3))
@@ -790,6 +791,7 @@ def scanner_grace_period(request):
                 description=(
                     f'منح مهلة {days} أيام لـ {student.full_name} '
                     f'حتى {grace_date} ({updated} تسجيل)'
+                    + (f' — السبب: {notes}' if notes else '')
                 ),
                 target_model='Student',
                 target_id=student.pk,
@@ -836,7 +838,7 @@ def grant_exception(request):
         session_id = body.get('session_id')
         exception_type = body.get('exception_type') or 'payment'
         reason_type = body.get('reason_type') or 'other'
-        custom_reason = body.get('custom_reason', '')
+        custom_reason = str(body.get('custom_reason') or '').strip()[:500]
 
         if not student_id:
             return JsonResponse({'success': False, 'message': 'student_id مطلوب'}, status=400)

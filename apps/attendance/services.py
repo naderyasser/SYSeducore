@@ -1071,6 +1071,7 @@ class AttendanceService:
                 'group_id': group.group_id,
                 'group_name': group.group_name,
                 'teacher_name': group.teacher.full_name if group.teacher else '—',
+                'teacher_id': group.teacher_id,
                 'schedule': schedule_str,
                 'schedule_day_en': first_entry.day_of_week if first_entry else '',
                 'schedule_day_ar': first_entry.get_day_display() if first_entry else '',
@@ -1091,6 +1092,11 @@ class AttendanceService:
                     'amount_due': amount_due,
                     'amount_paid': amount_paid,
                     'remaining': remaining,
+                    'payment_id': payment.payment_id if payment else None,
+                    'paid_on': (
+                        payment.paid_on.isoformat()
+                        if payment is not None and payment.paid_on else None
+                    ),
                 },
                 'entitlement': {
                     'cycle_index': cycle.index if cycle else None,

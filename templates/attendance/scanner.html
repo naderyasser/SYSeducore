@@ -283,7 +283,35 @@
     .result-header {
         padding: 20px;
         text-align: center;
+        position: relative;
     }
+
+    /* The card stays until the desk closes it (or the next scan replaces it):
+       it used to vanish after 10-15 s, before anyone could open a detail. */
+    .result-close {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, 0.08);
+        color: inherit;
+        font-size: 1.1rem;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .result-close:hover { background: rgba(0, 0, 0, 0.16); }
+
+    /* Every figure in the card opens its detail page (new tab, so the
+       scanner keeps its place). */
+    a.dossier-link, a.dossier-link:visited { color: inherit; text-decoration: none; border-bottom: 1px dashed currentColor; }
+    a.dossier-link:hover { color: #2563eb; border-bottom-style: solid; }
+    a.dossier-stat, a.dossier-stat:visited, a.dossier-badge-link { color: inherit; text-decoration: none; }
+    a.dossier-stat:hover { background: #eff6ff; }
+    .dossier-quick-links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 4px; }
+    .dossier-quick-links a { flex: 1 1 120px; }
 
     .result-icon {
         font-size: 3.5rem;
@@ -1086,6 +1114,9 @@
             <div class="result-display" id="resultDisplay">
                 <div class="result-card" id="resultCard">
                     <div class="result-header">
+                        <button type="button" class="result-close" onclick="closeResult()" title="إغلاق" aria-label="إغلاق">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
                         <div class="result-icon" id="resultIcon"></div>
                         <div class="result-title" id="resultTitle"></div>
                         <div class="result-message" id="resultMessage"></div>
@@ -1185,7 +1216,38 @@
     </div>
 </div>
 
-<!-- Export Modal -->
+<!-- Exception Modal — the reason is chosen AND written down: a bare prompt()
+     with four numbers left no record of why an exception was granted. -->
+<div class="modal-overlay" id="exceptionModal" style="display:none;">
+    <div class="modal-content" style="max-width:440px;">
+        <div class="modal-header">
+            <h3><i class="bi bi-shield-check me-2"></i>استثناء حضور (اليوم)</h3>
+            <button class="close-btn" onclick="closeExceptionModal()">&times;</button>
+        </div>
+        <div class="modal-body" style="padding:24px;">
+            <label for="exceptionReasonType" class="form-label fw-bold">السبب</label>
+            <select id="exceptionReasonType" class="form-select mb-3">
+                <option value="forgot_money">نسي المصروفات</option>
+                <option value="another_class">كان في حصة أخرى</option>
+                <option value="transportation">تأخر بسبب المواصلات</option>
+                <option value="medical">ظروف صحية طارئة</option>
+                <option value="family_emergency">ظرف عائلي طارئ</option>
+                <option value="admin_override">تجاوز إداري</option>
+                <option value="other">سبب آخر</option>
+            </select>
+            <label for="exceptionNotes" class="form-label fw-bold">ملاحظات / سبب الاستثناء</label>
+            <textarea id="exceptionNotes" class="form-control" rows="3" maxlength="500"
+                placeholder="اكتب سبب الاستثناء بالتفصيل (مثال: ولي الأمر هيدفع بكرة)"></textarea>
+        </div>
+        <div class="modal-footer" style="justify-content:center; gap:12px;">
+            <button class="btn btn-secondary" onclick="closeExceptionModal()">إلغاء</button>
+            <button class="btn btn-primary" id="confirmExceptionBtn" onclick="confirmException()">
+                <i class="bi bi-check-lg me-1"></i>منح الاستثناء
+            </button>
+        </div>
+    </div>
+</div>
+
 <!-- Grace Period Modal -->
 <div class="modal-overlay" id="graceModal" style="display:none;">
     <div class="modal-content" style="max-width:400px; text-align:center;">
@@ -1207,6 +1269,9 @@
                     style="width:100px; text-align:center; font-size:1.2rem;">
                 <span>يوم</span>
             </div>
+            <label for="graceNotes" class="form-label fw-bold mt-3 d-block text-start">ملاحظات / سبب المهلة</label>
+            <textarea id="graceNotes" class="form-control" rows="2" maxlength="500"
+                placeholder="مثال: ولي الأمر هيدفع أول الشهر"></textarea>
         </div>
         <div class="modal-footer" style="justify-content:center; gap:12px;">
             <button class="btn btn-secondary" onclick="closeGraceModal()">إلغاء</button>
@@ -1450,6 +1515,32 @@ function escHtml(str) {
     return d.innerHTML;
 }
 
+// Detail-page URLs, resolved server-side with a 0 placeholder id.
+const DETAIL_URLS = {
+    student: "{% url 'students:detail' 0 %}",
+    studentEdit: "{% url 'students:update' 0 %}",
+    studentReport: "{% url 'students:report' 0 %}",
+    group: "{% url 'teachers:group_detail' 0 %}",
+    teacher: "{% url 'teachers:detail' 0 %}",
+    receipt: "{% url 'payments:receipt' 0 %}",
+};
+function detailUrl(kind, id) {
+    return DETAIL_URLS[kind].replace(/\/0\//, '/' + encodeURIComponent(id) + '/');
+}
+// A link to a detail page, or the plain text when there is no id to link to.
+function detailLink(kind, id, html, hash) {
+    if (id == null || id === '') { return html; }
+    return `<a class="dossier-link" href="${detailUrl(kind, id)}${hash || ''}" target="_blank" rel="noopener">${html}</a>`;
+}
+
+function closeResult() {
+    clearTimeout(window._resultTimer);
+    resultDisplay.classList.remove('show');
+}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && resultDisplay.classList.contains('show')) { closeResult(); }
+});
+
 // Render rich student dossier card
 function renderDossier(d) {
     // Avatar initials (first 2 words)
@@ -1489,11 +1580,14 @@ function renderDossier(d) {
         enrollHtml += `
             <div class="dossier-group-row">
                 <div>
-                    <strong>${escHtml(enr.group_name)}</strong>
-                    <small class="text-muted d-block">${escHtml(enr.teacher_name)} · ${escHtml(schedInfo)}</small>
+                    <strong>${detailLink('group', enr.group_id, escHtml(enr.group_name))}</strong>
+                    <small class="text-muted d-block">${detailLink('teacher', enr.teacher_id, escHtml(enr.teacher_name))} · ${escHtml(schedInfo)}</small>
                     <small class="text-muted">${escHtml(enr.financial_status)}</small>
+                    ${p.paid_on ? `<small class="text-success d-block"><i class="bi bi-calendar-check"></i> دفع يوم ${escHtml(p.paid_on)}</small>` : ''}
                 </div>
-                <span class="badge bg-${cls} text-wrap text-start" style="max-width:140px;">${icon} ${escHtml(payText)}</span>
+                <a class="dossier-badge-link" href="${d.student_id ? detailUrl('student', d.student_id) + '#payments' : '#'}" target="_blank" rel="noopener" title="سجل الدفع">
+                    <span class="badge bg-${cls} text-wrap text-start" style="max-width:140px;">${icon} ${escHtml(payText)}</span>
+                </a>
             </div>`;
     });
 
@@ -1538,7 +1632,7 @@ function renderDossier(d) {
     if (fin) {
         financialHtml = `
             <div class="dossier-section">
-                <div class="dossier-section-title">ملخص مالي (الشهر الحالي)</div>
+                <div class="dossier-section-title">${detailLink('student', d.student_id, 'ملخص مالي', '#payments')}</div>
                 <div class="dossier-summary-grid">
                     <div class="dossier-sum-item"><span class="dossier-sum-value paid">${formatEgp(fin.total_paid)}</span><span class="dossier-sum-label">مدفوع</span></div>
                     <div class="dossier-sum-item"><span class="dossier-sum-value remaining">${formatEgp(fin.total_remaining)}</span><span class="dossier-sum-label">متبقي</span></div>
@@ -1556,20 +1650,27 @@ function renderDossier(d) {
             <div class="dossier-header">
                 <div class="dossier-avatar">${escHtml(initials)}</div>
                 <div class="dossier-info">
-                    <div class="dossier-name">${escHtml(d.full_name)}${d.plan_label ? ` <span class="plan-badge plan-badge-bundle plan-badge-lg" title="${d.bundle_paid ? 'الباقة مدفوعة — لا قيود مالية على الحصص الفردية' : 'الباقة غير مدفوعة'}"><i class="bi bi-box-seam"></i> ${escHtml(d.plan_label)} ${d.bundle_paid ? '✓ مدفوعة' : '✗ غير مدفوعة'}</span>` : ''}</div>
+                    <div class="dossier-name">${detailLink('student', d.student_id, escHtml(d.full_name))}${d.plan_label ? ` <span class="plan-badge plan-badge-bundle plan-badge-lg" title="${d.bundle_paid ? 'الباقة مدفوعة — لا قيود مالية على الحصص الفردية' : 'الباقة غير مدفوعة'}"><i class="bi bi-box-seam"></i> ${escHtml(d.plan_label)} ${d.bundle_paid ? '✓ مدفوعة' : '✗ غير مدفوعة'}</span>` : ''}</div>
                     <div class="dossier-meta">
-                        <span class="dossier-code">${escHtml(d.student_code)}</span>
+                        <span class="dossier-code">${detailLink('student', d.student_id, escHtml(d.student_code))}</span>
                         ${d.education && d.education !== '-' ? ' · ' + escHtml(d.education) : ''}
                     </div>
                     ${subBadge}
                 </div>
             </div>
+            ${d.student_id ? `
+            <div class="dossier-quick-links">
+                <a class="btn btn-sm btn-outline-primary" href="${detailUrl('student', d.student_id)}" target="_blank" rel="noopener"><i class="bi bi-person-badge"></i> ملف الطالب</a>
+                <a class="btn btn-sm btn-outline-secondary" href="${detailUrl('studentEdit', d.student_id)}" target="_blank" rel="noopener"><i class="bi bi-pencil"></i> تعديل البيانات</a>
+                <a class="btn btn-sm btn-outline-success" href="${detailUrl('student', d.student_id)}#payments" target="_blank" rel="noopener"><i class="bi bi-cash-stack"></i> سجل الدفع</a>
+                <a class="btn btn-sm btn-outline-dark" href="${detailUrl('studentReport', d.student_id)}" target="_blank" rel="noopener"><i class="bi bi-file-earmark-text"></i> تقرير الطالب</a>
+            </div>` : ''}
             ${enrollHtml ? `<div class="dossier-section"><div class="dossier-section-title">المجموعات والدفع</div>${enrollHtml}</div>` : ''}
             <div class="dossier-stats">
-                <div class="dossier-stat">
+                <a class="dossier-stat" href="${d.student_id ? detailUrl('studentReport', d.student_id) : '#'}" target="_blank" rel="noopener" title="تقرير الحضور">
                     <span class="dossier-stat-val">${d.attendance_month?.total ?? 0}</span>
                     <span class="dossier-stat-lbl">حضور الشهر</span>
-                </div>
+                </a>
                 <div class="dossier-stat">
                     <span class="dossier-stat-val">${d.attendance_month?.last_month ?? '-'}</span>
                     <span class="dossier-stat-lbl">الشهر السابق</span>
@@ -1620,7 +1721,7 @@ function displayResult(data, code) {
             </div>
             <div class="detail-row">
                 <span class="detail-label">اسم الطالب</span>
-                <span class="detail-value">${escHtml(data.student?.full_name || data.student?.name || '-')}</span>
+                <span class="detail-value">${detailLink('student', data.student?.student_id, escHtml(data.student?.full_name || data.student?.name || '-'))}</span>
             </div>`;
 
     } else if (data.success) {
@@ -1635,7 +1736,7 @@ function displayResult(data, code) {
             </div>
             <div class="detail-row">
                 <span class="detail-label">اسم الطالب</span>
-                <span class="detail-value">${escHtml(data.student?.full_name || data.student?.name || '-')}</span>
+                <span class="detail-value">${detailLink('student', data.student?.student_id, escHtml(data.student?.full_name || data.student?.name || '-'))}</span>
             </div>`;
 
     } else {
@@ -1656,14 +1757,14 @@ function displayResult(data, code) {
             detailHtml += `
             <div class="detail-row">
                 <span class="detail-label">الطالب</span>
-                <span class="detail-value">${escHtml(data.student_name)}</span>
+                <span class="detail-value">${detailLink('student', data.student_id || data.dossier?.student_id, escHtml(data.student_name))}</span>
             </div>`;
         }
         if (data.skipped && data.skipped.length) {
             data.skipped.forEach(s => {
                 detailHtml += `
             <div class="detail-row">
-                <span class="detail-label">${escHtml(s.group_name || 'سبب')}</span>
+                <span class="detail-label">${s.group_id ? detailLink('group', s.group_id, escHtml(s.group_name || 'المجموعة')) : escHtml(s.group_name || 'سبب')}</span>
                 <span class="detail-value text-danger">${escHtml(s.reason)}</span>
             </div>`;
             });
@@ -1715,12 +1816,9 @@ function displayResult(data, code) {
     // Add to history
     addToHistory(data, code);
 
-    // Auto hide — longer timeout when dossier is shown so supervisor can read
+    // No auto-hide: the desk reads, opens details and acts at its own pace;
+    // the card goes when they close it or the next scan replaces it.
     clearTimeout(window._resultTimer);
-    const hideDelay = data.dossier ? 15000 : 10000;
-    window._resultTimer = setTimeout(() => {
-        resultDisplay.classList.remove('show');
-    }, hideDelay);
 }
 
 // ── Admin override (تجاوز إداري) ──
@@ -1766,7 +1864,6 @@ async function scannerOverride(studentId, groupId, status, button) {
         resultDetails.innerHTML = '';
         playSound('success');
         await loadTodayStats();
-        window._resultTimer = setTimeout(() => resultDisplay.classList.remove('show'), 8000);
     } catch (error) {
         if (error.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); }
     } finally {
@@ -1813,23 +1910,37 @@ async function scannerPayNow(paymentId, studentId) {
  * the *grace days* dialog, a different decision entirely: grace opens the gate
  * for N days, this lets one student in for one day.
  */
-async function scannerPaymentException(studentId, groupId) {
-    const reason = prompt(
-        'سبب استثناء الحضور:\n' +
-        '1 = نسي المصروفات\n' +
-        '2 = كان في حصة أخرى\n' +
-        '3 = ظرف عائلي طارئ\n' +
-        '4 = سبب آخر',
-        '1'
-    );
-    if (reason === null) return;
-    const reasonMap = {
-        '1': 'forgot_money',
-        '2': 'another_class',
-        '3': 'family_emergency',
-        '4': 'other'
-    };
-    const reasonType = reasonMap[String(reason).trim()] || 'other';
+let _excStudentId = null;
+let _excGroupId = null;
+
+function scannerPaymentException(studentId, groupId) {
+    _excStudentId = studentId;
+    _excGroupId = groupId || null;
+    document.getElementById('exceptionReasonType').value = 'forgot_money';
+    document.getElementById('exceptionNotes').value = '';
+    document.getElementById('exceptionModal').style.display = 'flex';
+    setTimeout(() => document.getElementById('exceptionNotes').focus(), 50);
+}
+
+function closeExceptionModal() {
+    document.getElementById('exceptionModal').style.display = 'none';
+    _excStudentId = null;
+    _excGroupId = null;
+}
+
+function confirmException() {
+    const sid = _excStudentId, gid = _excGroupId;
+    const reasonType = document.getElementById('exceptionReasonType').value;
+    const notes = document.getElementById('exceptionNotes').value.trim();
+    if (reasonType === 'other' && !notes) {
+        alert('اكتب سبب الاستثناء في خانة الملاحظات');
+        return;
+    }
+    closeExceptionModal();
+    grantPaymentException(sid, gid, reasonType, notes);
+}
+
+async function grantPaymentException(studentId, groupId, reasonType, notes) {
 
     try {
         const resp = await fetch('{% url "attendance:grant_exception" %}', {
@@ -1839,7 +1950,8 @@ async function scannerPaymentException(studentId, groupId) {
                 student_id: studentId,
                 group_id: groupId || null,
                 exception_type: 'payment',
-                reason_type: reasonType
+                reason_type: reasonType,
+                custom_reason: notes || ''
             })
         });
         const data = await resp.json();
@@ -1871,6 +1983,7 @@ function scannerGracePrompt(studentId, groupId) {
     _graceStudentId = studentId;
     _graceGroupId = groupId || null;
     document.getElementById('graceDaysInput').value = 3;
+    document.getElementById('graceNotes').value = '';
     document.getElementById('graceModal').style.display = 'flex';
 }
 
@@ -1884,16 +1997,17 @@ function confirmGrace() {
     const days = parseInt(document.getElementById('graceDaysInput').value);
     if (!days || days <= 0) return;
     const sid = _graceStudentId, gid = _graceGroupId;
+    const notes = document.getElementById('graceNotes').value.trim();
     closeGraceModal();
-    scannerGracePeriod(sid, days, gid);
+    scannerGracePeriod(sid, days, gid, notes);
 }
 
-async function scannerGracePeriod(studentId, days, groupId) {
+async function scannerGracePeriod(studentId, days, groupId, notes) {
     try {
         const resp = await fetch('{% url "attendance:scanner_grace_period" %}', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}'},
-            body: JSON.stringify({student_id: studentId, days: days, group_id: groupId || null})
+            body: JSON.stringify({student_id: studentId, days: days, group_id: groupId || null, notes: notes || ''})
         });
         const data = await resp.json();
         if (data.success) {
