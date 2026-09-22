@@ -514,3 +514,28 @@ class TestAbsencesCountFromPaymentDate(AttendanceTestMixin, TestCase):
         payment = Payment.objects.get(student=self.student, group=self.group)
         self.assertEqual(payment.status, 'unpaid')
         self.assertEqual(payment.sessions_attended, 2)
+
+
+class TestRecountPaidCyclesCommand(AttendanceTestMixin, TestCase):
+    def test_dry_run_changes_nothing_and_apply_unblocks(self):
+        from io import StringIO
+        from django.core.management import call_command
+        self._attend(day_offset=0, status='present')
+        for i in range(1, 4):
+            self._attend(day_offset=i, status='absent')
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment = Payment.objects.get(student=self.student, group=self.group)
+        # Paid on day 4 — written straight to the row, as an older payment
+        # recorded before the rule would be.
+        Payment.objects.filter(pk=payment.pk).update(
+            status='paid', amount_paid=payment.amount_due,
+            paid_on=timezone.localdate() + timedelta(days=4), sessions_attended=4,
+        )
+        out = StringIO()
+        call_command('recount_paid_cycles', stdout=out)
+        payment.refresh_from_db()
+        self.assertEqual(payment.sessions_attended, 4, 'dry run writes nothing')
+        self.assertIn('4 -> 1', out.getvalue())
+        call_command('recount_paid_cycles', '--apply', stdout=StringIO())
+        payment.refresh_from_db()
+        self.assertEqual(payment.sessions_attended, 1)

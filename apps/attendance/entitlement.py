@@ -119,9 +119,8 @@ def billing_start_sequence(student, cycle):
 def consumed_attendance(student, cycle, anchor_session=None, absences_from=None):
     """
     The attendance rows in ``cycle`` that burn this student's entitlement —
-    the rows :func:`_consumed_sessions` counts, as a queryset, so a caller
-    that needs their *dates* (a settlement sheet covering part of a cycle)
-    counts exactly the same sessions the scanner does.
+    the rows :func:`_consumed_sessions` counts, as a queryset, for a caller
+    that needs the rows themselves rather than their number.
 
     ``absences_from`` is the date the student paid for the cycle. An absence
     before it never burns a session: the client's rule is "الحضور يتحسب من
