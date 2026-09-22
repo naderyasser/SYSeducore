@@ -1197,7 +1197,10 @@ class AttendanceService:
             if (payment and payment.entitlement_start_session_id)
             else first_consumed_session(student, cycle)
         )
-        sessions_count = _consumed_sessions(student, cycle, anchor_session=anchor)
+        from .entitlement import paid_from
+        sessions_count = _consumed_sessions(
+            student, cycle, anchor_session=anchor, absences_from=paid_from(payment),
+        )
 
         # Two different sequences, deliberately not merged:
         #

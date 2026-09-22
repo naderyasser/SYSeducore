@@ -76,6 +76,12 @@ def activate_payment(payment, *, paid_on=None, user=None, request=None):
             payment.entitlement_start_seq = first.session.sequence_in_cycle
             payment.save(update_fields=['entitlement_start_session', 'entitlement_start_seq'])
 
+    # The payment date decides which absences count, so the counter is
+    # recomputed now rather than at the student's next scan.
+    if payment.cycle_id:
+        from apps.attendance.entitlement import recount_payment
+        recount_payment(payment)
+
     if user:
         if enrollment is None:
             detail = ' — تنبيه: الطالب غير مسجل في هذه المجموعة (لم يتم إنشاء تسجيل)'

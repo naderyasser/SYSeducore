@@ -468,3 +468,49 @@ class TestAnchorSurvivesRenumbering(AttendanceTestMixin, TestCase):
         s2.refresh_from_db()
         self.assertIsNone(s1.sequence_in_cycle)
         self.assertEqual(s2.sequence_in_cycle, 1)
+
+
+class TestAbsencesCountFromPaymentDate(AttendanceTestMixin, TestCase):
+    """
+    Client, 2026-09-22: "لو طالب دفع يوم 18/8 وما حضرش، السيستم بيحسبها
+    غياب وبتتراكم ... عايز الحضور يتحسب من اول يوم دفع فيه، مش بأثر رجعي".
+    An absence before the payment date never burns a paid cycle's session;
+    lessons the student actually attended still count wherever they fall.
+    """
+
+    def _pay(self, on_offset):
+        from apps.payments.activation import activate_payment
+        payment = Payment.objects.get(student=self.student, group=self.group)
+        payment.status = 'paid'
+        payment.amount_paid = payment.amount_due
+        payment.save()
+        activate_payment(payment, paid_on=timezone.localdate() + timedelta(days=on_offset))
+        payment.refresh_from_db()
+        return payment
+
+    def test_absences_before_paying_do_not_accumulate(self):
+        self._attend(day_offset=0, status='present')   # attended once under grace
+        self._attend(day_offset=1, status='absent')
+        self._attend(day_offset=2, status='absent')
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        self.assertEqual(
+            Payment.objects.get(student=self.student, group=self.group).sessions_attended, 3,
+        )
+
+        payment = self._pay(on_offset=3)
+        self.assertEqual(payment.sessions_attended, 1,
+                         'paying must drop the two pre-payment absences at once')
+
+        self._attend(day_offset=4, status='absent')      # after paying: counts
+        self._attend(day_offset=5, status='present')
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment.refresh_from_db()
+        self.assertEqual(payment.sessions_attended, 3)
+
+    def test_unpaid_grace_counting_is_unchanged(self):
+        self._attend(day_offset=0, status='present')
+        self._attend(day_offset=1, status='absent')
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        payment = Payment.objects.get(student=self.student, group=self.group)
+        self.assertEqual(payment.status, 'unpaid')
+        self.assertEqual(payment.sessions_attended, 2)

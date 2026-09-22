@@ -116,11 +116,48 @@ def billing_start_sequence(student, cycle):
     return max(1, min(held + 1, size))
 
 
-def _consumed_sessions(student, cycle, anchor_session=None):
+def consumed_attendance(student, cycle, anchor_session=None, absences_from=None):
+    """
+    The attendance rows in ``cycle`` that burn this student's entitlement —
+    the rows :func:`_consumed_sessions` counts, as a queryset, so a caller
+    that needs their *dates* (a settlement sheet covering part of a cycle)
+    counts exactly the same sessions the scanner does.
+
+    ``absences_from`` is the date the student paid for the cycle. An absence
+    before it never burns a session: the client's rule is "الحضور يتحسب من
+    اول يوم دفع فيه، مش بأثر رجعي" — a student who paid on 18/8 is not
+    charged for the lessons they missed before paying, even if they had
+    attended one earlier under grace (which started counting). Sessions the
+    student actually attended still count wherever they fall.
+    """
+    from django.db.models import Q
+
+    from .models import Attendance
+
+    if anchor_session is None:
+        anchor_session = first_consumed_session(student, cycle)
+        if anchor_session is None:
+            return Attendance.objects.none()
+
+    rows = Attendance.objects.filter(
+        student=student,
+        session__cycle=cycle,
+        session__is_cancelled=False,
+        session__session_date__gte=anchor_session.session_date,
+    )
+    if absences_from is not None:
+        rows = rows.filter(
+            ~Q(status='absent') | Q(session__session_date__gte=absences_from)
+        )
+    return rows
+
+
+def _consumed_sessions(student, cycle, anchor_session=None, absences_from=None):
     """
     Count of non-cancelled sessions in ``cycle`` this student has consumed
     (present, late, absent or exception all count — an absence burns a
-    session, once counting has started).
+    session, once counting has started, and once the cycle is paid for:
+    see :func:`consumed_attendance`).
 
     Anchored on the start session's **date**, never on its
     ``sequence_in_cycle``. Sequence numbers are renumbered whenever a session
@@ -129,19 +166,39 @@ def _consumed_sessions(student, cycle, anchor_session=None):
     not move. (``Payment.entitlement_start_seq`` stays a frozen snapshot for
     pricing — that one is *meant* not to follow later changes.)
     """
-    from .models import Attendance
-
-    if anchor_session is None:
-        anchor_session = first_consumed_session(student, cycle)
-        if anchor_session is None:
-            return 0
-
-    return Attendance.objects.filter(
-        student=student,
-        session__cycle=cycle,
-        session__is_cancelled=False,
-        session__session_date__gte=anchor_session.session_date,
+    return consumed_attendance(
+        student, cycle, anchor_session=anchor_session, absences_from=absences_from,
     ).count()
+
+
+def paid_from(payment):
+    """The date absences start burning ``payment``'s sessions, or ``None``
+    while it is unpaid (grace counting keeps its old rule)."""
+    if payment is None or payment.status != 'paid':
+        return None
+    return payment.paid_on
+
+
+def recount_payment(payment):
+    """
+    Recompute ``payment.sessions_attended`` from the attendance rows, with
+    the same anchor and payment-date rule the scanner uses. Called when the
+    payment itself changes (it is paid, or its date is corrected), since a
+    new ``paid_on`` changes which absences count. Returns the new count.
+    """
+    if payment.cycle_id is None:
+        return payment.sessions_attended
+    anchor = payment.entitlement_start_session or first_consumed_session(
+        payment.student, payment.cycle,
+    )
+    count = _consumed_sessions(
+        payment.student, payment.cycle,
+        anchor_session=anchor, absences_from=paid_from(payment),
+    )
+    if count != payment.sessions_attended:
+        payment.sessions_attended = count
+        payment.save(update_fields=['sessions_attended'])
+    return count
 
 
 def bundle_paid(student):
