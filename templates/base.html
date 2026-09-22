@@ -37,8 +37,19 @@
             max-width: 100%;
         }
 
+        /* One look for every page (client, 2026-09-22: "الخلفيات كل الصفحات
+           واحده"): the page background and the coloured header strip at the
+           top of a screen come from these tokens only. Headers used to be
+           purple, orange, green or blue depending on the page. */
+        :root {
+            --page-bg: #f1f5f9;
+            --hero-bg: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            --brand: #2563eb;
+            --brand-grad: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+
         body {
-            background-color: #f5f6fa;
+            background-color: var(--page-bg);
             min-height: 100vh;
         }
 

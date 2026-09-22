@@ -6,7 +6,7 @@
 {% block extra_css %}
 <style>
     .search-hero {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--hero-bg);
         border-radius: 20px;
         padding: 40px;
         color: #fff;
@@ -93,7 +93,7 @@
 
     .search-input:focus {
         outline: none;
-        border-color: #667eea;
+        border-color: var(--brand);
         box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
     }
 
@@ -135,7 +135,7 @@
         width: 64px;
         height: 64px;
         border-radius: 16px;
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -202,7 +202,7 @@
     }
 
     .btn-book {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         color: #fff;
         border: none;
         padding: 12px 24px;
@@ -286,8 +286,8 @@
     }
 
     .quick-filter-btn:hover, .quick-filter-btn.active {
-        border-color: #667eea;
-        background: #667eea;
+        border-color: var(--brand);
+        background: var(--brand);
         color: #fff;
         text-decoration: none;
     }
@@ -384,7 +384,7 @@
 <div class="search-card" style="display: flex; justify-content: space-between; align-items: center;">
     <div>
         <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 1.3rem;">
-            <i class="bi bi-calendar-week me-2" style="color: #667eea;"></i>
+            <i class="bi bi-calendar-week me-2" style="color: var(--brand);"></i>
             التقويم الشامل
         </h3>
         <p style="margin: 0; color: #6b7280; font-size: 0.95rem;">
@@ -399,7 +399,7 @@
 <!-- Appointments & Attendance Section -->
 <div class="search-card">
     <h3 style="margin: 0 0 20px 0; color: #1f2937; font-size: 1.3rem;">
-        <i class="bi bi-calendar-check me-2" style="color: #667eea;"></i>
+        <i class="bi bi-calendar-check me-2" style="color: var(--brand);"></i>
         المواعيد و الحضور
     </h3>
     
@@ -440,7 +440,7 @@
     {% if upcoming_sessions %}
     <div style="display: grid; gap: 12px;">
         {% for session in upcoming_sessions|slice:":5" %}
-        <div style="background: #f9fafb; border-radius: 10px; padding: 16px; border-right: 4px solid #667eea; display: flex; justify-content: space-between; align-items: center;">
+        <div style="background: #f9fafb; border-radius: 10px; padding: 16px; border-right: 4px solid var(--brand); display: flex; justify-content: space-between; align-items: center;">
             <div>
                 <div style="font-weight: 600; color: #1f2937; margin-bottom: 5px;">
                     {{ session.group.group_name }}
@@ -452,7 +452,7 @@
                 </div>
             </div>
             <div style="text-align: left;">
-                <div style="font-weight: 600; color: #667eea;">{{ session.session_date|date:"Y-m-d" }}</div>
+                <div style="font-weight: 600; color: var(--brand);">{{ session.session_date|date:"Y-m-d" }}</div>
                 <div style="font-size: 0.85rem; color: #6b7280;">{{ session.group.schedule_time|time:"H:i" }}</div>
             </div>
         </div>

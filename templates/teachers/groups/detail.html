@@ -58,7 +58,7 @@
     }
 
     .btn-primary {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         color: #fff;
     }
 
@@ -112,7 +112,7 @@
 
     .info-card-header i {
         font-size: 1.1rem;
-        color: #667eea;
+        color: var(--brand);
     }
 
     .info-card-value {
@@ -339,7 +339,7 @@
         width: 48px;
         height: 48px;
         border-radius: 12px;
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -413,7 +413,7 @@
 <div class="detail-container">
     <div class="detail-header">
         <div class="detail-title">
-            <h1><i class="bi bi-people me-2" style="color: #667eea;"></i>{{ group.group_name }}</h1>
+            <h1><i class="bi bi-people me-2" style="color: var(--brand);"></i>{{ group.group_name }}</h1>
             <p class="detail-subtitle">
                 {% for entry in schedule_entries %}{{ entry.get_schedule_day_display }} {{ entry.schedule_time|time:"H:i" }}{% if not forloop.last %} | {% endif %}{% empty %}{{ group.get_schedule_day_display }} | {{ group.schedule_time }}{% endfor %}
             </p>

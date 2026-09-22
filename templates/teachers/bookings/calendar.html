@@ -63,7 +63,7 @@
     }
 
     .day-count {
-        background: #667eea;
+        background: var(--brand);
         color: #fff;
         width: 32px;
         height: 32px;
@@ -92,7 +92,7 @@
     .booking-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        border-color: #667eea;
+        border-color: var(--brand);
     }
 
     .booking-time {
@@ -100,7 +100,7 @@
         align-items: center;
         gap: 8px;
         font-weight: 600;
-        color: #667eea;
+        color: var(--brand);
         font-size: 0.95rem;
         margin-bottom: 8px;
     }
@@ -147,7 +147,7 @@
     }
 
     .booking-teacher i {
-        color: #667eea;
+        color: var(--brand);
     }
 
     .enrollment-badge {
@@ -206,7 +206,7 @@
     }
 
     .btn-primary {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         color: #fff;
         border: none;
     }
@@ -241,7 +241,7 @@
 {% block content %}
 <div class="calendar-container">
     <div class="calendar-header">
-        <h1><i class="bi bi-calendar-week me-2" style="color: #667eea;"></i>التقويم الشامل للمواعيد</h1>
+        <h1><i class="bi bi-calendar-week me-2" style="color: var(--brand);"></i>التقويم الشامل للمواعيد</h1>
         <p>عرض جميع المواعيد المجدولة حسب الأيام</p>
     </div>
 

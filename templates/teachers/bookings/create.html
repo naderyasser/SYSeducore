@@ -61,7 +61,7 @@
 
     .form-control:focus {
         outline: none;
-        border-color: #667eea;
+        border-color: var(--brand);
         box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
     }
 
@@ -131,16 +131,16 @@
         width: 100%;
         padding: 12px;
         background: #fff;
-        border: 2px dashed #667eea;
+        border: 2px dashed var(--brand);
         border-radius: 10px;
-        color: #667eea;
+        color: var(--brand);
         font-weight: 600;
         cursor: pointer;
         transition: all 0.3s;
     }
 
     .add-schedule-btn:hover {
-        background: #667eea;
+        background: var(--brand);
         color: #fff;
     }
 
@@ -183,7 +183,7 @@
     }
 
     .existing-group-name:hover {
-        color: #667eea;
+        color: var(--brand);
         text-decoration: underline;
     }
 
@@ -241,7 +241,7 @@
     }
 
     .btn-submit {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         color: #fff;
         border: none;
         padding: 16px 32px;
@@ -259,7 +259,7 @@
     }
 
     .btn-add-schedule {
-        background: linear-gradient(135deg, #667eea, #764ba2);
+        background: var(--brand-grad);
         color: #fff;
         border: none;
         padding: 12px 24px;
@@ -277,7 +277,7 @@
     }
 
     .schedule-input-area .form-control:focus {
-        border-color: #667eea;
+        border-color: var(--brand);
         box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
         outline: none;
     }
@@ -311,13 +311,13 @@
     }
 
     .day-checkbox input:checked + label {
-        background: #667eea;
+        background: var(--brand);
         color: #fff;
-        border-color: #667eea;
+        border-color: var(--brand);
     }
 
     .selected-days-summary {
-        background: #667eea;
+        background: var(--brand);
         color: #fff;
         padding: 12px 20px;
         border-radius: 10px;
@@ -506,9 +506,9 @@
                 <!-- Schedules will be added here dynamically -->
             </div>
 
-            <div class="schedule-input-area" style="background: #fff; padding: 20px; border-radius: 12px; border: 2px dashed #667eea; margin-bottom: 16px;">
+            <div class="schedule-input-area" style="background: #fff; padding: 20px; border-radius: 12px; border: 2px dashed var(--brand); margin-bottom: 16px;">
                 <h4 style="margin: 0 0 16px 0; color: #1f2937; font-size: 1rem; font-weight: 600;">
-                    <i class="bi bi-plus-circle me-2" style="color: #667eea;"></i>إضافة موعد جديد
+                    <i class="bi bi-plus-circle me-2" style="color: var(--brand);"></i>إضافة موعد جديد
                 </h4>
 
                 <div class="form-group" style="margin-bottom: 16px;">
