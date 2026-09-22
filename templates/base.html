@@ -146,6 +146,22 @@
             margin: 0;
         }
 
+        .page-back-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            color: #1f2937;
+            font-size: 1.15rem;
+            text-decoration: none;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        }
+        .page-back-btn:hover { background: #e2e8f0; color: #2563eb; }
+
         .user-info {
             display: flex;
             align-items: center;
@@ -939,6 +955,20 @@
                 <button class="mobile-toggle me-3" onclick="toggleSidebar()">
                     <i class="bi bi-list"></i>
                 </button>
+                {% url 'reports:dashboard' as dashboard_url %}
+                {% if request.path != dashboard_url %}
+                {% comment %}
+                One back arrow on every page instead of a hand-written link on
+                some of them (groups had none). A page can point it somewhere
+                fixed by overriding the back_url block; otherwise it goes back in
+                history, or to the dashboard when the page was opened directly.
+                {% endcomment %}
+                <a href="{% block back_url %}{{ dashboard_url }}{% endblock %}" class="page-back-btn me-2"
+                   data-history-back="{% block back_uses_history %}1{% endblock %}"
+                   title="رجوع" aria-label="رجوع">
+                    <i class="bi bi-arrow-right"></i>
+                </a>
+                {% endif %}
                 <h1 class="page-title">{% block page_title %}لوحة التحكم{% endblock %}</h1>
             </div>
             {% if user.is_authenticated %}
@@ -1044,6 +1074,21 @@
     <script src="{% static 'js/utils/responsive-tables.js' %}"></script>
     <script src="{% static 'js/utils/money.js' %}"></script>
     <script src="{% static 'js/utils/quick-search.js' %}"></script>
+    <script>
+    // Back arrow: step back in history when the previous page was ours;
+    // opened from a bookmark or another site, the href (dashboard) applies.
+    (function () {
+        var btn = document.querySelector('.page-back-btn');
+        if (!btn || btn.dataset.historyBack !== '1') { return; }
+        btn.addEventListener('click', function (e) {
+            var sameOrigin = document.referrer && document.referrer.indexOf(location.origin + '/') === 0;
+            if (sameOrigin && history.length > 1) {
+                e.preventDefault();
+                history.back();
+            }
+        });
+    })();
+    </script>
     <script src="{% static 'js/utils/manual-attendance.js' %}"></script>
     {% block extra_js %}{% endblock %}
 </body>

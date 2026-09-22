@@ -297,6 +297,22 @@
         gap: 10px;
     }
 
+    .student-link { color: inherit; text-decoration: none; }
+    .student-link:hover { color: #2563eb; text-decoration: underline; }
+    .btn-row-action {
+        background: #eff6ff;
+        color: #2563eb;
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    .btn-row-action:hover { background: #2563eb; color: #fff; }
+    .btn-row-action.pay { background: #ecfdf5; color: #059669; }
+    .btn-row-action.pay:hover { background: #059669; color: #fff; }
     .btn-remove-student {
         background: #fee2e2;
         color: #dc2626;
@@ -604,7 +620,7 @@
                         {% for row in students_rows %}
                         <tr id="enrollment-{{ row.enrollment.id }}">
                             <td>
-                                <div class="student-name">{{ row.student.full_name }} {% plan_badge row.student %}</div>
+                                <div class="student-name"><a href="{% url 'students:detail' row.student.student_id %}" class="student-link">{{ row.student.full_name }}</a> {% plan_badge row.student %}</div>
                             </td>
                             <td>{{ row.student.student_code }}</td>
                             <td dir="ltr">
@@ -646,8 +662,17 @@
                                 {% endif %}
                                 {% endif %}
                             </td>
-                            <td>
-                                <button type="button" class="btn-remove-student"
+                            <td class="text-nowrap">
+                                <a href="{% url 'students:detail' row.student.student_id %}" class="btn-row-action" title="ملف الطالب">
+                                    <i class="bi bi-person-badge"></i>
+                                </a>
+                                <a href="{% url 'students:update' row.student.student_id %}" class="btn-row-action" title="تعديل بيانات الطالب">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{% url 'students:detail' row.student.student_id %}#payments" class="btn-row-action pay" title="سجل الدفع">
+                                    <i class="bi bi-cash-stack"></i>
+                                </a>
+                                <button type="button" class="btn-remove-student" title="إزالة من المجموعة"
                                     onclick="removeStudent({{ row.enrollment.id }}, '{{ row.student.full_name|escapejs }}')">
                                     <i class="bi bi-person-x"></i>
                                 </button>
