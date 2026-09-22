@@ -499,6 +499,40 @@ def attendance_report(request):
     return render(request, 'reports/attendance.html', context)
 
 
+@supervisor_required
+def attendance_excel(request):
+    """
+    ``GET ?date_from=&date_to=&group=`` → a formatted .xlsx: per lesson,
+    the teacher, the group, how many attended and how many of them paid in
+    full / in part / not at all; a second sheet lists every student.
+    Defaults to today. See :mod:`apps.reports.excel`.
+    """
+    from django.http import HttpResponse
+
+    from .excel import build_attendance_workbook
+
+    today = timezone.localdate()
+    date_from = _parse_date_param(request.GET.get('date_from')) or today
+    date_to = _parse_date_param(request.GET.get('date_to')) or date_from
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+    if (date_to - date_from).days > 366:
+        date_from = date_to - timedelta(days=366)
+    group_id = _parse_int_param(request.GET.get('group'))
+
+    content = build_attendance_workbook(date_from, date_to, group_id=group_id)
+    name = (
+        f'attendance_{date_from}.xlsx' if date_from == date_to
+        else f'attendance_{date_from}_to_{date_to}.xlsx'
+    )
+    response = HttpResponse(
+        content,
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    )
+    response['Content-Disposition'] = f'attachment; filename="{name}"'
+    return response
+
+
 # ==================== Payment report ====================
 
 @supervisor_required

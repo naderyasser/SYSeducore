@@ -233,10 +233,13 @@
             <p class="mb-0 mt-2 opacity-75">عرض وتحليل سجلات حضور الطلاب</p>
         </div>
         <div class="export-buttons">
-            <button class="btn-export excel" onclick="exportTableToExcel()">
+            {% comment %} Server-built .xlsx over the filtered dates (today when none) —
+               the old button scraped one page of this table into a CSV. {% endcomment %}
+            <a class="btn-export excel text-decoration-none"
+               href="{% url 'reports:attendance_excel' %}?date_from={{ date_from|default:'' }}&date_to={{ date_to|default:'' }}{% if selected_group %}&group={{ selected_group }}{% endif %}">
                 <i class="bi bi-file-earmark-excel"></i>
                 تصدير Excel
-            </button>
+            </a>
         </div>
     </div>
     
@@ -406,29 +409,6 @@
 
 {% block extra_js %}
 <script>
-function exportTableToExcel() {
-    const table = document.getElementById('attendanceTable');
-    const rows = table.querySelectorAll('tr');
-    
-    let csv = '\ufeff'; // BOM for Arabic
-    rows.forEach(row => {
-        const cells = row.querySelectorAll('td, th');
-        const rowData = [];
-        cells.forEach((cell, index) => {
-            // Skip the status icon column logic, just get text content
-            let text = cell.textContent.trim().replace(/,/g, ' ');
-            rowData.push(text);
-        });
-        csv += rowData.join(',') + '\n';
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'attendance_report_' + new Date().toISOString().split('T')[0] + '.csv';
-    link.click();
-}
-
 function exportTableToPDF() {
     alert('سيتم إضافة تصدير PDF قريباً');
 }

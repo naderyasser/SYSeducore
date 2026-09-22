@@ -6,6 +6,7 @@ app_name = 'reports'
 urlpatterns = [
     path('', views.dashboard, name='dashboard'),
     path('attendance/', views.attendance_report, name='attendance'),
+    path('attendance/excel/', views.attendance_excel, name='attendance_excel'),
 
     # NOTE: the ``password/``, ``password/verify/`` and ``logout/`` routes were
     # removed along with the inert "report password" gate (SEC-07). The gate

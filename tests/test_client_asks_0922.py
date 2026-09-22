@@ -180,3 +180,47 @@ class ReportDrillDownTests(AttendanceTestMixin, TestCase):
         self.assertEqual(r.context['detail_page'].paginator.count, 2)
         r = self.client.get(url, {'detail': 'unpaid'})
         self.assertEqual([p.student.full_name for p in r.context['detail_page']], ['طالب مديون'])
+
+
+class AttendanceExcelTests(AttendanceTestMixin, TestCase):
+    """تصدير الاكسيل: ملف منسق بدل CSV كان يطلع ###### وتاريخ بس."""
+
+    def test_formatted_workbook_with_payment_split(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from apps.payments.models import Payment
+        from apps.students.models import Student, StudentGroupEnrollment
+
+        self.client.login(username='sup_att', password='TestPass123!')
+        session = self._attend(day_offset=0, status='present')
+        other = Student.objects.create(student_code='ATT003', full_name='طالب جزئي',
+                                       parent_phone='01088888888')
+        StudentGroupEnrollment.objects.create(student=other, group=self.group, is_active=True)
+        from apps.attendance.models import Attendance
+        Attendance.objects.create(student=other, session=session, status='late',
+                                  scan_time=timezone.now())
+        Payment.objects.create(student=self.student, group=self.group, cycle=session.cycle,
+                               month=self.today_month(), amount_due=Decimal('200'),
+                               amount_paid=Decimal('200'), status='paid')
+        Payment.objects.create(student=other, group=self.group, cycle=session.cycle,
+                               month=self.today_month(), amount_due=Decimal('200'),
+                               amount_paid=Decimal('50'), status='partial')
+
+        today = timezone.localdate().isoformat()
+        r = self.client.get(reverse('reports:attendance_excel'), {'date_from': today, 'date_to': today})
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('spreadsheetml', r['Content-Type'])
+        wb = load_workbook(BytesIO(r.content))
+        ws = wb['ملخص الحصص']
+        self.assertTrue(ws.sheet_view.rightToLeft)
+        header = [c.value for c in ws[4]]
+        self.assertEqual(header[:4], ['التاريخ', 'اليوم', 'المدرس', 'المجموعة'])
+        row = [c.value for c in ws[5]]
+        self.assertEqual(row[0], today, 'the date is text, never a ###### number')
+        self.assertEqual(row[2], self.teacher.full_name)
+        self.assertEqual(row[3], self.group.group_name)
+        self.assertEqual(row[4:10], [2, 1, 0, 1, 1, 0])   # attended, late, absent, paid, partial, unpaid
+        self.assertEqual(wb['تفاصيل الطلاب'].max_row, 6)  # title, subtitle, blank, header, 2 students
+
+    def today_month(self):
+        return timezone.localdate().replace(day=1)

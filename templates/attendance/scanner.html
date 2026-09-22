@@ -1318,18 +1318,17 @@
             </button>
         </div>
         <div class="modal-body">
-            <div class="mb-3">
-                <label class="form-label">التاريخ</label>
-                <input type="date" class="form-control" id="exportDate" value="{{ today|default:'' }}">
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" class="form-control" id="exportDate" value="{{ today|default:'' }}">
+                </div>
+                <div class="col-6">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" class="form-control" id="exportDateTo" value="{{ today|default:'' }}">
+                </div>
             </div>
-            <div class="mb-3">
-                <label class="form-label">نوع التقرير</label>
-                <select class="form-select" id="exportType">
-                    <option value="summary">ملخص الحضور</option>
-                    <option value="detailed">تفاصيل كاملة</option>
-                    <option value="students">قائمة الطلاب</option>
-                </select>
-            </div>
+            <small class="text-muted">ملف Excel منسّق: لكل حصة المدرس والمجموعة وعدد الحاضرين ومنهم المدفوع كامل والجزئي وغير المدفوع، وصفحة ثانية بتفاصيل كل طالب.</small>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary" onclick="closeExportModal()">إلغاء</button>
@@ -2532,13 +2531,11 @@ function closeExportModal() {
 
 function performExport() {
     const date = document.getElementById('exportDate').value;
-    const type = document.getElementById('exportType').value;
+    const dateTo = document.getElementById('exportDateTo').value || date;
     if (!date) { alert('التاريخ مطلوب'); return; }
 
-    // A plain GET download — the endpoint now returns a real CSV file
-    // (with a UTF-8 BOM so Excel shows Arabic correctly), so no fetch/Blob
-    // dance or CSRF token is needed for what is a read-only export.
-    const url = `{% url "attendance:export_report" %}?date=${encodeURIComponent(date)}&type=${encodeURIComponent(type)}`;
+    // A plain GET download of a formatted .xlsx (apps/reports/excel.py).
+    const url = `{% url "reports:attendance_excel" %}?date_from=${encodeURIComponent(date)}&date_to=${encodeURIComponent(dateTo)}`;
     window.location = url;
     closeExportModal();
 }
