@@ -247,3 +247,22 @@ class StudentReportTests(AttendanceTestMixin, TestCase):
         self.assertEqual(row['last'], timezone.localdate() - timedelta(days=2))
         self.assertContains(r, 'تقرير الطالب')
         self.assertContains(r, 'ولي الأمر هيدفع بكرة')
+
+
+class PaymentsExcelTests(AttendanceTestMixin, TestCase):
+    def test_payment_report_exports_every_row_as_xlsx(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from apps.payments.models import Payment
+        from django.contrib.auth import get_user_model
+        get_user_model().objects.create_user(username='boss2', password='pw12345!', role='admin')
+        self.client.login(username='boss2', password='pw12345!')
+        Payment.objects.create(student=self.student, group=self.group,
+                               month=timezone.localdate().replace(day=1),
+                               amount_due=Decimal('200'), amount_paid=Decimal('200'),
+                               status='paid', paid_on=timezone.localdate())
+        r = self.client.get(reverse('reports:payments'), {'export': 'xlsx'})
+        self.assertEqual(r.status_code, 200)
+        ws = load_workbook(BytesIO(r.content)).active
+        self.assertEqual(ws.cell(row=5, column=1).value, self.student.full_name)
+        self.assertEqual(ws.cell(row=5, column=10).value, timezone.localdate().isoformat())

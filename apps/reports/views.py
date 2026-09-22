@@ -583,6 +583,23 @@ def payment_report(request):
             if teacher_id_parsed is not None else payments.none()
         )
 
+    # ``?export=xlsx`` — every filtered row as a formatted workbook. Amounts
+    # are per-payment desk data (the same the table shows), so no admin gate
+    # beyond the page's own.
+    if request.GET.get('export') == 'xlsx':
+        from django.http import HttpResponse
+        from .excel import build_payments_workbook
+        parts = [f'الشهر {month}' if month else 'كل الشهور']
+        content = build_payments_workbook(payments, subtitle=' · '.join(parts))
+        response = HttpResponse(
+            content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = (
+            f'attachment; filename="payments_{month or timezone.localdate()}.xlsx"'
+        )
+        return response
+
     # Statistics — one aggregate instead of five round-trips. The money sums
     # are only requested (and only ever reach the template) for an admin.
     agg_kwargs = {

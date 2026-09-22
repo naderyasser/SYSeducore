@@ -8,7 +8,7 @@
 {% block extra_css %}
 <style>
     .report-header {
-        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        background: var(--hero-bg);
         border-radius: 16px;
         padding: 30px;
         color: #fff;
@@ -292,10 +292,10 @@
             <p class="mb-0 mt-2 opacity-75">متابعة وتتبع المدفوعات والمصروفات</p>
         </div>
         <div class="export-buttons">
-            <button class="btn-export excel" onclick="exportTableToExcel()">
+<a class="btn-export excel text-decoration-none" href="?{% if selected_month %}month={{ selected_month }}&{% endif %}{% if selected_status %}status={{ selected_status }}&{% endif %}{% if selected_group %}group={{ selected_group }}&{% endif %}{% if selected_teacher %}teacher={{ selected_teacher }}&{% endif %}export=xlsx">
                 <i class="bi bi-file-earmark-excel"></i>
                 تصدير Excel
-            </button>
+            </a>
         </div>
     </div>
     
@@ -501,26 +501,5 @@
 
 {% block extra_js %}
 <script>
-function exportTableToExcel() {
-    const table = document.getElementById('paymentsTable');
-    const rows = table.querySelectorAll('tr');
-    
-    let csv = '\ufeff'; // BOM for Arabic
-    rows.forEach(row => {
-        const cells = row.querySelectorAll('td, th');
-        const rowData = [];
-        cells.forEach((cell, index) => {
-            let text = cell.textContent.trim().replace(/,/g, ' ');
-            rowData.push(text);
-        });
-        csv += rowData.join(',') + '\n';
-    });
-    
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'payments_report_' + new Date().toISOString().split('T')[0] + '.csv';
-    link.click();
-}
 </script>
 {% endblock %}

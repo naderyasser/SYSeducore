@@ -193,3 +193,40 @@ def build_attendance_workbook(date_from, date_to, group_id=None):
     out = BytesIO()
     wb.save(out)
     return out.getvalue()
+
+
+def build_payments_workbook(payments, subtitle=''):
+    """The payment report's rows (already filtered by the page) as .xlsx —
+    every row, not the one page the old button scraped off the screen."""
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'المدفوعات'
+    headers = [
+        'الطالب', 'الكود', 'المجموعة', 'المدرس', 'الدورة / الشهر', 'المطلوب',
+        'المدفوع', 'المتبقي', 'الحالة', 'تاريخ الدفع',
+    ]
+    _title(ws, 'تقرير المدفوعات', subtitle, len(headers))
+    rows, due, paid = [], 0, 0
+    for p in payments.select_related('student', 'group', 'group__teacher', 'cycle'):
+        status = 'exempt' if p.is_exempt else p.status
+        due += float(p.amount_due or 0)
+        paid += float(p.amount_paid or 0)
+        rows.append([
+            p.student.full_name,
+            p.student.student_code,
+            p.group.group_name,
+            p.group.teacher.full_name if p.group.teacher_id else '—',
+            f'دورة {p.cycle.index}' if p.cycle_id else p.month.strftime('%Y-%m'),
+            float(p.amount_due or 0),
+            float(p.amount_paid or 0),
+            float((p.amount_due or 0) - (p.amount_paid or 0)),
+            PAY_AR.get(status, status),
+            p.paid_on.strftime('%Y-%m-%d') if p.paid_on else '',
+        ])
+    _write_table(
+        ws, 4, headers, rows, widths=[28, 12, 28, 22, 14, 11, 11, 11, 13, 13],
+        total=['الإجمالي', f'{len(rows)} سجل', '', '', '', due, paid, due - paid, '', ''],
+    )
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
