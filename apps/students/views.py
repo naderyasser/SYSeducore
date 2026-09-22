@@ -299,12 +299,29 @@ def _student_report(student, active_enrollments):
         'report_first_attendance': first_any,
         'report_last_attendance': last_any,
         'report_groups': rows,
-        'student_exceptions': (
+        'student_exceptions': _arabic_exceptions(
             ExceptionRecord.objects.filter(student=student)
             .select_related('group', 'approved_by')
             .order_by('-created_at')[:20]
         ),
     }
+
+
+def _arabic_only(label):
+    """'سبب آخر – Other' → 'سبب آخر': the choice labels carry an English
+    gloss the desk does not need on screen."""
+    for sep in (' – ', ' — ', ' - '):
+        if sep in label:
+            return label.split(sep)[0].strip()
+    return label
+
+
+def _arabic_exceptions(records):
+    rows = list(records)
+    for ex in rows:
+        ex.type_ar = _arabic_only(ex.get_exception_type_display())
+        ex.reason_ar = _arabic_only(ex.get_reason_type_display())
+    return rows
 
 
 def _payment_statement(student):
