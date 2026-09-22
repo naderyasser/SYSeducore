@@ -161,6 +161,7 @@
         grid-template-columns: repeat(3, 1fr);
         gap: 15px;
     }
+    .stats-grid.report-grid { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 
     .stat-box {
         text-align: center;
@@ -444,31 +445,141 @@
             </div>
         </div>
 
-        <!-- Attendance Stats -->
-        <div class="section-card">
+        <!-- Student report: attendance, money, dates — and edit from here -->
+        <div class="section-card" id="student-report">
             <div class="section-header">
                 <h5 class="section-title">
-                    <i class="bi bi-graph-up"></i>
-                    إحصائيات الحضور (آخر 30 يوم)
+                    <i class="bi bi-clipboard-data"></i>
+                    تقرير الطالب
                 </h5>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{% url 'students:update' student.student_id %}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil me-1"></i>تعديل البيانات</a>
+                    {% if user.is_supervisor and active_enrollments %}
+                    <button type="button" class="btn btn-sm btn-outline-success" onclick="showManualAttendance()"><i class="bi bi-hand-index me-1"></i>تسجيل حضور يدوي</button>
+                    {% endif %}
+                    <a href="{% url 'students:report' student.student_id %}" target="_blank" class="btn btn-sm btn-outline-dark"><i class="bi bi-printer me-1"></i>طباعة</a>
+                </div>
             </div>
             <div class="section-body">
-                <div class="stats-grid">
+                <div class="stats-grid report-grid">
                     <div class="stat-box">
-                        <div class="number text-success">{{ attendance_stats.present }}</div>
-                        <div class="label">حاضر</div>
+                        <div class="number text-success">{{ report_lifetime.present|add:report_lifetime.late }}</div>
+                        <div class="label">حضر (إجمالي)</div>
                     </div>
                     <div class="stat-box">
-                        <div class="number text-warning">{{ attendance_stats.late }}</div>
-                        <div class="label">متأخر</div>
+                        <div class="number text-warning">{{ report_lifetime.late }}</div>
+                        <div class="label">منهم متأخر</div>
                     </div>
                     <div class="stat-box">
-                        <div class="number text-danger">{{ attendance_stats.absent }}</div>
-                        <div class="label">غائب</div>
+                        <div class="number text-danger">{{ report_lifetime.absent }}</div>
+                        <div class="label">غاب (إجمالي)</div>
                     </div>
+                    <div class="stat-box">
+                        <div class="number text-info">{{ report_lifetime.excused }}</div>
+                        <div class="label">عذر</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number">{{ attendance_stats.present|add:attendance_stats.late }} <small class="text-muted fs-6">/ {{ attendance_stats.absent }} غ</small></div>
+                        <div class="label">آخر 30 يوم (حضور / غياب)</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number" style="font-size:1.05rem">{{ payment_totals.due|egp }}</div>
+                        <div class="label">المطلوب (إجمالي)</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number text-success" style="font-size:1.05rem">{{ payment_totals.paid|egp }}</div>
+                        <div class="label">المدفوع (إجمالي)</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="number {% if payment_totals.remaining > 0 %}text-danger{% else %}text-success{% endif %}" style="font-size:1.05rem">
+                            {% if payment_totals.remaining > 0 %}{{ payment_totals.remaining|egp }}{% else %}خالص{% endif %}
+                        </div>
+                        <div class="label">الحالة المالية</div>
+                    </div>
+                </div>
+                <p class="small text-muted mt-3 mb-2">
+                    <i class="bi bi-calendar-event me-1"></i>أول حضور: <strong>{{ report_first_attendance|date:"Y-m-d"|default:"—" }}</strong>
+                    <span class="mx-2">|</span>
+                    آخر حضور: <strong>{{ report_last_attendance|date:"Y-m-d"|default:"—" }}</strong>
+                    <span class="mx-2">|</span>
+                    مسجل في السيستم من: <strong>{{ student.created_at|date:"Y-m-d" }}</strong>
+                </p>
+                {% if report_groups %}
+                <div class="table-responsive">
+                    <table class="attendance-table report-groups-table">
+                        <thead>
+                            <tr>
+                                <th>المجموعة</th>
+                                <th>اشترك من</th>
+                                <th>بداية / آخر حضور</th>
+                                <th>حضر / غاب</th>
+                                <th>الدورة الحالية</th>
+                                <th>الدفع</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in report_groups %}
+                            <tr>
+                                <td><a href="{% url 'teachers:group_detail' r.group.group_id %}" class="fw-bold text-decoration-none">{{ r.group.group_name }}</a>
+                                    <small class="d-block text-muted">{{ r.group.teacher.full_name|default:"—" }}</small></td>
+                                <td class="text-nowrap">{{ r.enrollment.enrolled_at|date:"Y-m-d" }}</td>
+                                <td class="text-nowrap">{{ r.first|date:"Y-m-d"|default:"—" }}<small class="d-block text-muted">{{ r.last|date:"Y-m-d"|default:"—" }}</small></td>
+                                <td>{{ r.attended_count }} / <span class="text-danger">{{ r.absent_count }}</span></td>
+                                <td class="text-nowrap">
+                                    {% if r.cycle %}
+                                        دورة {{ r.cycle.index }}
+                                        <small class="d-block text-muted">{% if r.cycle.started_on %}من {{ r.cycle.started_on|date:"Y-m-d" }}{% else %}لم تبدأ{% endif %}</small>
+                                        {% if r.payment %}<small class="d-block">{{ r.payment.sessions_attended }}/{{ r.payment.sessions_total }} حصة</small>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    {% if r.enrollment.financial_status == 'exempt' %}<span class="badge bg-info">معفى</span>
+                                    {% elif not r.payment %}<span class="badge bg-secondary">لا يوجد سجل</span>
+                                    {% elif r.payment.status == 'paid' %}<span class="badge bg-success">مدفوع</span>
+                                    {% elif r.payment.status == 'partial' %}<span class="badge bg-warning text-dark">جزئي {{ r.payment.amount_paid|egp }}</span>
+                                    {% else %}<span class="badge bg-danger">غير مدفوع {{ r.payment.amount_due|egp }}</span>{% endif %}
+                                    {% if r.payment.paid_on %}<small class="d-block text-success">دفع يوم {{ r.payment.paid_on|date:"Y-m-d" }}</small>{% endif %}
+                                    {% if r.enrollment.grace_until and r.enrollment.grace_until >= today %}<small class="d-block text-warning">مهلة حتى {{ r.enrollment.grace_until|date:"Y-m-d" }}</small>{% endif %}
+                                </td>
+                                <td class="text-nowrap">
+                                    <button class="btn btn-sm btn-outline-success" onclick="collectPayment({{ r.group.group_id }}, '{{ r.group.group_name|escapejs }}')" title="تسجيل دفع"><i class="bi bi-cash-coin"></i></button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if student_exceptions %}
+        <!-- Exceptions granted, with the reason written for each -->
+        <div class="section-card">
+            <div class="section-header">
+                <h5 class="section-title"><i class="bi bi-shield-check"></i>الاستثناءات</h5>
+            </div>
+            <div class="section-body p-0">
+                <div class="table-responsive">
+                    <table class="attendance-table">
+                        <thead><tr><th>التاريخ</th><th>المجموعة</th><th>النوع</th><th>السبب والملاحظات</th><th>بواسطة</th></tr></thead>
+                        <tbody>
+                            {% for ex in student_exceptions %}
+                            <tr>
+                                <td class="text-nowrap">{{ ex.created_at|date:"Y-m-d" }}</td>
+                                <td>{{ ex.group.group_name|default:"كل المجموعات" }}</td>
+                                <td>{{ ex.get_exception_type_display }}</td>
+                                <td>{{ ex.reason_display }}</td>
+                                <td>{% if ex.approved_by %}{{ ex.approved_by.get_full_name|default:ex.approved_by.username }}{% else %}—{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- Recent Attendance -->
         <div class="section-card">

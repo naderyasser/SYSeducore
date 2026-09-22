@@ -239,8 +239,72 @@ def student_detail(request, student_id):
         'today': timezone.localdate(),
     }
     context.update(_payment_statement(student))
+    context.update(_student_report(student, active_enrollments))
 
     return render(request, 'students/detail.html', context)
+
+
+def _student_report(student, active_enrollments):
+    """
+    The full picture on the student's own page — client, 2026-09-22: "حضر كام
+    يوم، اتأخر كام، اخر 30 يوم، المطلوب كام، المدفوع كام، حالته، بداية حضوره
+    امتى وخلص امتى، وامكانية التعديل من نفس الصفحة".
+
+    All-time attendance counts, and per group: when the student joined, their
+    first and latest lesson, the current cycle (dates, lessons used) with its
+    payment and paid-on date, and any grace period. Exceptions granted to the
+    student, with the reason written for them, are listed too.
+    """
+    from apps.attendance.models import ExceptionRecord
+    from apps.teachers.models import GroupCycle
+
+    lifetime = Attendance.objects.filter(student=student).aggregate(
+        present=Count('pk', filter=Q(status='present')),
+        late=Count('pk', filter=Q(status='late')),
+        absent=Count('pk', filter=Q(status='absent')),
+        excused=Count('pk', filter=Q(status='exception')),
+    )
+    attended_qs = Attendance.objects.filter(student=student).exclude(status='absent')
+    first_any = attended_qs.order_by('session__session_date').values_list('session__session_date', flat=True).first()
+    last_any = attended_qs.order_by('-session__session_date').values_list('session__session_date', flat=True).first()
+
+    rows = []
+    for enr in active_enrollments:
+        group = enr.group
+        attended = attended_qs.filter(session__group=group)
+        cycle = (
+            GroupCycle.objects.filter(group=group, closed_on__isnull=True).first()
+            if group.sessions_per_month else None
+        )
+        payment = (
+            Payment.objects.filter(student=student, cycle=cycle).first() if cycle
+            else Payment.objects.filter(
+                student=student, group=group, cycle__isnull=True,
+                month=timezone.localdate().replace(day=1),
+            ).first()
+        )
+        rows.append({
+            'enrollment': enr,
+            'group': group,
+            'first': attended.order_by('session__session_date').values_list('session__session_date', flat=True).first(),
+            'last': attended.order_by('-session__session_date').values_list('session__session_date', flat=True).first(),
+            'attended_count': attended.count(),
+            'absent_count': Attendance.objects.filter(student=student, session__group=group, status='absent').count(),
+            'cycle': cycle,
+            'payment': payment,
+        })
+
+    return {
+        'report_lifetime': lifetime,
+        'report_first_attendance': first_any,
+        'report_last_attendance': last_any,
+        'report_groups': rows,
+        'student_exceptions': (
+            ExceptionRecord.objects.filter(student=student)
+            .select_related('group', 'approved_by')
+            .order_by('-created_at')[:20]
+        ),
+    }
 
 
 def _payment_statement(student):

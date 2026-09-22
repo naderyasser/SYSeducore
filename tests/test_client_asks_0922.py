@@ -224,3 +224,26 @@ class AttendanceExcelTests(AttendanceTestMixin, TestCase):
 
     def today_month(self):
         return timezone.localdate().replace(day=1)
+
+
+class StudentReportTests(AttendanceTestMixin, TestCase):
+    """تقرير الطالب: حضر كام، اتأخر كام، آخر 30 يوم، المطلوب والمدفوع، البداية والنهاية."""
+
+    def test_student_page_carries_the_full_report(self):
+        from apps.attendance.models import ExceptionRecord
+        self.client.login(username='sup_att', password='TestPass123!')
+        self._attend(day_offset=-3, status='present')
+        self._attend(day_offset=-2, status='late')
+        self._attend(day_offset=-1, status='absent')
+        ExceptionRecord.objects.create(student=self.student, group=self.group,
+                                       exception_type='payment', reason_type='other',
+                                       custom_reason='ولي الأمر هيدفع بكرة')
+        r = self.client.get(reverse('students:detail', args=[self.student.pk]))
+        self.assertEqual(r.context['report_lifetime']['present'], 1)
+        self.assertEqual(r.context['report_lifetime']['late'], 1)
+        self.assertEqual(r.context['report_lifetime']['absent'], 1)
+        row = r.context['report_groups'][0]
+        self.assertEqual(row['first'], timezone.localdate() - timedelta(days=3))
+        self.assertEqual(row['last'], timezone.localdate() - timedelta(days=2))
+        self.assertContains(r, 'تقرير الطالب')
+        self.assertContains(r, 'ولي الأمر هيدفع بكرة')
