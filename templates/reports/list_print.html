@@ -1,0 +1,118 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} - {{ printed_at|date:"Y-m-d" }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        @font-face {
+            font-family: 'Cairo';
+            src: url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype-variations'),
+                 url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype');
+            font-weight: 200 1000;
+            font-style: normal;
+        }
+        * { font-family: 'Cairo', sans-serif; }
+        body { background: #f5f6fa; padding: 20px; }
+        .sheet {
+            background: #fff;
+            max-width: 1100px;
+            margin: 0 auto 30px;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .sheet-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            border-bottom: 2px solid #1e3a8a;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+        }
+        .sheet-header img { width: 48px; height: 48px; border-radius: 10px; }
+        .sheet-header h2 { margin: 0; color: #1e3a8a; font-size: 1.4rem; }
+        .filters { font-size: 0.85rem; color: #374151; }
+        .sheet-meta { font-size: 0.8rem; color: #6b7280; text-align: left; white-space: nowrap; }
+        .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+        .stats div { border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px 12px; font-size: 0.85rem; }
+        .stats b { color: #1e3a8a; }
+        .truncated { font-size: 0.85rem; color: #991b1b; margin-bottom: 8px; }
+        table.list { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+        table.list th, table.list td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: center; }
+        table.list td.name { text-align: right; white-space: nowrap; }
+        table.list thead th { background: #eef2ff; }
+        table.list tbody tr:nth-child(even) { background: #f8fafc; }
+        @media screen and (max-width: 900px) {
+            body { padding: 12px; }
+            .sheet { overflow-x: auto; }
+            .sheet-header { flex-wrap: wrap; }
+            .sheet-meta { text-align: right; }
+        }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .no-print { display: none !important; }
+            .sheet { box-shadow: none; margin: 0; max-width: 100%; padding: 0; }
+            @page { size: A4; margin: 10mm; }
+            table.list tr { page-break-inside: avoid; }
+            table.list thead { display: table-header-group; }
+            table.list tbody tr:nth-child(even) { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+    <div class="no-print text-center mb-3">
+        <button class="btn btn-primary" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>
+        <button class="btn btn-outline-secondary" onclick="history.length > 1 ? history.back() : window.close()">رجوع</button>
+    </div>
+    <div class="sheet">
+        <div class="sheet-header">
+            <div class="d-flex align-items-center gap-2">
+                <img src="{% static 'icons/logo.svg' %}" alt="بداية">
+                <div>
+                    <h2>{{ title }}</h2>
+                    <div class="filters">{{ filters|join:" · " }}</div>
+                </div>
+            </div>
+            <div class="sheet-meta">
+                عدد السجلات: {{ total }}<br>
+                طُبع في {{ printed_at|date:"Y-m-d H:i" }}
+            </div>
+        </div>
+        <div class="stats">
+            {% for label, value in stats %}
+            <div>{{ label }}: <b>{{ value }}</b></div>
+            {% endfor %}
+        </div>
+        {% if truncated %}
+        <div class="truncated">يعرض أول {{ rows|length }} سجل فقط من {{ total }} — ضيّق الفلتر (التاريخ أو الشهر) لطباعة الباقي.</div>
+        {% endif %}
+        <table class="list">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    {% for col in columns %}<th>{{ col }}</th>{% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    {% for cell in row %}<td{% if forloop.first %} class="name"{% endif %}>{{ cell }}</td>{% endfor %}
+                </tr>
+                {% empty %}
+                <tr><td colspan="{{ columns|length|add:1 }}">لا توجد سجلات بهذا الفلتر</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <script>
+        // Opened from the report's print button: go straight to the print dialog.
+        window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });
+    </script>
+</body>
+</html>

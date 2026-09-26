@@ -266,6 +266,11 @@
         transition: all 0.2s;
     }
 
+    .btn-export.print {
+        background: #fff;
+        color: #1e3a8a;
+    }
+
     .btn-export.excel {
         background: #fff;
         color: #065f46;
@@ -295,6 +300,12 @@
 <a class="btn-export excel text-decoration-none" href="?{% if selected_month %}month={{ selected_month }}&{% endif %}{% if selected_status %}status={{ selected_status }}&{% endif %}{% if selected_group %}group={{ selected_group }}&{% endif %}{% if selected_teacher %}teacher={{ selected_teacher }}&{% endif %}export=xlsx">
                 <i class="bi bi-file-earmark-excel"></i>
                 تصدير Excel
+            </a>
+            {% comment %} Prints every filtered row (the current query string + print=1), not just this page. {% endcomment %}
+            <a class="btn-export print text-decoration-none" target="_blank" rel="noopener"
+               href="?{% for k, v in request.GET.items %}{% if k != 'page' and k != 'print' and k != 'export' %}{{ k }}={{ v|urlencode }}&{% endif %}{% endfor %}print=1">
+                <i class="bi bi-printer"></i>
+                طباعة
             </a>
         </div>
     </div>

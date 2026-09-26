@@ -437,10 +437,11 @@
                     <span class="input-group-text">اختياري</span>
                 </div>
             </div>
-            <button class="btn-pay full"
-                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name|escapejs }}', {% localize off %}{{ payment.amount_due }}{% endlocalize %})">
+            {# The button collects what is still owed, so it shows the remaining amount, not the full fee. #}
+            <button class="btn-pay full" data-remaining="{% localize off %}{{ payment.remaining }}{% endlocalize %}"
+                    onclick="payAndActivate({{ payment.payment_id }}, {{ payment.student.student_id }}, '{{ payment.student.full_name|escapejs }}', Number(this.dataset.remaining))">
                 <i class="bi bi-check-circle-fill"></i>
-                تسديد كامل {{ payment.amount_due|egp }} + تفعيل اشتراك
+                <span class="pay-full-label">{% if payment.amount_paid %}تسديد الباقي{% else %}تسديد كامل{% endif %} {{ payment.remaining|egp }}</span> + تفعيل اشتراك
             </button>
             {% else %}
             <div class="btn-pay done">
@@ -584,6 +585,13 @@ function updateCardAmounts(paymentId, data) {
     const rem = card.querySelector('[data-field="remaining"]');
     if (rem) rem.innerHTML = `${formatMoney(data.remaining)} <small>ج.م</small>`;
 
+    const fullBtn = card.querySelector('.btn-pay.full');
+    if (fullBtn && data.status !== 'paid') {
+        fullBtn.dataset.remaining = data.remaining;
+        const label = fullBtn.querySelector('.pay-full-label');
+        if (label) label.textContent = `تسديد الباقي ${formatEgp(data.remaining)}`;
+    }
+
     const badge = card.querySelector('.status-badge');
     if (badge) {
         if (data.status === 'paid') {
@@ -616,8 +624,8 @@ function updateCardAmounts(paymentId, data) {
     }
 }
 
-function payAndActivate(paymentId, studentId, studentName, amountDue) {
-    if (!confirm(`هل تريد تسديد ${formatEgp(amountDue)} وتفعيل اشتراك "${studentName}" لمدة 30 يوم؟`)) return;
+function payAndActivate(paymentId, studentId, studentName, amountRemaining) {
+    if (!confirm(`هل تريد تسديد ${formatEgp(amountRemaining)} وتفعيل اشتراك "${studentName}" لمدة 30 يوم؟`)) return;
 
     showLoading();
 

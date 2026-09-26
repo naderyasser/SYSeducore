@@ -695,6 +695,19 @@ def room_slot_create(request, room_id):
 def room_delete(request, room_id):
     room = get_object_or_404(Room, pk=room_id)
     if request.method == 'POST':
+        # A hidden room would still be booked by these groups' schedules.
+        in_use = list(
+            GroupSchedule.objects.filter(
+                room=room, group__is_active=True, group__deleted_at__isnull=True,
+            ).values_list('group__group_name', flat=True).distinct()[:5]
+        )
+        if in_use:
+            messages.error(
+                request,
+                f'لا يمكن حذف القاعة "{room.name}" — مستخدمة في مواعيد مجموعات نشطة: '
+                f'{"، ".join(in_use)}. انقل مواعيدها لقاعة أخرى أولاً.'
+            )
+            return redirect('teachers:room_detail', room_id=room.pk)
         room.soft_delete(user=request.user)
         ActivityLog.log(
             user=request.user, action='room_delete',

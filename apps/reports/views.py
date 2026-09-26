@@ -424,6 +424,25 @@ def dashboard(request):
 
 # ==================== Attendance report ====================
 
+# Printing one of the list reports prints every filtered row, not the
+# 25-row page on screen. The cap keeps a runaway "all time" print from
+# building a multi-thousand-row page; the sheet says when it was cut.
+PRINT_ROW_LIMIT = 3000
+
+
+def _render_list_print(request, *, title, filters, stats, columns, rows, total):
+    return render(request, 'reports/list_print.html', {
+        'title': title,
+        'filters': [f for f in filters if f],
+        'stats': stats,
+        'columns': columns,
+        'rows': rows,
+        'total': total,
+        'truncated': total > len(rows),
+        'printed_at': timezone.localtime(),
+    })
+
+
 @login_required
 def attendance_report(request):
     """
@@ -475,6 +494,42 @@ def attendance_report(request):
 
     # Group filter options
     groups = Group.objects.filter(is_active=True)
+
+    if request.GET.get('print'):
+        group_name = (
+            groups.filter(group_id=_parse_int_param(group_id)).values_list('group_name', flat=True).first()
+            if group_id else None
+        )
+        status_label = dict(Attendance.STATUS_CHOICES).get(status)
+        rows = [
+            [
+                a.student.full_name, a.student.student_code or '',
+                a.session.group.group_name, a.session.group.teacher.full_name if a.session.group.teacher else '',
+                a.session.session_date.strftime('%Y-%m-%d'),
+                timezone.localtime(a.scan_time).strftime('%H:%M') if a.scan_time else '',
+                a.get_status_display(),
+            ]
+            for a in attendances[:PRINT_ROW_LIMIT]
+        ]
+        return _render_list_print(
+            request,
+            title='تقرير الحضور',
+            filters=[
+                f'من {date_from}' if date_from else '',
+                f'إلى {date_to}' if date_to else '',
+                f'المجموعة: {group_name}' if group_name else '',
+                f'الحالة: {status_label}' if status_label else '',
+            ],
+            stats=[
+                ('إجمالي السجلات', stats['total'] or 0),
+                ('حاضر', stats['present'] or 0),
+                ('متأخر', stats['late'] or 0),
+                ('غائب', stats['absent'] or 0),
+            ],
+            columns=['الطالب', 'الكود', 'المجموعة', 'المدرس', 'التاريخ', 'الوقت', 'الحالة'],
+            rows=rows,
+            total=stats['total'] or 0,
+        )
 
     # Pagination
     paginator = Paginator(attendances, 25)
@@ -617,6 +672,53 @@ def payment_report(request):
     # Group and teacher filter options
     groups = Group.objects.filter(is_active=True)
     teachers = Teacher.objects.filter(is_active=True)
+
+    if request.GET.get('print'):
+        from apps.core.templatetags.money_format import egp
+        group_name = (
+            groups.filter(group_id=_parse_int_param(group_id)).values_list('group_name', flat=True).first()
+            if group_id else None
+        )
+        teacher_name = (
+            teachers.filter(teacher_id=_parse_int_param(teacher_id)).values_list('full_name', flat=True).first()
+            if teacher_id else None
+        )
+        status_label = dict(Payment.STATUS_CHOICES).get(status)
+        rows = [
+            [
+                p.student.full_name, p.group.group_name if p.group else '',
+                p.month.strftime('%Y-%m') if p.month else '',
+                egp(p.amount_due), egp(p.amount_paid), egp(p.remaining),
+                timezone.localtime(p.payment_date).strftime('%Y-%m-%d') if p.payment_date else '',
+                p.get_status_display(),
+            ]
+            for p in payments[:PRINT_ROW_LIMIT]
+        ]
+        print_stats = [
+            ('مدفوع بالكامل', stats['paid'] or 0),
+            ('جزئي', stats['partial'] or 0),
+            ('غير مدفوع', stats['unpaid'] or 0),
+        ]
+        if show_financials:
+            print_stats += [
+                ('إجمالي المستحق', egp(total_due)),
+                ('إجمالي المحصل', egp(total_paid)),
+                ('المتبقي', egp(total_due - total_paid)),
+            ]
+        return _render_list_print(
+            request,
+            title='سجل المدفوعات',
+            filters=[
+                f'الشهر: {month}' if month else 'كل الشهور',
+                f'الحالة: {status_label}' if status_label else '',
+                f'المجموعة: {group_name}' if group_name else '',
+                f'المدرس: {teacher_name}' if teacher_name else '',
+            ],
+            stats=print_stats,
+            columns=['الطالب', 'المجموعة', 'الشهر', 'المستحق', 'المدفوع', 'المتبقي', 'تاريخ الدفع', 'الحالة'],
+            rows=rows,
+            total=payments.count(),
+        )
 
     # Pagination
     paginator = Paginator(payments, 25)
