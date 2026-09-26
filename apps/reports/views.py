@@ -105,6 +105,20 @@ def parse_month_param(value):
     return None
 
 
+def _reportable_payments():
+    """
+    Payments the money reports count. A due that belongs to a student or
+    group in the recycle bin — with nothing collected on it — is not owed to
+    anyone any more; it inflated "المستحق"/"المتبقي" while the desk page and
+    the dashboard's pending list already hid it. Anything actually collected
+    stays: that money was taken.
+    """
+    return Payment.objects.exclude(
+        (Q(student__deleted_at__isnull=False) | Q(group__deleted_at__isnull=False))
+        & Q(amount_paid=0)
+    )
+
+
 def _month_filter(queryset, month_start, field='month'):
     """Restrict ``queryset`` to a single calendar month, range-style."""
     return queryset.filter(**{
@@ -245,7 +259,7 @@ def dashboard(request):
         # swept in every future-dated row that ``roll_group_cycles`` bulk
         # creates for groups whose cycle already closed, so "this month"
         # kept growing by every upcoming month's dues (dashboard-month-gte-future-payments).
-        month_totals = _month_filter(Payment.objects.all(), this_month_start).aggregate(
+        month_totals = _month_filter(_reportable_payments(), this_month_start).aggregate(
             total_due=Sum('amount_due'),
             total_paid=Sum('amount_paid'),
         )
@@ -608,7 +622,7 @@ def payment_report(request):
     teacher_id = request.GET.get('teacher')
 
     # Base queryset
-    payments = Payment.objects.select_related(
+    payments = _reportable_payments().select_related(
         'student', 'group', 'group__teacher'
     ).order_by('-month', '-payment_date')
 
@@ -770,7 +784,7 @@ def financial_report(request):
     monthly_rows = {
         row['bucket']: row
         for row in (
-            Payment.objects
+            _reportable_payments()
             .filter(month__gte=range_start, month__lt=range_end)
             .annotate(bucket=TruncMonth('month'))
             .values('bucket')
@@ -1250,7 +1264,7 @@ def monthly_financial_summary(request):
         timezone.localdate().replace(day=1)
 
     # All payments for the selected month
-    payments_qs = Payment.objects.filter(month=report_month).select_related(
+    payments_qs = _reportable_payments().filter(month=report_month).select_related(
         'student', 'group', 'group__teacher'
     ).order_by('status', '-amount_due')
 
@@ -1449,7 +1463,7 @@ def comprehensive_report(request):
     # ── المدفوعات في المدى ──
     # ``month`` هو أول يوم في شهر الفوترة، فالمدى يُقارن على مستوى الشهر
     # حتى لا يسقط شهر بدأ قبل ``date_from`` بأيام.
-    payments = Payment.objects.filter(
+    payments = _reportable_payments().filter(
         month__gte=date_from.replace(day=1), month__lte=date_to,
     ).select_related('student', 'group', 'group__teacher')
     if group_id is not None:

@@ -6,10 +6,14 @@ Rows of the groups directory — rendered standalone for the live-search
 {% for group in groups %}
 <tr>
     <td>
+        {% if user.is_supervisor %}
         <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
            class="fw-semibold text-decoration-none">
             <i class="bi bi-box-arrow-up-left me-1 small"></i>{{ group.group_name }}
         </a>
+        {% else %}
+        <span class="fw-semibold">{{ group.group_name }}</span>
+        {% endif %}
     </td>
     <td>
         {% comment %} Clicking a teacher re-runs the search for them: the fastest path from
@@ -41,20 +45,22 @@ Rows of the groups directory — rendered standalone for the live-search
         {% endif %}
     </td>
     <td class="table-actions">
+        {% if user.is_supervisor %}
         <a href="{% url 'teachers:group_detail' group_id=group.group_id %}"
            class="btn btn-sm btn-outline-info" title="عرض تفاصيل المجموعة">
             <i class="bi bi-eye me-1"></i>عرض
         </a>
-        {% if user.is_supervisor %}
         <a href="{% url 'teachers:group_update' group_id=group.group_id %}" class="btn btn-sm btn-outline-primary" title="تعديل">
             <i class="bi bi-pencil"></i>
         </a>
-        <form method="post" action="{% url 'teachers:group_delete' group_id=group.group_id %}" class="d-inline">
+        {% if user.is_admin %}
+            <form method="post" action="{% url 'teachers:group_delete' group_id=group.group_id %}" class="d-inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذه المجموعة؟')">
                 <i class="bi bi-trash"></i>
             </button>
         </form>
+            {% endif %}
         {% endif %}
     </td>
 </tr>

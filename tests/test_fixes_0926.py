@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from apps.attendance.models import Attendance, Session
 from apps.payments.models import Payment
+from apps.students.models import Student
 from apps.teachers.models import Room
 from tests.test_attendance import AttendanceTestMixin
 
@@ -142,3 +143,58 @@ class ScannerExportDateTests(AttendanceTestMixin, TestCase):
         self.client.login(username='sup_att', password='TestPass123!')
         r = self.client.get(reverse('attendance:scanner'))
         self.assertContains(r, f'id="exportDate" value="{timezone.localdate().isoformat()}"')
+
+
+class RoleButtonTests(AttendanceTestMixin, TestCase):
+    """Buttons a role cannot use are not shown to it (they used to 403)."""
+
+    def setUp(self):
+        super().setUp()
+        User.objects.create_user(username='tch_btn', password='TestPass123!', role='teacher')
+
+    def test_teacher_sees_no_edit_or_group_links(self):
+        self.client.login(username='tch_btn', password='TestPass123!')
+        r = self.client.get(reverse('students:list'))
+        self.assertNotContains(r, reverse('students:update', args=[self.student.pk]))
+        self.assertNotContains(r, reverse('teachers:group_detail', args=[self.group.pk]))
+        r = self.client.get(reverse('teachers:list'))
+        self.assertNotContains(r, reverse('teachers:update', args=[self.teacher.pk]))
+        r = self.client.get(reverse('teachers:room_list'))
+        self.assertNotContains(r, reverse('teachers:room_update', args=[self.room.pk]))
+
+    def test_supervisor_edits_but_does_not_see_admin_deletes(self):
+        self.client.login(username='sup_att', password='TestPass123!')
+        r = self.client.get(reverse('teachers:list'))
+        self.assertContains(r, reverse('teachers:update', args=[self.teacher.pk]))
+        self.assertNotContains(r, reverse('teachers:delete', args=[self.teacher.pk]))
+        r = self.client.get(reverse('teachers:group_list'))
+        self.assertContains(r, reverse('teachers:group_detail', args=[self.group.pk]))
+        self.assertNotContains(r, reverse('teachers:group_delete', args=[self.group.pk]))
+
+
+class DeletedDuesTests(AttendanceTestMixin, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        User.objects.create_user(username='adm_dues', password='TestPass123!', role='admin')
+        self.client.login(username='adm_dues', password='TestPass123!')
+        self.month = timezone.localdate().replace(day=1)
+
+    def test_unpaid_due_of_a_deleted_student_leaves_the_totals_collected_money_stays(self):
+        Payment.objects.create(student=self.student, group=self.group, month=self.month,
+                               amount_due=Decimal('200'), amount_paid=Decimal('0'))
+        gone = Student.objects.create(student_code='GONE1', full_name='طالب محذوف', gender='male',
+                                      parent_phone='01098765400', student_phone='01011111100')
+        Payment.objects.create(student=gone, group=self.group, month=self.month,
+                               amount_due=Decimal('300'), amount_paid=Decimal('0'))
+        paid_gone = Student.objects.create(student_code='GONE2', full_name='طالب محذوف دافع', gender='male',
+                                           parent_phone='01098765401', student_phone='01011111101')
+        Payment.objects.create(student=paid_gone, group=self.group, month=self.month,
+                               amount_due=Decimal('100'), amount_paid=Decimal('100'))
+        gone.soft_delete()
+        paid_gone.soft_delete()
+        r = self.client.get(reverse('reports:payments') + f'?month={self.month:%Y-%m}')
+        self.assertEqual(r.context['total_due'], Decimal('300'))     # 200 live + 100 collected
+        self.assertEqual(r.context['total_paid'], Decimal('100'))
+        r = self.client.get(reverse('reports:dashboard'))
+        self.assertEqual(r.context['month_total_due'], Decimal('300'))

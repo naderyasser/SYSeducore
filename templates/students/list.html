@@ -781,8 +781,12 @@
                 <td class="groups-cell">
                     {% if student.active_enrollments %}
                         {% for enrollment in student.active_enrollments %}
+                        {% if user.is_supervisor %}
                         <a href="{% url 'teachers:group_detail' group_id=enrollment.group.group_id %}"
                            class="group-tag text-decoration-none">{{ enrollment.group.group_name }}</a>
+                        {% else %}
+                        <span class="group-tag">{{ enrollment.group.group_name }}</span>
+                        {% endif %}
                         {% endfor %}
                     {% else %}
                         <span class="group-tag empty">غير مسجل</span>
@@ -814,12 +818,14 @@
                     <a href="{% url 'students:id_card' student_id=student.student_id %}" target="_blank" class="action-btn id-card" title="عرض/طباعة البطاقة">
                         <i class="bi bi-card-heading"></i>
                     </a>
+                    {% if user.is_supervisor %}
                     <a href="{% url 'students:update' student_id=student.student_id %}" class="action-btn edit" title="تعديل">
                         <i class="bi bi-pencil"></i>
                     </a>
                     <button class="action-btn delete" onclick="confirmDeleteStudent({{ student.student_id }}, '{{ student.full_name|escapejs }}')" title="حذف">
                         <i class="bi bi-trash"></i>
                     </button>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}

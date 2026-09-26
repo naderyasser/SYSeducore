@@ -342,7 +342,7 @@ class Group(SoftDeleteModel):
         verbose_name="نسبة السنتر %"
     )
     sessions_per_month = models.PositiveIntegerField(
-        default=4,
+        default=8,
         validators=[MaxValueValidator(MAX_SESSIONS_PER_CYCLE)],
         verbose_name="عدد الحصص في الشهر",
         help_text=(

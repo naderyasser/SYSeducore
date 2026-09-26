@@ -8,9 +8,11 @@
         <i class="bi bi-book"></i> {{ subject.name }}
     </h1>
     <div class="user-info">
+        {% if user.is_supervisor %}
         <a href="{% url 'teachers:subject_update' subject.id %}" class="btn btn-warning btn-sm">
             <i class="bi bi-pencil"></i> تعديل
         </a>
+        {% endif %}
     </div>
 </div>
 

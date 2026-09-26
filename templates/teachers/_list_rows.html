@@ -48,20 +48,24 @@ find out defeats the point.
         <a href="{% url 'teachers:detail' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-primary" title="عرض">
             <i class="bi bi-eye"></i>
         </a>
+        {% if user.is_supervisor %}
         <a href="{% url 'teachers:update' teacher_id=teacher.teacher_id %}" class="btn btn-sm btn-outline-warning" title="تعديل">
             <i class="bi bi-pencil"></i>
         </a>
+        {% endif %}
         {% if user.can_see_financials %}
         <a href="{% url 'payments:settlement_index' %}" class="btn btn-sm btn-outline-success" title="كشف التصفية">
             <i class="bi bi-calculator"></i>
         </a>
         {% endif %}
+        {% if user.is_admin %}
         <form method="post" action="{% url 'teachers:delete' teacher_id=teacher.teacher_id %}" class="d-inline">
             {% csrf_token %}
             <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('هل أنت متأكد من حذف هذا المدرس؟')">
                 <i class="bi bi-trash"></i>
             </button>
         </form>
+        {% endif %}
     </td>
 </tr>
 {% if is_search %}

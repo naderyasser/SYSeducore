@@ -246,10 +246,12 @@
     </div>
 
     <div class="calendar-actions">
+        {% if user.is_supervisor %}
         <a href="{% url 'teachers:booking_create' %}" class="btn-action btn-primary">
             <i class="bi bi-plus-circle"></i>
             حجز موعد جديد
         </a>
+        {% endif %}
         <a href="{% url 'teachers:group_list' %}" class="btn-action btn-secondary">
             <i class="bi bi-list-ul"></i>
             قائمة المجموعات

@@ -518,10 +518,12 @@
                 {% endif %}
 
                 <div class="teacher-actions">
+                    {% if user.is_supervisor %}
                     <a href="{% url 'teachers:booking_create_for_teacher' teacher.teacher_id %}" class="btn-book">
                         <i class="bi bi-calendar-plus me-1"></i>
                         حجز موعد
                     </a>
+                    {% endif %}
                     <a href="{% url 'teachers:detail' teacher.teacher_id %}" class="btn-view">
                         <i class="bi bi-person me-1"></i>
                         الملف الشخصي

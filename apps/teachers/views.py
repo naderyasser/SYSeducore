@@ -1436,7 +1436,7 @@ def booking_create(request, teacher_id=None):
         'education_year': (data.get('education_year') or '').strip(),
         'standard_fee': data.get('standard_fee') or '0',
         'center_percentage': data.get('center_percentage') or '30',
-        'sessions_per_month': data.get('sessions_per_month') or 4,
+        'sessions_per_month': data.get('sessions_per_month') or 8,
         'is_active': True,
     })
 

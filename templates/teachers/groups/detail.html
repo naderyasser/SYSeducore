@@ -423,6 +423,7 @@
                 <i class="bi bi-pencil"></i>
                 تعديل
             </a>
+            {% if user.is_admin %}
             <form method="post" action="{% url 'teachers:group_delete' group.group_id %}" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit" class="btn-action btn-danger" onclick="return confirm('هل أنت متأكد من حذف هذه المجموعة؟')">
@@ -430,6 +431,7 @@
                     حذف
                 </button>
             </form>
+            {% endif %}
         </div>
     </div>
 

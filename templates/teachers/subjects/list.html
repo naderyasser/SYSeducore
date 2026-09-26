@@ -77,15 +77,19 @@
                                    class="btn btn-sm btn-info" title="عرض التفاصيل">
                                     <i class="bi bi-eye"></i>
                                 </a>
+                                {% if user.is_supervisor %}
                                 <a href="{% url 'teachers:subject_update' item.subject.id %}" 
                                    class="btn btn-sm btn-warning" title="تعديل">
                                     <i class="bi bi-pencil"></i>
                                 </a>
+                                {% endif %}
+                                {% if user.is_admin %}
                                 <a href="{% url 'teachers:subject_delete' item.subject.id %}" 
                                    class="btn btn-sm btn-danger" title="حذف"
                                    onclick="return confirm('هل تريد حذف هذه المادة؟')">
                                     <i class="bi bi-trash"></i>
                                 </a>
+                                {% endif %}
                             </td>
                         </tr>
                         {% endfor %}

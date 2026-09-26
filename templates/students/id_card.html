@@ -366,9 +366,9 @@
         <button class="btn btn-primary" onclick="window.print()">
             <i class="bi bi-printer me-1"></i>طباعة البطاقة
         </button>
-        <a href="{% url 'students:update' student_id=student.student_id %}" class="btn btn-outline-primary">
+        {% if user.is_supervisor %}<a href="{% url 'students:update' student_id=student.student_id %}" class="btn btn-outline-primary">
             <i class="bi bi-pencil me-1"></i>تعديل البيانات
-        </a>
+        </a>{% endif %}
     </div>
 
     <!-- Front of ID Card -->

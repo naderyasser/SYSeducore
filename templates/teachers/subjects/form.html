@@ -74,7 +74,7 @@
         </div>
     </div>
 
-    {% if subject %}
+    {% if subject and user.is_admin %}
     <div class="mt-4" style="max-width: 600px; margin-left: auto; margin-right: auto;">
         <div class="card border-danger">
             <div class="card-header bg-danger-light text-dark">
