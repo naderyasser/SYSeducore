@@ -2,7 +2,7 @@
 {% load money_format %}
 
 {% block title %}كشف تصفية - {{ settlement.teacher.full_name }}{% endblock %}
-{% block page_title %}كشف تصفية: {{ settlement.teacher.full_name }}{% endblock %}
+{% block page_title %}كشف تصفية: {{ settlement.teacher.full_name }} {% include 'includes/_new_badge.html' %}{% endblock %}
 
 {% block extra_css %}
 <style>

@@ -1063,7 +1063,7 @@
         <div class="main-content">
             <!-- Scan Input Section -->
             <div class="scan-input-section">
-                <h2><i class="bi bi-qr-code-scan"></i> تسجيل حضور الطلاب</h2>
+                <h2><i class="bi bi-qr-code-scan"></i> تسجيل حضور الطلاب {% include 'includes/_new_badge.html' %}</h2>
                 <p>امسح كود QR أو أدخل كود الطالب يدويًا</p>
 
                 <!-- Manual Code Input (always visible) -->
@@ -1236,7 +1236,7 @@
                 <option value="admin_override">تجاوز إداري</option>
                 <option value="other">سبب آخر</option>
             </select>
-            <label for="exceptionNotes" class="form-label fw-bold">ملاحظات / سبب الاستثناء</label>
+            <label for="exceptionNotes" class="form-label fw-bold">ملاحظات / سبب الاستثناء {% include 'includes/_new_badge.html' %}</label>
             <textarea id="exceptionNotes" class="form-control" rows="3" maxlength="500"
                 placeholder="اكتب سبب الاستثناء بالتفصيل (مثال: ولي الأمر هيدفع بكرة)"></textarea>
         </div>

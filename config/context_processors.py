@@ -31,3 +31,29 @@ def education_taxonomy(request):
         'EDUCATION_STAGE_YEARS': education.stage_years_map(),
         'EDUCATION_NO_YEAR_LABEL': education.NO_YEAR_LABEL,
     }
+
+
+def feature_notice(request):
+    """
+    "جديد" badges on the features of the latest update, and a banner saying
+    they stop on ``FEATURE_NOTICE_DEADLINE`` unless the update is paid for.
+
+    Admins only — the centre's owner settles the bill; the desk staff are not
+    part of it. Unset the variable in .env (and recreate the web container)
+    and every badge and the banner disappear.
+    """
+    raw = getattr(settings, 'FEATURE_NOTICE_DEADLINE', '')
+    user = getattr(request, 'user', None)
+    if not raw or user is None or not user.is_authenticated or not user.is_admin():
+        return {}
+    from datetime import datetime
+    from django.utils import timezone
+    try:
+        deadline = datetime.fromisoformat(raw)
+    except ValueError:
+        return {}
+    if timezone.is_naive(deadline):
+        deadline = timezone.make_aware(deadline)
+    if deadline <= timezone.now():
+        return {}
+    return {'feature_notice': {'deadline': deadline}}

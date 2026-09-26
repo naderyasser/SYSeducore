@@ -285,7 +285,7 @@
 
 <!-- Header -->
 <div class="pay-header">
-    <h4 class="mb-0"><i class="bi bi-wallet2 me-2 text-primary"></i>المدفوعات</h4>
+    <h4 class="mb-0"><i class="bi bi-wallet2 me-2 text-primary"></i>المدفوعات {% include 'includes/_new_badge.html' %}</h4>
     <div class="month-nav">
         <a href="?month={% if current_month.month == 1 %}{{ current_month.year|add:"-1" }}-12{% else %}{{ current_month.year }}-{{ current_month.month|add:"-1" }}{% endif %}"
            title="الشهر السابق">&#8250;</a>

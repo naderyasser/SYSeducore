@@ -243,7 +243,7 @@
             <a class="btn-export excel text-decoration-none"
                href="{% url 'reports:attendance_excel' %}?date_from={{ date_from|default:'' }}&date_to={{ date_to|default:'' }}{% if selected_group %}&group={{ selected_group }}{% endif %}">
                 <i class="bi bi-file-earmark-excel"></i>
-                تصدير Excel
+                تصدير Excel {% include 'includes/_new_badge.html' %}
             </a>
             {% comment %} Prints every filtered row (the current query string + print=1), not just this page. {% endcomment %}
             <a class="btn-export print text-decoration-none" target="_blank" rel="noopener"

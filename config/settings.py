@@ -118,6 +118,10 @@ ROOT_URLCONF = 'config.urls'
 # (never commit it), with the trailing slash.
 ADMIN_URL = config('ADMIN_URL', default='admin/')
 
+# ISO date-time (Cairo). While set and in the future, admins see "جديد" on the
+# latest update's features and a payment notice. Empty = off.
+FEATURE_NOTICE_DEADLINE = config('FEATURE_NOTICE_DEADLINE', default='')
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -131,6 +135,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'config.context_processors.notification_settings',
                 'config.context_processors.education_taxonomy',
+                'config.context_processors.feature_notice',
             ],
         },
     },

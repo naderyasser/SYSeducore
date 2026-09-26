@@ -573,7 +573,7 @@
 
     <div class="enrollment-section">
         <div class="enrollment-header">
-            <h3><i class="bi bi-person-plus me-2"></i>الطلاب المسجلين</h3>
+            <h3><i class="bi bi-person-plus me-2"></i>الطلاب المسجلين {% include 'includes/_new_badge.html' %}</h3>
             <div class="enrollment-stats">
                 {% if capacity > 0 %}
                     {% widthratio enrolled_count capacity 100 as enrollment_percent %}
@@ -698,7 +698,7 @@
     {% if upcoming_lessons %}
     <div class="detail-container" id="upcoming-lessons">
         <div class="detail-header">
-            <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>الحصص القادمة (4 أسابيع)</h5>
+            <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>الحصص القادمة (4 أسابيع) {% include 'includes/_new_badge.html' %}</h5>
             <small class="text-muted">إلغاء حصة واحدة لا يغيّر جدول المجموعة — يتم إبلاغ أولياء الأمور على واتساب.</small>
         </div>
         <div class="table-responsive">

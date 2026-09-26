@@ -79,6 +79,8 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
             .kpi, table.rep { page-break-inside: avoid; }
             @page { size: A4; margin: 10mm; }
         }
+            .new-feature-badge { display: inline-block; background: #dc2626; color: #fff; font-size: 0.7rem; font-weight: 700; line-height: 1; padding: 3px 7px; border-radius: 999px; vertical-align: middle; }
+        @media print { .new-feature-badge { display: none; } }
     </style>
 </head>
 <body>
@@ -92,7 +94,7 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
     <div class="sheet">
         <div class="sheet-header">
             <div>
-                <h1>تقرير الطالب</h1>
+                <h1>تقرير الطالب {% include 'includes/_new_badge.html' %}</h1>
                 <div class="sub">بداية — نظام إدارة تعليمي</div>
             </div>
             <div class="sheet-meta">
