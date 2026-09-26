@@ -114,8 +114,9 @@ SYSTEM_LOCKOUT = config('SYSTEM_LOCKOUT', default=False, cast=bool)
 
 ROOT_URLCONF = 'config.urls'
 
-# Path of Django's admin site (see config/urls.py). Keep the trailing slash.
-ADMIN_URL = config('ADMIN_URL', default='bd-control/')
+# Path of Django's admin site (see config/urls.py). Set a private value in .env
+# (never commit it), with the trailing slash.
+ADMIN_URL = config('ADMIN_URL', default='admin/')
 
 TEMPLATES = [
     {
