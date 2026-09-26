@@ -32,7 +32,10 @@ def scanner_page(request):
     صفحة إدخال كود الطالب (النظام الجديد)
     """
     return render(request, 'attendance/scanner.html', {
-        'page_title': 'تسجيل الحضور - إدخال يدوي'
+        'page_title': 'تسجيل الحضور - إدخال يدوي',
+        # Cairo's date for the export dialog; the browser's valueAsDate is UTC
+        # and showed yesterday between midnight and 03:00.
+        'today': timezone.localdate().isoformat(),
     })
 
 

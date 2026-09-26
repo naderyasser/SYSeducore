@@ -109,3 +109,36 @@ class LogoTests(TestCase):
         r = self.client.get(reverse('accounts:login'))
         self.assertNotContains(r, 'b-cdn.net')
         self.assertContains(r, 'icons/logo.svg')
+
+
+class FinancialReportTests(AttendanceTestMixin, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        User.objects.create_user(username='adm_fin', password='TestPass123!', role='admin')
+        self.client.login(username='adm_fin', password='TestPass123!')
+
+    def test_deleted_teacher_revenue_stays_in_the_table(self):
+        Payment.objects.create(student=self.student, group=self.group,
+                               month=timezone.localdate().replace(day=1),
+                               amount_due=Decimal('200'), amount_paid=Decimal('200'))
+        self.teacher.soft_delete()
+        r = self.client.get(reverse('reports:financial'))
+        row = next(t for t in r.context['teacher_stats'] if t['name'] == self.teacher.full_name)
+        self.assertEqual(row['total_revenue'], Decimal('200'))
+        self.assertTrue(row['is_deleted'])
+        self.assertContains(r, 'محذوف')
+
+    def test_month_names_are_arabic(self):
+        import json
+        r = self.client.get(reverse('reports:financial'))
+        names = [m['month_name'] for m in json.loads(r.context['monthly_data'])]
+        self.assertFalse(any(n.split()[0] in ('January', 'September', 'December') for n in names), names)
+
+
+class ScannerExportDateTests(AttendanceTestMixin, TestCase):
+
+    def test_export_dialog_defaults_to_cairo_today(self):
+        self.client.login(username='sup_att', password='TestPass123!')
+        r = self.client.get(reverse('attendance:scanner'))
+        self.assertContains(r, f'id="exportDate" value="{timezone.localdate().isoformat()}"')

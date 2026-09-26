@@ -35,6 +35,7 @@ from django.db.models.functions import TruncMonth
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.template.defaultfilters import date as date_filter
 from django.utils.dateparse import parse_date
 
 from apps.accounts.decorators import (
@@ -787,7 +788,8 @@ def financial_report(request):
     for month_date in months:
         row = monthly_rows.get(month_date) or {}
         monthly_data.append({
-            'month_name': month_date.strftime('%B %Y'),
+            # ``date`` filter, not strftime: the site locale gives Arabic month names.
+            'month_name': date_filter(month_date, 'F Y'),
             'total_due': row.get('total_due') or 0,
             'total_paid': row.get('total_paid') or 0,
             'paid_count': row.get('paid_count') or 0,
@@ -808,20 +810,25 @@ def financial_report(request):
     # Revenue is summed over ALL of the teacher's groups, active or not: a
     # group deactivated mid-month still earned the money it collected, and
     # filtering on ``is_active=True`` made that revenue disappear (DATA-23).
+    # Same reasoning for the teacher: one who was deactivated or sent to the
+    # recycle bin still collected that money, so they stay in the table
+    # (flagged) instead of their revenue silently dropping out of the total.
     revenue = dict(
-        Payment.objects.filter(group__teacher_id__in=teacher_ids)
+        Payment.objects.filter(group__teacher__isnull=False, amount_paid__gt=0)
         .values_list('group__teacher_id')
         .annotate(total=Sum('amount_paid'))
         .order_by()
         .values_list('group__teacher_id', 'total')
     )
+    teachers += list(Teacher.all_objects.filter(pk__in=set(revenue) - set(teacher_ids)))
 
     teacher_stats = [
         {
             'name': teacher.full_name,
             'groups_count': group_counts.get(teacher.pk, 0),
             'total_revenue': revenue.get(teacher.pk) or 0,
-            'is_active': teacher.is_active,
+            'is_active': teacher.is_active and teacher.deleted_at is None,
+            'is_deleted': teacher.deleted_at is not None,
         }
         for teacher in teachers
     ]
