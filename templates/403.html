@@ -1,0 +1,31 @@
+{% load static %}<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title|default:"غير مسموح" }} - بداية</title>
+    <style>
+        @font-face { font-family: 'Cairo'; src: url('{% static "fonts/Cairo-Variable.woff2" %}') format('woff2'); font-weight: 200 1000; font-display: swap; }
+        * { box-sizing: border-box; font-family: 'Cairo', Tahoma, sans-serif; }
+        body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+               background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%); padding: 16px; }
+        .card { background: #fff; border-radius: 16px; padding: 40px 32px; max-width: 440px; width: 100%;
+                text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,.2); }
+        .card img { width: 72px; height: 72px; border-radius: 14px; }
+        .code { font-size: 3.5rem; font-weight: 800; color: #1e3a8a; line-height: 1; margin: 16px 0 4px; }
+        h1 { font-size: 1.25rem; margin: 8px 0; color: #111827; }
+        p { color: #6b7280; margin: 0 0 24px; }
+        a { display: inline-block; background: #2563eb; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 10px; font-weight: 600; }
+        a.secondary { background: #eef2ff; color: #1e3a8a; margin-inline-start: 8px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <img src="{% static 'icons/logo.svg' %}" alt="بداية">
+        <div class="code">403</div>
+        <h1>{{ title|default:"غير مسموح" }}</h1>
+        <p>{{ message|default:"ليس لديك صلاحية لفتح هذه الصفحة." }}</p>
+        <a href="/">الصفحة الرئيسية</a><a class="secondary" href="javascript:history.back()">رجوع</a>
+    </div>
+</body>
+</html>

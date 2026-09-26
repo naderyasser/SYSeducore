@@ -112,7 +112,7 @@
 
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label">اسم المجموعة <span class="text-danger">*</span></label>
+                            <label class="form-label" for="{{ form.group_name.id_for_label }}">اسم المجموعة <span class="text-danger">*</span></label>
                             {{ form.group_name }}
                             {% if form.group_name.errors %}
                             <div class="text-danger small mt-1">{{ form.group_name.errors.0 }}</div>
@@ -120,7 +120,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">المدرس <span class="text-danger">*</span></label>
+                            <label class="form-label" for="{{ form.teacher.id_for_label }}">المدرس <span class="text-danger">*</span></label>
                             {{ form.teacher }}
                             {% if form.teacher.errors %}
                             <div class="text-danger small mt-1">{{ form.teacher.errors.0 }}</div>
@@ -128,7 +128,7 @@
                         </div>
 
                         <div class="col-md-12">
-                            <label class="form-label">يوم الحصة <span class="text-danger">*</span></label>
+                            <label class="form-label" for="{{ form.duration_minutes.id_for_label }}">يوم الحصة <span class="text-danger">*</span></label>
                             <div class="multi-day-selector" id="daySelector">
                                 <div class="day-checkbox">
                                     <input type="checkbox" id="day_Saturday" value="Saturday" name="schedule_days">
@@ -188,18 +188,18 @@
                     </h6>
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label class="form-label">نوع الطلاب</label>
+                            <label class="form-label" for="{{ form.gender_type.id_for_label }}">نوع الطلاب</label>
                             {{ form.gender_type }}
                             <small class="text-muted">ولاد فقط / بنات فقط / مختلط</small>
                         </div>
 
                         <div class="col-md-4">
-                            <label class="form-label">المرحلة الدراسية</label>
+                            <label class="form-label" for="{{ form.education_stage.id_for_label }}">المرحلة الدراسية</label>
                             {{ form.education_stage }}
                         </div>
 
                         <div class="col-md-4" id="education_year_wrapper">
-                            <label class="form-label">السنة الدراسية</label>
+                            <label class="form-label" for="{{ form.education_year.id_for_label }}">السنة الدراسية</label>
                             {{ form.education_year }}
                         </div>
                     </div>
@@ -210,7 +210,7 @@
                     </h6>
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label class="form-label">السعر الشهري <span class="text-danger">*</span></label>
+                            <label class="form-label" for="{{ form.standard_fee.id_for_label }}">السعر الشهري <span class="text-danger">*</span></label>
                             {{ form.standard_fee }}
                             {% if form.standard_fee.errors %}
                             <div class="text-danger small mt-1">{{ form.standard_fee.errors.0 }}</div>
@@ -218,7 +218,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">نسبة السنتر %</label>
+                            <label class="form-label" for="{{ form.center_percentage.id_for_label }}">نسبة السنتر %</label>
                             {{ form.center_percentage }}
                             {% if form.center_percentage.errors %}
                             <div class="text-danger small mt-1">{{ form.center_percentage.errors.0 }}</div>
@@ -226,7 +226,7 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label">عدد حصص الدورة (الباقة)</label>
+                            <label class="form-label" for="{{ form.sessions_per_month.id_for_label }}">عدد حصص الدورة (الباقة)</label>
                             {{ form.sessions_per_month }}
                             <small class="text-muted d-block">لما الطالب يخلص العدد ده تتفتح دورة جديدة تلقائياً — مش مربوطة بأول الشهر.</small>
                             {% if form.sessions_per_month.errors %}

@@ -9,7 +9,9 @@
     <style>
         @font-face {
             font-family: 'Cairo';
-            src: url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype-variations'),
+            src: url('{% static "fonts/Cairo-Variable.woff2" %}') format('woff2-variations'),
+                 url('{% static "fonts/Cairo-Variable.woff2" %}') format('woff2'),
+                 url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype-variations'),
                  url('{% static "fonts/Cairo-Variable.ttf" %}') format('truetype');
             font-weight: 200 1000;
         }

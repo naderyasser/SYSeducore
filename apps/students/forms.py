@@ -3,7 +3,7 @@ from django import forms
 from apps.core import education
 
 from .models import Student, StudentGroupEnrollment
-from .utils import enrollment_compatibility_errors, normalize_phone
+from .utils import PHONE_INPUT_ATTRS, enrollment_compatibility_errors, normalize_phone, validate_phone
 
 
 class StudentForm(forms.ModelForm):
@@ -43,10 +43,12 @@ class StudentForm(forms.ModelForm):
                 'class': 'form-select',
             }),
             'student_phone': forms.TextInput(attrs={
+                **PHONE_INPUT_ATTRS,
                 'class': 'form-control',
                 'placeholder': 'رقم هاتف الطالب: 01xxxxxxxxx'
             }),
             'parent_phone': forms.TextInput(attrs={
+                **PHONE_INPUT_ATTRS,
                 'class': 'form-control',
                 'placeholder': 'رقم ولي الأمر: 01xxxxxxxxx'
             }),
@@ -137,14 +139,10 @@ class StudentForm(forms.ModelForm):
         return normalize_phone(phone)
 
     def clean_parent_phone(self):
-        phone = self.cleaned_data.get('parent_phone', '')
-        return self._clean_phone(phone)
+        return validate_phone(self.cleaned_data.get('parent_phone', ''))
 
     def clean_student_phone(self):
-        phone = self.cleaned_data.get('student_phone', '')
-        if phone:
-            return self._clean_phone(phone)
-        return phone
+        return validate_phone(self.cleaned_data.get('student_phone', ''), required=False)
 
 
 class StudentQuickForm(forms.ModelForm):
@@ -160,6 +158,7 @@ class StudentQuickForm(forms.ModelForm):
                 'placeholder': 'اسم الطالب الكامل'
             }),
             'parent_phone': forms.TextInput(attrs={
+                **PHONE_INPUT_ATTRS,
                 'class': 'form-control',
                 'placeholder': '01xxxxxxxxx'
             }),
@@ -169,7 +168,7 @@ class StudentQuickForm(forms.ModelForm):
         # Same canonical format as StudentForm ('01xxxxxxxxx'). This form used
         # to store '+201xxxxxxxxx', so the very same number looked like two
         # different contacts depending on which dialog created the student.
-        return normalize_phone(self.cleaned_data.get('parent_phone', ''))
+        return validate_phone(self.cleaned_data.get('parent_phone', ''))
 
 
 class StudentGroupEnrollmentForm(forms.ModelForm):

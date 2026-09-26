@@ -241,6 +241,7 @@
     .schedule-status.ongoing { background: #10b981; color: #fff; }
     .schedule-status.upcoming { background: #e5e7eb; color: #6b7280; }
     .schedule-status.completed { background: #d1d5db; color: #6b7280; }
+    .schedule-status.cancelled { background: #fee2e2; color: #991b1b; }
 
     /* Quick Actions */
     .quick-action {
@@ -486,7 +487,7 @@
     <div class="dashboard-hero-content d-flex justify-content-between align-items-start flex-wrap gap-3">
         <div>
             <h1><i class="bi bi-grid-1x2-fill me-2"></i>نظرة عامة على المركز</h1>
-            <p class="subtitle mb-0">متابعة شاملة لإحصائيات و activites اليومية</p>
+            <p class="subtitle mb-0">متابعة شاملة للإحصائيات والأنشطة اليومية</p>
             <div class="date-badge">
                 <i class="bi bi-calendar3"></i>
                 <span id="currentDate"></span>
@@ -625,7 +626,7 @@
                     </div>
                     <div class="d-flex flex-column gap-2 align-items-end">
                         <span class="schedule-status {{ session.status }}">
-                            {% if session.status == 'ongoing' %}جاري الآن{% elif session.status == 'completed' %}انتهت{% else %}قادمة{% endif %}
+                            {% if session.status == 'ongoing' %}جاري الآن{% elif session.status == 'completed' %}انتهت{% elif session.status == 'cancelled' %}ملغاة{% else %}قادمة{% endif %}
                         </span>
                         <small class="text-muted">{{ session.enrolled }}/{{ session.capacity }}</small>
                     </div>
@@ -719,17 +720,17 @@
                 <div class="row text-center mb-4">
                     <div class="col-4">
                         <div class="text-muted mb-2">المستحق</div>
-                        <div class="fs-2 fw-bold text-danger">{{ month_total_due|floatformat:0 }}</div>
+                        <div class="fs-2 fw-bold text-danger">{{ month_total_due|money }}</div>
                         <small class="text-muted">ج.م</small>
                     </div>
                     <div class="col-4">
                         <div class="text-muted mb-2">المحصل</div>
-                        <div class="fs-2 fw-bold text-success">{{ month_total_paid|floatformat:0 }}</div>
+                        <div class="fs-2 fw-bold text-success">{{ month_total_paid|money }}</div>
                         <small class="text-muted">ج.م</small>
                     </div>
                     <div class="col-4">
                         <div class="text-muted mb-2">المتبقي</div>
-                        <div class="fs-2 fw-bold {% if month_remaining > 0 %}text-warning{% endif %}">{{ month_remaining|floatformat:0 }}</div>
+                        <div class="fs-2 fw-bold {% if month_remaining > 0 %}text-warning{% endif %}">{{ month_remaining|money }}</div>
                         <small class="text-muted">ج.م</small>
                     </div>
                 </div>
@@ -814,7 +815,7 @@
             <div class="content-card-header">
                 <div class="content-card-title">
                     <i class="bi bi-graph-up text-primary"></i>
-                    trend الحضور - آخر 7 أيام
+                    اتجاه الحضور - آخر 7 أيام
                 </div>
             </div>
             <div class="content-card-body">
@@ -859,7 +860,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 // Chart.js formats its axis ticks with `toLocaleString()` and no locale, so
 // an Arabic browser drew ١٬٢٣٤٫٥ on the axis while every figure the server

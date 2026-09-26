@@ -26,12 +26,12 @@
                     {% csrf_token %}
 
                     <div class="mb-3">
-                        <label class="form-label">اسم القاعة <span class="text-danger">*</span></label>
+                        <label class="form-label" for="{{ form.name.id_for_label }}">اسم القاعة <span class="text-danger">*</span></label>
                         {{ form.name }}
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">السعة القصوى <span class="text-danger">*</span></label>
+                        <label class="form-label" for="{{ form.capacity.id_for_label }}">السعة القصوى <span class="text-danger">*</span></label>
                         {{ form.capacity }}
                     </div>
 

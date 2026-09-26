@@ -198,3 +198,62 @@ class DeletedDuesTests(AttendanceTestMixin, TestCase):
         self.assertEqual(r.context['total_paid'], Decimal('100'))
         r = self.client.get(reverse('reports:dashboard'))
         self.assertEqual(r.context['month_total_due'], Decimal('300'))
+
+
+class DashboardAndHeadersTests(AttendanceTestMixin, TestCase):
+
+    def setUp(self):
+        super().setUp()
+        User.objects.create_user(username='adm_dash', password='TestPass123!', role='admin')
+        self.client.login(username='adm_dash', password='TestPass123!')
+
+    def test_lessons_card_counts_the_same_timetable_as_the_table(self):
+        r = self.client.get(reverse('reports:dashboard'))
+        self.assertEqual(r.context['today_total_sessions'],
+                         sum(1 for s in r.context['today_schedule'] if s['status'] != 'cancelled'))
+
+    def test_day_names_are_arabic(self):
+        r = self.client.get(reverse('reports:dashboard'))
+        self.assertNotContains(r, 'activites')
+        self.assertIn(r.context['today_day_name'], ('السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'))
+
+    def test_signed_in_pages_are_not_cached_and_carry_permissions_policy(self):
+        r = self.client.get(reverse('reports:dashboard'))
+        self.assertIn('no-store', r['Cache-Control'])
+        self.assertIn('private', r['Cache-Control'])
+        self.assertIn('camera=(self)', r['Permissions-Policy'])
+
+    def test_payments_page_is_paginated(self):
+        month = timezone.localdate().replace(day=1)
+        for i in range(55):
+            s = Student.objects.create(student_code=f'PG{i:03d}', full_name=f'طالب {i}', gender='male',
+                                       parent_phone=f'0101234{i:04d}', student_phone='')
+            Payment.objects.create(student=s, group=self.group, month=month,
+                                   amount_due=Decimal('200'), amount_paid=Decimal('0'))
+        r = self.client.get(reverse('payments:list') + f'?month={month:%Y-%m}')
+        self.assertEqual(len(r.context['payments']), 50)
+        self.assertContains(r, 'page=2')
+
+
+class PhoneValidationTests(TestCase):
+
+    def test_validate_phone(self):
+        from django.core.exceptions import ValidationError
+        from apps.students.utils import validate_phone
+        self.assertEqual(validate_phone('+20 101 234 5678'), '01012345678')
+        self.assertEqual(validate_phone('', required=False), '')
+        for bad in ('0101', '01912345678', 'abc', '010123456789'):
+            with self.assertRaises(ValidationError):
+                validate_phone(bad)
+
+
+class ErrorPageTests(TestCase):
+
+    def test_404_uses_the_branded_page(self):
+        User.objects.create_user(username='adm_404', password='TestPass123!', role='admin')
+        self.client.login(username='adm_404', password='TestPass123!')
+        with self.settings(DEBUG=False):
+            r = self.client.get('/students/999999/')
+        self.assertEqual(r.status_code, 404)
+        self.assertContains(r, 'icons/logo.svg', status_code=404)
+        self.assertNotContains(r, "DEBUG = True", status_code=404)

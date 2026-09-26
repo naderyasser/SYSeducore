@@ -296,21 +296,21 @@
         <div class="stat-icon green">
             <i class="bi bi-check-circle"></i>
         </div>
-        <div class="stat-value" id="totalGroups">0</div>
+        <div class="stat-value" id="totalGroups">{{ page_groups_total }}</div>
         <div class="stat-label">المجموعات</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon orange">
             <i class="bi bi-calendar-week"></i>
         </div>
-        <div class="stat-value" id="totalSessions">0</div>
+        <div class="stat-value" id="totalSessions">{{ page_sessions_total }}</div>
         <div class="stat-label">الحصص أسبوعياً</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon red">
             <i class="bi bi-people"></i>
         </div>
-        <div class="stat-value" id="totalCapacity">0</div>
+        <div class="stat-value" id="totalCapacity">{{ page_capacity_total }}</div>
         <div class="stat-label">السعة الكلية</div>
     </div>
 </div>
@@ -347,16 +347,16 @@
 
             <div class="info-row">
                 <span class="info-label"><i class="bi bi-calendar3 me-1"></i>الحصص</span>
-                <span class="info-value" id="sessions-{{ room.room_id }}">-</span>
+                <span class="info-value" id="sessions-{{ room.room_id }}">{{ room.sessions_per_week }} حصص</span>
             </div>
 
             <div class="capacity-wrapper">
                 <div class="capacity-header">
                     <span class="info-label">نسبة الاستخدام</span>
-                    <span class="info-value" id="occupancy-{{ room.room_id }}">0%</span>
+                    <span class="info-value" id="occupancy-{{ room.room_id }}">{{ room.occupancy_rate|floatformat:1 }}%</span>
                 </div>
                 <div class="capacity-bar-bg">
-                    <div class="capacity-bar-fill" id="capacity-bar-{{ room.room_id }}" style="width: 0%;"></div>
+                    <div class="capacity-bar-fill{% if room.occupancy_rate > 90 %} danger{% elif room.occupancy_rate > 70 %} warning{% endif %}" id="capacity-bar-{{ room.room_id }}" style="width: {{ room.occupancy_rate|stringformat:'s' }}%;"></div>
                 </div>
             </div>
         </div>
@@ -427,61 +427,3 @@
 {% endif %}
 {% endblock %}
 
-{% block extra_js %}
-<script>
-// Load room statistics from API
-document.addEventListener('DOMContentLoaded', function() {
-    let totalGroups = 0;
-    let totalCapacity = 0;
-    let totalSessions = 0;
-
-    {% for room in rooms %}
-    totalCapacity += {{ room.capacity }};
-    totalGroups += {{ room.active_groups_count }};
-
-    // Fetch room details
-    fetch('{% url "teachers:api_room_detail" room_id=room.room_id %}')
-        .then(response => {
-            if (response.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
-            if (!response.ok) throw new Error('خطأ في الخادم');
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                // Update sessions count
-                const sessionsEl = document.getElementById('sessions-{{ room.room_id }}');
-                if (sessionsEl) {
-                    sessionsEl.textContent = data.room.sessions_per_week + ' حصص';
-                    totalSessions += data.room.sessions_per_week;
-                }
-
-                // Update occupancy
-                const occupancyEl = document.getElementById('occupancy-{{ room.room_id }}');
-                const barEl = document.getElementById('capacity-bar-{{ room.room_id }}');
-
-                if (occupancyEl && barEl) {
-                    const rate = data.room.occupancy_rate;
-                    occupancyEl.textContent = rate.toFixed(1) + '%';
-                    barEl.style.width = rate + '%';
-
-                    barEl.className = 'capacity-bar-fill';
-                    if (rate > 90) {
-                        barEl.classList.add('danger');
-                    } else if (rate > 70) {
-                        barEl.classList.add('warning');
-                    }
-                }
-
-                // Update total sessions
-                document.getElementById('totalSessions').textContent = totalSessions;
-            }
-        })
-        .catch(error => console.error('Error loading room data:', error));
-    {% endfor %}
-
-    // Update overview statistics
-    document.getElementById('totalGroups').textContent = totalGroups;
-    document.getElementById('totalCapacity').textContent = totalCapacity;
-});
-</script>
-{% endblock %}

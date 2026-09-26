@@ -448,7 +448,21 @@ def room_list(request):
         ))
         .order_by('name')
     )
-    return render(request, 'teachers/rooms/list.html', _page_context(_paginate(request, rooms), 'rooms'))
+    page_obj = _paginate(request, rooms)
+    # Weekly lessons and occupancy are worked out here for the rooms on the
+    # page. The template used to fetch /teachers/api/rooms/<id>/ once per
+    # room after load (N requests, and the cards read "-" until they landed).
+    from .api_views import _active_groups, _occupancy, _peak_usage
+    for room in page_obj:
+        room.sessions_per_week = sum(len(e) for e in room_week_entries(room).values())
+        room.occupancy_rate = _occupancy(_peak_usage(_active_groups(room)), room.capacity)
+    context = _page_context(page_obj, 'rooms')
+    context.update({
+        'page_groups_total': sum(r.active_groups_count for r in page_obj),
+        'page_sessions_total': sum(r.sessions_per_week for r in page_obj),
+        'page_capacity_total': sum(r.capacity for r in page_obj),
+    })
+    return render(request, 'teachers/rooms/list.html', context)
 
 
 @supervisor_required

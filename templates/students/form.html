@@ -546,6 +546,14 @@
                                 </div>
                             </div>
                             <div class="payment-options" id="payment_{{ group.group_id }}" style="display: none; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e5e7eb;">
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% comment %} One copy of the per-group payment fields, stamped into a
+                       group's holder when it is ticked. Rendering it for every group
+                       made this page ~600 KB (279 radios, 186 date inputs). {% endcomment %}
+                    <template id="paymentOptionsTpl">
                                 <div style="margin-bottom: 6px;">
                                     <label style="font-size: 0.85rem; font-weight: 500; color: #374151;">
                                         <i class="bi bi-wallet2 me-1"></i>حالة الدفع:
@@ -553,25 +561,25 @@
                                 </div>
                                 <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                                     <label class="payment-radio">
-                                        <input type="radio" name="financial_status_{{ group.group_id }}" value="normal" checked
-                                            onchange="toggleCustomFee({{ group.group_id }}, this.value)">
+                                        <input type="radio" name="financial_status___GID__" value="normal" checked
+                                            onchange="toggleCustomFee(__GID__, this.value)">
                                         <span class="payment-radio-label normal">💳 دفع كامل</span>
                                     </label>
                                     <label class="payment-radio">
-                                        <input type="radio" name="financial_status_{{ group.group_id }}" value="symbolic"
-                                            onchange="toggleCustomFee({{ group.group_id }}, this.value)">
+                                        <input type="radio" name="financial_status___GID__" value="symbolic"
+                                            onchange="toggleCustomFee(__GID__, this.value)">
                                         <span class="payment-radio-label symbolic">🏷️ تخفيض/خصم</span>
                                     </label>
                                     <label class="payment-radio">
-                                        <input type="radio" name="financial_status_{{ group.group_id }}" value="exempt"
-                                            onchange="toggleCustomFee({{ group.group_id }}, this.value)">
+                                        <input type="radio" name="financial_status___GID__" value="exempt"
+                                            onchange="toggleCustomFee(__GID__, this.value)">
                                         <span class="payment-radio-label exempt">🎁 دخول مجاني</span>
                                     </label>
                                 </div>
-                                <div id="custom_fee_{{ group.group_id }}" style="display: none;">
+                                <div id="custom_fee___GID__" style="display: none;">
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text">المبلغ بعد الخصم</span>
-                                        <input type="number" name="custom_fee_{{ group.group_id }}"
+                                        <input type="number" name="custom_fee___GID__"
                                             class="form-control" min="0" step="0.01" placeholder="أدخل المبلغ">
                                         <span class="input-group-text">ج.م</span>
                                     </div>
@@ -584,24 +592,21 @@
                                        is chased later. {% endcomment %}
                                     <div class="input-group input-group-sm">
                                         <span class="input-group-text"><i class="bi bi-cash me-1"></i> دفعة أولى</span>
-                                        <input type="number" name="initial_payment_{{ group.group_id }}"
+                                        <input type="number" name="initial_payment___GID__"
                                             class="form-control" min="0" step="0.01"
                                             placeholder="اختياري — يمكن دفع جزء من المبلغ">
                                         <span class="input-group-text">ج.م</span>
                                     </div>
                                     <div class="input-group input-group-sm mt-1">
                                         <span class="input-group-text"><i class="bi bi-calendar3 me-1"></i> تاريخ الاشتراك</span>
-                                        <input type="date" name="paid_on_{{ group.group_id }}" class="form-control">
+                                        <input type="date" name="paid_on___GID__" class="form-control">
                                     </div>
                                     <div class="form-text" style="font-size: 0.75rem;">
                                         اتركه فارغًا وسيُسجَّل تلقائيًا بتاريخ بداية دورة المجموعة أو تاريخ اليوم.
                                     </div>
                                 </div>
                                 {% endif %}
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
+                    </template>
                     {% else %}
                     <div class="alert alert-warning">
                         <i class="bi bi-exclamation-triangle me-2"></i>
@@ -735,7 +740,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Show payment options for already-checked groups (edit mode)
     document.querySelectorAll('input[name="groups"]:checked').forEach(cb => {
         const groupId = cb.value;
-        const paymentDiv = document.getElementById('payment_' + groupId);
+        const paymentDiv = ensurePaymentOptions(groupId);
         if (paymentDiv) {
             paymentDiv.style.display = 'block';
             // Restore financial status from enrollment data
@@ -758,9 +763,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+// Fill a group's payment holder from the shared <template> the first time.
+function ensurePaymentOptions(groupId) {
+    const holder = document.getElementById('payment_' + groupId);
+    const tpl = document.getElementById('paymentOptionsTpl');
+    if (holder && tpl && !holder.dataset.filled) {
+        holder.innerHTML = tpl.innerHTML.split('__GID__').join(groupId);
+        holder.dataset.filled = '1';
+    }
+    return holder;
+}
+
 // Toggle payment options when group checkbox changes
 function togglePaymentOptions(checkbox, groupId) {
-    const paymentDiv = document.getElementById('payment_' + groupId);
+    const paymentDiv = checkbox.checked ? ensurePaymentOptions(groupId)
+                                        : document.getElementById('payment_' + groupId);
     if (paymentDiv) {
         paymentDiv.style.display = checkbox.checked ? 'block' : 'none';
     }

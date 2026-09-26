@@ -66,7 +66,7 @@ def _fallback_error_response(code, title, message):
 
 def _render_or_fallback(request, template_name, code, title, message):
     try:
-        return render(request, template_name, status=code)
+        return render(request, template_name, {'title': title, 'message': message}, status=code)
     except TemplateDoesNotExist:
         pass  # no project template yet - use the built-in page below
     except Exception:  # noqa: BLE001 - the error page must never raise
@@ -122,7 +122,9 @@ handler500 = 'config.urls.error_500'
 
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    # Not on the default /admin/, which every scanner on the internet probes.
+    # Override with ADMIN_URL in .env.
+    path(settings.ADMIN_URL, admin.site.urls),
 
     # Infrastructure health probe (nginx proxies /health/, no auth, no DB access)
     path('health/', health_check, name='health_check'),

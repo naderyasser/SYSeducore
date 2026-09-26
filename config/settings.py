@@ -105,6 +105,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.accounts.middleware.SessionTimeoutMiddleware',
+    'apps.core.middleware.SecurityHeadersMiddleware',
 ]
 
 # System Lockout - set SYSTEM_LOCKOUT=True in the environment to block all access.
@@ -112,6 +113,9 @@ MIDDLEWARE = [
 SYSTEM_LOCKOUT = config('SYSTEM_LOCKOUT', default=False, cast=bool)
 
 ROOT_URLCONF = 'config.urls'
+
+# Path of Django's admin site (see config/urls.py). Keep the trailing slash.
+ADMIN_URL = config('ADMIN_URL', default='bd-control/')
 
 TEMPLATES = [
     {

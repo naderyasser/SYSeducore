@@ -36,6 +36,7 @@
         var inFlight = null;
         var active = -1;
         var items = [];
+        var pendingEnter = false;
 
         function open() { root.classList.add('is-open'); menu.hidden = false; }
         function close() { root.classList.remove('is-open'); menu.hidden = true; active = -1; }
@@ -45,7 +46,7 @@
             var html = '';
             SECTIONS.forEach(function (sec) {
                 var block = data[sec.key];
-                if (!block || !block.items.length) return;
+                if (!block || !block.items || !block.items.length) return;
                 html += '<div class="quick-search-section"><i class="bi ' + sec.icon + '"></i> ' + sec.title + '</div>';
                 block.items.forEach(function (row) {
                     var i = items.length;
@@ -72,6 +73,11 @@
             menu.innerHTML = html;
             active = -1;
             open();
+            // Enter pressed before the answer came back: open the first hit.
+            if (pendingEnter) {
+                pendingEnter = false;
+                if (items.length) window.location.href = items[0];
+            }
         }
 
         function run(term) {
@@ -127,12 +133,24 @@
         });
 
         input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                // Enter opens the highlighted hit, else the first one. It used
+                // to submit the fallback form to the groups directory, which
+                // only knows groups — a student or teacher match was lost.
+                e.preventDefault();
+                var term = input.value.trim();
+                if (!menu.hidden && items.length) {
+                    window.location.href = items[active >= 0 ? active : 0];
+                } else if (term.length >= MIN_CHARS) {
+                    clearTimeout(timer);
+                    pendingEnter = true;
+                    run(term);
+                }
+                return;
+            }
             if (menu.hidden) return;
             if (e.key === 'ArrowDown') { e.preventDefault(); highlight(1); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); highlight(-1); }
-            else if (e.key === 'Enter' && active >= 0) {
-                e.preventDefault(); window.location.href = items[active];
-            }
             else if (e.key === 'Escape') { close(); input.blur(); }
         });
 

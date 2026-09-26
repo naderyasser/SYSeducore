@@ -131,7 +131,9 @@ class QuickSearchTests(TestCase):
 
     def test_short_term_returns_nothing_rather_than_everything(self):
         r = self.client.get(self.url, {'q': 'م'})
-        self.assertEqual(r.json(), {'q': 'م', 'groups': [], 'teachers': [], 'students': []})
+        # Same {items, more} shape as a real answer, so the client reads one format.
+        empty = {'items': [], 'more': False}
+        self.assertEqual(r.json(), {'q': 'م', 'groups': empty, 'teachers': empty, 'students': empty})
 
     def test_more_flag_when_capped(self):
         for i in range(8):

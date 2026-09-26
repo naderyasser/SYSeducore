@@ -5,6 +5,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from apps.core import education
+from apps.students.utils import PHONE_INPUT_ATTRS, validate_phone
 
 from .models import MAX_SESSIONS_PER_CYCLE, Teacher, Group, Room, Subject, GroupSchedule
 
@@ -32,7 +33,7 @@ class TeacherForm(forms.ModelForm):
         fields = ['full_name', 'phone', 'email', 'subjects', 'specialization', 'photo', 'hire_date', 'is_active']
         widgets = {
             'full_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اسم المدرس'}),
-            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': '01xxxxxxxxx'}),
+            'phone': forms.TextInput(attrs={**PHONE_INPUT_ATTRS, 'class': 'form-control', 'placeholder': '01xxxxxxxxx'}),
             'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'example@email.com (اختياري)'}),
             'specialization': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'التخصص (نص حر)'}),
             'photo': forms.FileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
@@ -81,6 +82,9 @@ class TeacherForm(forms.ModelForm):
         if commit:
             teacher.subjects.set(self.cleaned_data.get('subjects', []))
         return teacher
+
+    def clean_phone(self):
+        return validate_phone(self.cleaned_data.get('phone', ''))
 
 
 class RoomForm(forms.ModelForm):

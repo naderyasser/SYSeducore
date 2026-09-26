@@ -12,6 +12,7 @@ can all rely on the *same* parsing / validation rules:
   between a student and a group (used by both the enrollment form and the
   enrollment API so they cannot drift apart).
 """
+import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 __all__ = [
@@ -106,6 +107,32 @@ def normalize_phone(phone):
 
     if not phone.startswith('0') and len(phone) == 10:
         phone = '0' + phone
+    return phone
+
+
+#: An Egyptian mobile once normalised, or an international number kept as typed.
+_PHONE_OK = re.compile(r'01[0125]\d{8}|\+\d{8,15}')
+
+#: Widget attributes for every phone input: the phone keypad on mobiles and a
+#: length cap. The real check is ``validate_phone`` on the server.
+PHONE_INPUT_ATTRS = {'type': 'tel', 'inputmode': 'tel', 'maxlength': '16', 'dir': 'ltr'}
+
+
+def validate_phone(phone, required=True):
+    """
+    ``normalize_phone`` plus a check that the result is a real number. The
+    forms used to accept anything typed into a phone box; WhatsApp sends to
+    such a number simply failed later.
+    """
+    from django.core.exceptions import ValidationError
+
+    phone = normalize_phone(phone)
+    if not phone:
+        if required:
+            raise ValidationError('رقم الهاتف مطلوب')
+        return phone
+    if not _PHONE_OK.fullmatch(phone):
+        raise ValidationError('رقم هاتف غير صحيح — اكتبه 11 رقمًا يبدأ بـ 010 أو 011 أو 012 أو 015')
     return phone
 
 

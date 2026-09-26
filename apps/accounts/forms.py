@@ -5,6 +5,8 @@ from django.core.exceptions import ValidationError
 import secrets
 import string
 
+from apps.students.utils import PHONE_INPUT_ATTRS, validate_phone
+
 User = get_user_model()
 
 
@@ -79,13 +81,13 @@ class _PasswordValidationMixin:
 class UserCreateForm(_PasswordValidationMixin, forms.ModelForm):
     password1 = forms.CharField(
         label='كلمة المرور',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'كلمة المرور'}),
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'كلمة المرور', 'autocomplete': 'new-password'}),
         required=False,
         help_text='اتركه فارغاً لتوليد كلمة مرور تلقائياً',
     )
     password2 = forms.CharField(
         label='تأكيد كلمة المرور',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'تأكيد كلمة المرور'}),
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'تأكيد كلمة المرور', 'autocomplete': 'new-password'}),
         required=False,
     )
 
@@ -98,8 +100,11 @@ class UserCreateForm(_PasswordValidationMixin, forms.ModelForm):
             'last_name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'اسم العائلة'}),
             'email': forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'البريد الإلكتروني'}),
             'role': forms.Select(attrs={'class': 'form-select'}),
-            'phone': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'رقم الهاتف'}),
+            'phone': forms.TextInput(attrs={**PHONE_INPUT_ATTRS, 'class': 'form-control', 'placeholder': '01xxxxxxxxx'}),
         }
+
+    def clean_phone(self):
+        return validate_phone(self.cleaned_data.get('phone', ''), required=False)
 
     def clean(self):
         cleaned_data = super().clean()
@@ -137,7 +142,7 @@ class UserCreateForm(_PasswordValidationMixin, forms.ModelForm):
 class UserUpdateForm(_PasswordValidationMixin, forms.ModelForm):
     new_password = forms.CharField(
         label='كلمة مرور جديدة',
-        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'اتركه فارغاً لعدم التغيير'}),
+        widget=forms.PasswordInput(attrs={'class': 'form-control', 'placeholder': 'اتركه فارغاً لعدم التغيير', 'autocomplete': 'new-password'}),
         required=False,
     )
 
@@ -150,7 +155,7 @@ class UserUpdateForm(_PasswordValidationMixin, forms.ModelForm):
             'last_name': forms.TextInput(attrs={'class': 'form-control'}),
             'email': forms.EmailInput(attrs={'class': 'form-control'}),
             'role': forms.Select(attrs={'class': 'form-select'}),
-            'phone': forms.TextInput(attrs={'class': 'form-control'}),
+            'phone': forms.TextInput(attrs={**PHONE_INPUT_ATTRS, 'class': 'form-control', 'placeholder': '01xxxxxxxxx'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
         }
 
@@ -158,6 +163,9 @@ class UserUpdateForm(_PasswordValidationMixin, forms.ModelForm):
         # The admin performing the edit — used for the self-lockout guard.
         self.request_user = kwargs.pop('request_user', None)
         super().__init__(*args, **kwargs)
+
+    def clean_phone(self):
+        return validate_phone(self.cleaned_data.get('phone', ''), required=False)
 
     def clean(self):
         cleaned_data = super().clean()

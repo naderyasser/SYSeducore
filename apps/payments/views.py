@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.core.paginator import Paginator
 from django.db.models import Count, Exists, OuterRef, Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
@@ -11,6 +12,8 @@ from apps.teachers.models import Group, Teacher
 from .models import Payment
 from .pricing import base_fee_parts
 from .services import SettlementService
+
+PAYMENTS_PER_PAGE = 50
 
 
 def _ensure_cycle_payments():
@@ -271,8 +274,17 @@ def payment_list(request):
 
     groups = Group.objects.filter(is_active=True).select_related('teacher')
 
+    # 50 cards a page: the whole month (1,000+ cards) was one 3 MB page that
+    # took a second to build and longer to lay out. The stats above still
+    # cover every row; search/filters narrow the list server-side.
+    page_obj = Paginator(payments, PAYMENTS_PER_PAGE).get_page(request.GET.get('page'))
+    page_query = request.GET.copy()
+    page_query.pop('page', None)
+
     context = {
-        'payments': payments,
+        'payments': page_obj.object_list,
+        'page_obj': page_obj,
+        'page_query': page_query.urlencode(),
         'stats': stats,
         'show_financials': show_financials,
         'groups': groups,

@@ -155,7 +155,9 @@ def quick_search(request):
         )
     term = (request.GET.get('q') or '').strip()
     if len(term) < MIN_CHARS:
-        return JsonResponse({'q': term, 'groups': [], 'teachers': [], 'students': []})
+        # Same shape as a real answer, so the client reads one format.
+        empty = {'items': [], 'more': False}
+        return JsonResponse({'q': term, 'groups': empty, 'teachers': empty, 'students': empty})
 
     def capped(items):
         return {'items': items[:LIMIT], 'more': len(items) > LIMIT}

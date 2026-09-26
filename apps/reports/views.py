@@ -47,7 +47,7 @@ from apps.accounts.decorators import (
 from apps.attendance.models import ActivityLog, Attendance, Session
 from apps.payments.models import Payment
 from apps.students.models import Student, StudentGroupEnrollment
-from apps.teachers.models import Group, Room, Teacher
+from apps.teachers.models import WEEK_DAYS_AR, Group, Room, Teacher
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +226,7 @@ def dashboard(request):
         absent = counts['absent']
         total = present + late + absent
         week_attendance_data.append({
-            'date': day.strftime('%a'),
+            'date': WEEK_DAYS_AR.get(DAY_NAMES[day.weekday()], day.strftime('%a')),
             'full_date': day.strftime('%Y-%m-%d'),
             'present': present,
             'late': late,
@@ -318,6 +318,10 @@ def dashboard(request):
     # ``get_schedule_entries()`` (apps.teachers.models) is the single source of
     # schedule truth: it returns one entry per weekly session from
     # ``GroupSchedule``, each carrying its own room (DATA-04).
+    cancelled_today = set(
+        Session.objects.filter(session_date=today, is_cancelled=True)
+        .values_list('group_id', flat=True)
+    )
     today_schedule = []
     for grp in active_groups:
         for entry in grp.get_schedule_entries():
@@ -328,7 +332,9 @@ def dashboard(request):
             end_time = entry.get_end_time()
 
             session_status = 'upcoming'
-            if current_time > end_time:
+            if grp.pk in cancelled_today:
+                session_status = 'cancelled'
+            elif current_time > end_time:
                 session_status = 'completed'
             elif current_time >= entry.start_time:
                 session_status = 'ongoing'
@@ -353,6 +359,11 @@ def dashboard(request):
     today_schedule.sort(key=lambda s: s['sort_key'])
     for slot in today_schedule:
         del slot['sort_key']
+    # The "حصص اليوم" card counts the same timetable the table lists. It used
+    # to count Session rows — one per group per day, and only once written —
+    # so a group meeting twice today, or a lesson nobody had opened yet, made
+    # the card and the table disagree (30 vs 32).
+    today_total_sessions = sum(1 for s in today_schedule if s['status'] != 'cancelled')
 
     # ====== GROUPS STATUS ======
     groups_low_enrollment = []
@@ -391,7 +402,7 @@ def dashboard(request):
 
         # Today's Overview
         'today_date': today,
-        'today_day_name': current_day_name,
+        'today_day_name': WEEK_DAYS_AR.get(current_day_name, current_day_name),
         'today_total_sessions': today_total_sessions,
         'today_active_sessions': today_active_sessions,
         'today_cancelled_sessions': today_cancelled_sessions,
