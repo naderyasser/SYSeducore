@@ -121,6 +121,9 @@ ADMIN_URL = config('ADMIN_URL', default='admin/')
 # ISO date-time (Cairo). While set and in the future, admins see "جديد" on the
 # latest update's features and a payment notice. Empty = off.
 FEATURE_NOTICE_DEADLINE = config('FEATURE_NOTICE_DEADLINE', default='')
+# After the deadline the update's features lock until this is true (config/feature_lock.py).
+FEATURE_UPDATE_PAID = config('FEATURE_UPDATE_PAID', default=False, cast=bool)
+FEATURE_UPDATE_WALLET = config('FEATURE_UPDATE_WALLET', default='01227853003')
 
 TEMPLATES = [
     {

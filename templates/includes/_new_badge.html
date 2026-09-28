@@ -1,1 +1,1 @@
-{% if feature_notice %}<span class="new-feature-badge" title="ميزة جديدة من آخر تحديث — ستتوقف في {{ feature_notice.deadline|date:'Y-m-d H:i' }} ما لم يتم سداد تكلفة التحديث">جديد</span>{% endif %}
+{% if feature_lock %}<span class="feature-lock-chip" data-feature-lock="{{ lock|default:'chip' }}" title="مقفولة لحد سداد تكلفة التحديث"><i class="bi bi-lock-fill"></i> مقفولة</span>{% elif feature_notice %}<span class="new-feature-badge" title="ميزة جديدة من آخر تحديث — ستتوقف في {{ feature_notice.deadline|date:'Y-m-d H:i' }} ما لم يتم سداد تكلفة التحديث">جديد</span>{% endif %}

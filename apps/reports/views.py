@@ -26,6 +26,9 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from django.contrib import messages
+
+from config import feature_lock
+from config.feature_lock import locked_feature
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.db import transaction
@@ -581,6 +584,7 @@ def attendance_report(request):
 
 
 @supervisor_required
+@locked_feature
 def attendance_excel(request):
     """
     ``GET ?date_from=&date_to=&group=`` → a formatted .xlsx: per lesson,
@@ -1348,7 +1352,7 @@ def monthly_financial_summary(request):
     # ومين اللي ما دفعش. كل رقم في التقرير عايزه clickable". The figures
     # link back to this page with ``status``/``group``; the records table
     # below is filtered to exactly the rows behind the figure clicked.
-    records_qs, drill = _drill_payments(payments_qs, request.GET)
+    records_qs, drill = _drill_payments(payments_qs, {} if feature_lock.is_locked() else request.GET)
     if drill['status'] == 'split':
         split_paid = list(records_qs.filter(status__in=['paid', 'partial']).order_by('group__group_name', 'student__full_name'))
         split_unpaid = list(records_qs.filter(status='unpaid').order_by('group__group_name', 'student__full_name'))
@@ -1612,7 +1616,8 @@ def comprehensive_report(request):
     base_params = dict(range_params)
     if group_id is not None:
         base_params['group'] = group_id
-    detail_kind = request.GET.get('detail') or ''
+    # تفاصيل الأرقام ميزة من التحديث الأخير — مقفولة لحد السداد (config/feature_lock.py).
+    detail_kind = '' if feature_lock.is_locked() else (request.GET.get('detail') or '')
     detail_title, detail_page, detail_type = '', None, ''
     payment_kinds = {
         'due': ('كل المستحقات', Q()),

@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block page_title %}ميزة مقفولة{% endblock %}
+{% block content %}
+<div class="container py-5" style="max-width:560px">
+  <div class="card border-0 shadow-sm text-center p-4">
+    <div class="mb-3" style="font-size:2.2rem;color:#6c757d"><i class="bi bi-lock-fill"></i></div>
+    <h4 class="fw-bold mb-3">الميزة دي مقفولة</h4>
+    <p class="mb-3">{{ lock_message }}</p>
+    <div class="fs-4 fw-bold mb-3" dir="ltr">{{ wallet }}</div>
+    <a class="btn btn-success" href="https://wa.me/2{{ wallet }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ابعت إيصال التحويل واتساب</a>
+    <a class="btn btn-outline-secondary mt-2" href="javascript:history.back()">رجوع</a>
+  </div>
+</div>
+{% endblock %}

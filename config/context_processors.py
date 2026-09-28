@@ -44,7 +44,14 @@ def feature_notice(request):
     """
     raw = getattr(settings, 'FEATURE_NOTICE_DEADLINE', '')
     user = getattr(request, 'user', None)
-    if not raw or user is None or not user.is_authenticated or not user.is_admin():
+    if not raw or user is None or not user.is_authenticated:
+        return {}
+    from config import feature_lock
+
+    if feature_lock.is_locked():
+        # بعد الميعاد ومن غير سداد: مقفولة للكل، مش للأدمن بس.
+        return {'feature_lock': {'wallet': getattr(settings, 'FEATURE_UPDATE_WALLET', ''), 'message': feature_lock.message()}}
+    if not user.is_admin():
         return {}
     from datetime import datetime
     from django.utils import timezone

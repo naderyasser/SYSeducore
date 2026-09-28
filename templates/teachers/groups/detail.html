@@ -698,7 +698,7 @@
     {% if upcoming_lessons %}
     <div class="detail-container" id="upcoming-lessons">
         <div class="detail-header">
-            <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>الحصص القادمة (4 أسابيع) {% include 'includes/_new_badge.html' %}</h5>
+            <h5 class="mb-0"><i class="bi bi-calendar-week me-2"></i>الحصص القادمة (4 أسابيع) {% include 'includes/_new_badge.html' with lock='section' %}</h5>
             <small class="text-muted">إلغاء حصة واحدة لا يغيّر جدول المجموعة — يتم إبلاغ أولياء الأمور على واتساب.</small>
         </div>
         <div class="table-responsive">

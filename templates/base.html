@@ -822,6 +822,15 @@
             tr { page-break-inside: avoid; }
             thead { display: table-header-group; }
         }
+
+        /* قفل مميزات التحديث (config/feature_lock.py): رصاصي، والضغطة بتفتح رقم المحفظة. */
+        .feature-lock-chip { display:inline-flex; align-items:center; gap:.25rem; background:#e9ecef; color:#6c757d;
+            border:1px solid #ced4da; border-radius:999px; padding:.05rem .55rem; font-size:.72rem; font-weight:700;
+            vertical-align:middle; cursor:pointer; }
+        .feature-locked { position:relative; filter:grayscale(1); opacity:.55; }
+        .feature-locked > .feature-lock-shield { position:absolute; inset:0; z-index:5; cursor:not-allowed; background:transparent; border:0; width:100%; }
+        a.feature-locked, button.feature-locked { pointer-events:auto; cursor:not-allowed; }
+        @media print { .feature-lock-chip { display:none !important; } }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -1071,7 +1080,7 @@
                 <strong><i class="bi bi-exclamation-octagon-fill me-1"></i> تنبيه بخصوص التحديث الأخير:</strong>
                 لم يتم سداد تكلفة التحديث حتى الآن. المميزات المعلَّم عليها
                 <span class="new-feature-badge">جديد</span>
-                ستتوقف عن العمل وتختفي من الموقع خلال 48 ساعة — يوم
+                هتتقفل خلال 48 ساعة — يوم
                 <strong>{{ feature_notice.deadline|date:"Y-m-d" }}</strong> الساعة
                 <strong>{{ feature_notice.deadline|date:"H:i" }}</strong> — ما لم يتم السداد.
                 <div class="mt-2 fw-bold">المميزات الجديدة:</div>
@@ -1179,6 +1188,54 @@
     })();
     </script>
     <script src="{% static 'js/utils/manual-attendance.js' %}"></script>
+    {% if feature_lock %}
+    <div class="modal fade" id="featureLockModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered"><div class="modal-content text-center p-3">
+        <div class="modal-body">
+          <div class="mb-2" style="font-size:2rem;color:#6c757d"><i class="bi bi-lock-fill"></i></div>
+          <h5 class="fw-bold mb-3">الميزة دي مقفولة</h5>
+          <p class="mb-3">{{ feature_lock.message }}</p>
+          <div class="fs-4 fw-bold mb-3" dir="ltr">{{ feature_lock.wallet }}</div>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="featureLockCopy">نسخ الرقم</button>
+          <a class="btn btn-success btn-sm" href="https://wa.me/2{{ feature_lock.wallet }}" target="_blank" rel="noopener"><i class="bi bi-whatsapp"></i> ابعت الإيصال واتساب</a>
+        </div>
+      </div></div>
+    </div>
+    <script>
+    (function () {
+      var modalEl = document.getElementById('featureLockModal');
+      function show(e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        if (window.bootstrap && modalEl) { bootstrap.Modal.getOrCreateInstance(modalEl).show(); }
+        else { alert('{{ feature_lock.message|escapejs }}'); }
+      }
+      function lock(el) {
+        if (!el || el.classList.contains('feature-locked')) return;
+        el.classList.add('feature-locked');
+        el.querySelectorAll('input, textarea, select, button').forEach(function (c) { c.disabled = true; });
+        if (el.tagName === 'A' || el.tagName === 'BUTTON') { el.addEventListener('click', show, true); return; }
+        var shield = document.createElement('button');
+        shield.type = 'button'; shield.className = 'feature-lock-shield'; shield.setAttribute('aria-label', 'ميزة مقفولة');
+        shield.addEventListener('click', show);
+        el.appendChild(shield);
+      }
+      document.querySelectorAll('[data-feature-lock]').forEach(function (chip) {
+        chip.addEventListener('click', show);
+        var mode = chip.getAttribute('data-feature-lock');
+        if (mode === 'section') lock(chip.closest('.card') || chip.parentElement);
+        else if (mode === 'field') lock(chip.closest('label') ? chip.closest('label').parentElement : chip.parentElement);
+        else if (mode === 'self') lock(chip.closest('a, button'));
+      });
+      // أرقام التقارير اللي بتفتح التفاصيل (التصفية الشهرية والتقرير الشامل)
+      document.querySelectorAll('a.drill-card, a.drill-link').forEach(lock);
+      var copy = document.getElementById('featureLockCopy');
+      if (copy) copy.addEventListener('click', function () {
+        navigator.clipboard && navigator.clipboard.writeText('{{ feature_lock.wallet }}');
+        copy.textContent = 'اتنسخ';
+      });
+    })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>

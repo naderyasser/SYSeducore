@@ -1236,7 +1236,7 @@
                 <option value="admin_override">تجاوز إداري</option>
                 <option value="other">سبب آخر</option>
             </select>
-            <label for="exceptionNotes" class="form-label fw-bold">ملاحظات / سبب الاستثناء {% include 'includes/_new_badge.html' %}</label>
+            <label for="exceptionNotes" class="form-label fw-bold">ملاحظات / سبب الاستثناء {% include 'includes/_new_badge.html' with lock='field' %}</label>
             <textarea id="exceptionNotes" class="form-control" rows="3" maxlength="500"
                 placeholder="اكتب سبب الاستثناء بالتفصيل (مثال: ولي الأمر هيدفع بكرة)"></textarea>
         </div>
