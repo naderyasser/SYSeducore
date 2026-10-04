@@ -15,7 +15,7 @@ import logging
 
 from .models import Student, StudentGroupEnrollment
 from .forms import StudentForm
-from .utils import enrollment_compatibility_errors, normalize_financial_status, parse_money
+from .utils import code_lookup_q, enrollment_compatibility_errors, normalize_financial_status, parse_money
 from apps.teachers.models import Group
 from apps.accounts.decorators import (
     ajax_login_required,
@@ -67,7 +67,10 @@ def student_list(request):
     )
 
     # Apply search filter
-    if search:
+    code_q = code_lookup_q(search)
+    if code_q is not None:
+        students = students.filter(code_q)
+    elif search:
         students = students.filter(
             Q(full_name__icontains=search) |
             Q(student_code__icontains=search) |

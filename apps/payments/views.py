@@ -230,7 +230,11 @@ def payment_list(request):
         payments = payments.filter(status=status_filter)
     if group_filter:
         payments = payments.filter(group_id=group_filter)
-    if search:
+    from apps.students.utils import code_lookup_q
+    code_q = code_lookup_q(search, prefix='student__')
+    if code_q is not None:
+        payments = payments.filter(code_q)
+    elif search:
         payments = payments.filter(
             Q(student__full_name__icontains=search) |
             Q(student__student_code__icontains=search) |

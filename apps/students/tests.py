@@ -842,3 +842,27 @@ class WhatsAppNumberTest(TestCase):
         )
         self.assertEqual(student.student_whatsapp, '201011112222')
         self.assertEqual(student.parent_whatsapp, '201033334444')
+
+
+class CodeSearchTest(TestCase):
+    """«ببحث بكود الطالب بيظهرلي طلبة تانية»: a short number is a code, not a
+    fragment of somebody's phone number."""
+
+    def setUp(self):
+        self.hamza = Student.objects.create(
+            student_code='1001', full_name='حمزه', gender='male',
+            parent_phone='01200000001', student_phone='01200000002',
+        )
+        self.other = Student.objects.create(
+            student_code='1343', full_name='محمد محمود', gender='male',
+            parent_phone='01001911393', student_phone='01001911394',
+        )
+
+    def test_exact_code_wins_over_phone_digits(self):
+        from .utils import code_lookup_q
+        self.assertEqual(list(Student.objects.filter(code_lookup_q('1001'))), [self.hamza])
+
+    def test_long_numbers_and_names_are_not_code_searches(self):
+        from .utils import code_lookup_q
+        self.assertIsNone(code_lookup_q('0100191'))
+        self.assertIsNone(code_lookup_q('حمزه'))

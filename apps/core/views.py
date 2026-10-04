@@ -101,12 +101,16 @@ def _students(term):
     name_q = Q()
     for word in words:
         name_q &= Q(full_name__iregex=_name_pattern(word))
+    from apps.students.utils import code_lookup_q
+    code_q = code_lookup_q(term)
     rows = list(
         Student.objects.filter(
-            name_q
-            | Q(student_code__icontains=term)
-            | Q(parent_phone__icontains=term)
-            | Q(student_phone__icontains=term)
+            code_q if code_q is not None else (
+                name_q
+                | Q(student_code__icontains=term)
+                | Q(parent_phone__icontains=term)
+                | Q(student_phone__icontains=term)
+            )
         )
         .order_by('-is_active', 'full_name')[: LIMIT + 1]
     )

@@ -13,6 +13,8 @@ can all rely on the *same* parsing / validation rules:
   enrollment API so they cannot drift apart).
 """
 import re
+
+from django.db.models import Q
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 __all__ = [
@@ -216,3 +218,25 @@ def enrollment_compatibility_errors(student, group):
             )
 
     return errors
+
+
+#: A typed number shorter than this is a student code, not a phone fragment.
+CODE_MAX_DIGITS = 6
+
+
+def code_lookup_q(term, prefix=''):
+    """
+    For a short all-digit search («1001») return the Q that matches the student
+    *code* only — exactly, when such a code exists — instead of every phone
+    number that happens to contain those digits (searching 1001 listed
+    01001911393, 01001685390…). ``None`` means "not a code search": the caller
+    keeps its normal name/phone search.
+    """
+    from .models import Student
+
+    term = (term or '').strip()
+    if not term.isdigit() or len(term) > CODE_MAX_DIGITS:
+        return None
+    if Student.objects.filter(student_code=term).exists():
+        return Q(**{f'{prefix}student_code': term})
+    return Q(**{f'{prefix}student_code__icontains': term})

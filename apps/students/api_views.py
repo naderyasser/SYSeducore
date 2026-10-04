@@ -524,7 +524,11 @@ def students_list_api(request):
     )
 
     # Apply filters
-    if search:
+    from .utils import code_lookup_q
+    code_q = code_lookup_q(search)
+    if code_q is not None:
+        students = students.filter(code_q)
+    elif search:
         students = students.filter(
             Q(full_name__icontains=search) |
             Q(student_code__icontains=search) |
