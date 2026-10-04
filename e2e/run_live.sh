@@ -2,6 +2,7 @@
 # Playwright smoke test of the LIVE site (https://sys.educore.software).
 #
 #   sh e2e/run_live.sh            # run from the repo root on the server
+#   sh e2e/run_live.sh --buttons  # also click every button on every page
 #
 # Read-only: every POST/PUT/DELETE the pages send is intercepted in the browser
 # and answered with a fake success, so nothing is ever written — the test only
@@ -47,4 +48,8 @@ print(json.dumps({
 }))
 " 2>/dev/null | tail -1 > "$TMP"
 
-nice -n 19 python3 e2e/live_smoke.py "$TMP"
+if [ "${1:-}" = "--buttons" ]; then
+    nice -n 19 python3 e2e/live_buttons.py "$TMP"
+else
+    nice -n 19 python3 e2e/live_smoke.py "$TMP"
+fi
