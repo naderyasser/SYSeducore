@@ -52,6 +52,23 @@ class CancelOneLessonTests(AttendanceTestMixin, TestCase):
         self.assertFalse(Session.objects.filter(pk=session.pk).exists(),
                          'the placeholder row is removed; the day is a normal lesson again')
 
+    def test_a_past_lesson_cancelled_in_an_open_cycle_can_be_restored(self, _notify):
+        """Cancelled from the cycle register after it happened, then «تراجع»:
+        the lesson is counted in its (still open) cycle again."""
+        from apps.teachers.cycles import assign_to_cycle
+        past = assign_to_cycle(Session.objects.create(group=self.group, session_date=timezone.localdate() - timedelta(days=7)))
+        self.assertIsNotNone(past.sequence_in_cycle)
+        r = self.client.post(reverse('attendance:cancel_session', args=[past.pk]), {'reason': 'عطلة', 'notify': '0'})
+        self.assertEqual(r.status_code, 200, r.content)
+        past.refresh_from_db()
+        self.assertIsNone(past.sequence_in_cycle)
+        r = self.client.post(reverse('attendance:restore_upcoming_lesson', args=[past.pk]))
+        self.assertEqual(r.status_code, 200, r.content)
+        past.refresh_from_db()
+        self.assertFalse(past.is_cancelled)
+        self.assertIsNotNone(past.sequence_in_cycle)
+        _notify.assert_not_called()
+
     def test_a_day_the_group_does_not_meet_is_refused(self, _notify):
         r = self._cancel(self.next_week + timedelta(days=1))
         self.assertEqual(r.status_code, 400)

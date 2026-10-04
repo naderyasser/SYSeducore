@@ -610,13 +610,18 @@ class AttendanceService:
     @staticmethod
     def restore_lesson(session):
         """
-        Undo :meth:`cancel_lesson_on` for a lesson that has not happened yet.
+        Undo a cancellation: an upcoming lesson, or a past one in a still-open cycle.
         A row that only existed to carry the cancellation is removed; a real
         session is un-cancelled and counted in its cycle again. Returns an
         error message or ``None``.
         """
-        if session.session_date < timezone.localdate():
-            return 'لا يمكن استعادة حصة فاتت'
+        # A past lesson cancelled from the cycle register can be restored
+        # while its cycle is still open (it is only being counted again); a
+        # closed cycle's billing is settled, so that stays refused.
+        if session.session_date < timezone.localdate() and (
+            session.cycle_id is None or session.cycle.closed_on is not None
+        ):
+            return 'لا يمكن استعادة حصة فاتت في دورة مقفولة'
         if not session.is_cancelled:
             return None
         if session.cycle_id is None and not session.attendances.exists():
