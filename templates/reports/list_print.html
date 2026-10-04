@@ -46,7 +46,8 @@
         .truncated { font-size: 0.85rem; color: #991b1b; margin-bottom: 8px; }
         table.list { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
         table.list th, table.list td { border: 1px solid #cbd5e1; padding: 4px 6px; text-align: center; }
-        table.list td.name { text-align: right; white-space: nowrap; }
+        table.list td { white-space: nowrap; }
+        table.list td.name, table.list td.wrap { text-align: right; white-space: normal; min-width: 110px; }
         table.list thead th { background: #eef2ff; }
         table.list tbody tr:nth-child(even) { background: #f8fafc; }
         @media screen and (max-width: 900px) {
@@ -59,7 +60,8 @@
             body { background: #fff; padding: 0; }
             .no-print { display: none !important; }
             .sheet { box-shadow: none; margin: 0; max-width: 100%; padding: 0; }
-            @page { size: A4; margin: 10mm; }
+            @page { size: A4 landscape; margin: 8mm; }
+            table.list { font-size: 9pt; }
             table.list tr { page-break-inside: avoid; }
             table.list thead { display: table-header-group; }
             table.list tbody tr:nth-child(even) { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -104,7 +106,7 @@
                 {% for row in rows %}
                 <tr>
                     <td>{{ forloop.counter }}</td>
-                    {% for cell in row %}<td{% if forloop.first %} class="name"{% endif %}>{{ cell }}</td>{% endfor %}
+                    {% for cell in row %}<td{% if forloop.first %} class="name"{% elif cell|stringformat:"s"|length > 18 %} class="wrap"{% endif %}>{{ cell }}</td>{% endfor %}
                 </tr>
                 {% empty %}
                 <tr><td colspan="{{ columns|length|add:1 }}">لا توجد سجلات بهذا الفلتر</td></tr>
