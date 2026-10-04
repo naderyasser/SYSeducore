@@ -62,7 +62,18 @@ def main():
         page.route('**/*', route)
 
         def go(path):
-            page.goto(BASE + path, wait_until='networkidle', timeout=60000)
+            # A clicked button may still have its own reload pending (e.g. the
+            # recycle bin reloads ~350 ms after a success): let it land, and
+            # retry if it interrupts this navigation anyway.
+            page.wait_for_timeout(800)
+            for attempt in range(3):
+                try:
+                    page.goto(BASE + path, wait_until='networkidle', timeout=60000)
+                    return
+                except Exception as exc:  # noqa: BLE001
+                    if 'interrupted by another navigation' not in str(exc) or attempt == 2:
+                        raise
+                    page.wait_for_load_state('networkidle')
 
         go('/')
         pages = sorted({a for a in page.eval_on_selector_all(
