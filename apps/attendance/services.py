@@ -45,6 +45,13 @@ def local_datetime(day, clock_time):
     return datetime.combine(day, clock_time, tzinfo=get_local_tz())
 
 
+def _teacher_suffix(group):
+    """« — مستر فلان»: many groups share a name (الصف الأول الثانوي), so a
+    scan message names the teacher too, or the desk can't tell which one."""
+    teacher = getattr(group, 'teacher', None)
+    return f' — {teacher.full_name}' if teacher else ''
+
+
 def _calculate_age(dob):
     """Calculate age from date of birth."""
     if not dob:
@@ -924,7 +931,7 @@ class AttendanceService:
             return {
                 'type': 'too_early',
                 'group_id': group.group_id,
-                'message': f'مبكر جداً! حصة {group.group_name} للطالب {name} تبدأ الساعة {time_str} (بعد {mins} دقيقة)',
+                'message': f'مبكر جداً! حصة {group.group_name}{_teacher_suffix(group)} للطالب {name} تبدأ الساعة {time_str} (بعد {mins} دقيقة)',
             }
 
         if most_recent_ended:
@@ -932,7 +939,7 @@ class AttendanceService:
             return {
                 'type': 'too_late',
                 'group_id': group.group_id,
-                'message': f'الحصة انتهت! حصة {group.group_name} للطالب {name} كانت الساعة {time_str} (منذ {mins} دقيقة)',
+                'message': f'الحصة انتهت! حصة {group.group_name}{_teacher_suffix(group)} للطالب {name} كانت الساعة {time_str} (منذ {mins} دقيقة)',
             }
 
         return {

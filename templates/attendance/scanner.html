@@ -806,6 +806,7 @@
     }
 
     .dossier-group-row:last-child { border-bottom: none; }
+    .dossier-group-row.dossier-target { background:#fef9c3; border:2px solid #f59e0b; border-radius:10px; padding:10px; margin-bottom:6px; }
     .dossier-group-row > div { min-width: 0; flex: 1; }
 
     .dossier-stats {
@@ -1547,7 +1548,19 @@ document.addEventListener('keydown', (e) => {
 });
 
 // Render rich student dossier card
-function renderDossier(d) {
+// Group ids this scan is about — the dossier highlights them so the desk sees
+// which of the student's groups the message / override refers to.
+function scanTargetIds(data) {
+    const ids = new Set();
+    if (!data) { return ids; }
+    if (data.group_id) { ids.add(Number(data.group_id)); }
+    if (data.group && data.group.group_id) { ids.add(Number(data.group.group_id)); }
+    (data.skipped || []).forEach(s => { if (s.group_id) { ids.add(Number(s.group_id)); } });
+    return ids;
+}
+
+function renderDossier(d, targets) {
+    targets = targets || new Set();
     // Avatar initials (first 2 words)
     const initials = (d.full_name || '').split(' ')
         .filter(Boolean).slice(0, 2).map(w => w[0]).join('');
@@ -1572,8 +1585,10 @@ function renderDossier(d) {
     const payIcons  = { paid: '🟢', partial: '🟡', unpaid: '🔴', exempt: '⚫' };
     const payColors = { paid: 'success', partial: 'warning', unpaid: 'danger', exempt: 'secondary' };
     let enrollHtml = '';
-    (d.enrollments || []).forEach(enr => {
+    const enrollments = (d.enrollments || []).slice().sort((a, b) => targets.has(Number(b.group_id)) - targets.has(Number(a.group_id)));
+    enrollments.forEach(enr => {
         const p = enr.payment;
+        const isTarget = targets.has(Number(enr.group_id));
         const icon  = payIcons[p.status]  || '⚫';
         const cls   = payColors[p.status] || 'secondary';
         let payText = p.status_display;
@@ -1583,8 +1598,9 @@ function renderDossier(d) {
             ? `${enr.schedule_day_ar} ${enr.schedule_time}`
             : (enr.schedule || '');
         enrollHtml += `
-            <div class="dossier-group-row">
+            <div class="dossier-group-row${isTarget ? ' dossier-target' : ''}">
                 <div>
+                    ${isTarget ? '<span class="badge bg-warning text-dark mb-1"><i class="bi bi-arrow-left-circle"></i> المجموعة اللي اتمسح عليها</span>' : ''}
                     <strong>${detailLink('group', enr.group_id, escHtml(enr.group_name))}</strong>
                     <small class="text-muted d-block">${detailLink('teacher', enr.teacher_id, escHtml(enr.teacher_name))} · ${escHtml(schedInfo)}</small>
                     <small class="text-muted">${escHtml(enr.financial_status)}</small>
@@ -1719,7 +1735,7 @@ function displayResult(data, code) {
         resultIcon.innerHTML = sevIcons.info;
         resultTitle.textContent = 'تم تسجيل الحضور مسبقاً';
         resultMessage.textContent = data.message || 'الطالب مسجل بالفعل';
-        resultDetails.innerHTML = dossier ? renderDossier(dossier) : `
+        resultDetails.innerHTML = dossier ? renderDossier(dossier, scanTargetIds(data)) : `
             <div class="detail-row">
                 <span class="detail-label">كود الطالب</span>
                 <span class="detail-value highlight">${escHtml(code)}</span>
@@ -1734,7 +1750,7 @@ function displayResult(data, code) {
         resultIcon.innerHTML = sevIcons.success;
         resultTitle.textContent = 'تم تسجيل الحضور بنجاح';
         resultMessage.textContent = data.message || 'مرحباً!';
-        resultDetails.innerHTML = dossier ? renderDossier(dossier) : `
+        resultDetails.innerHTML = dossier ? renderDossier(dossier, scanTargetIds(data)) : `
             <div class="detail-row">
                 <span class="detail-label">كود الطالب</span>
                 <span class="detail-value highlight">${escHtml(code)}</span>
@@ -1813,7 +1829,7 @@ function displayResult(data, code) {
 
         // Render dossier below the error details when student data is available
         if (data.dossier) {
-            detailHtml += renderDossier(data.dossier);
+            detailHtml += renderDossier(data.dossier, scanTargetIds(data));
         }
         resultDetails.innerHTML = detailHtml;
     }
@@ -1846,6 +1862,13 @@ function renderOverrideActions(data) {
         (data.dossier?.enrollments || []).forEach(e => candidates.push({groupId: e.group_id, groupName: e.group_name, status: 'present'}));
     }
     if (!candidates.length) { return ''; }
+    candidates.forEach(c => {
+        const e = (data.dossier?.enrollments || []).find(x => Number(x.group_id) === Number(c.groupId));
+        if (e) {
+            const when = e.schedule_day_ar && e.schedule_time ? `${e.schedule_day_ar} ${e.schedule_time}` : (e.schedule || '');
+            c.groupName = `${e.group_name} — ${e.teacher_name}${when ? ' (' + when + ')' : ''}`;
+        }
+    });
     const buttons = candidates.map(c => `
         <button class="btn btn-outline-dark btn-lg flex-fill" style="min-width:160px;"
                 onclick="scannerOverride(${Number(studentId)}, ${Number(c.groupId)}, '${c.status}', this)">
