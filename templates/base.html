@@ -933,6 +933,10 @@
                     <span>تقرير المدفوعات</span>
                     <i class="bi bi-shield-lock ms-auto" style="font-size: 0.8rem; color: #f59e0b;"></i>
                 </a>
+                <a href="{% url 'reports:cycle_register' %}" class="menu-item {% if request.resolver_match.url_name == 'cycle_register' %}active{% endif %}">
+                    <i class="bi bi-table"></i>
+                    <span>كشف الدورة</span>
+                </a>
                 {% endif %}
                 {% if user.can_see_financials %}
                 <a href="{% url 'reports:financial' %}" class="menu-item {% if request.resolver_match.url_name == 'financial' %}active{% endif %}">

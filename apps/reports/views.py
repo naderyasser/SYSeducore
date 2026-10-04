@@ -778,6 +778,86 @@ def payment_report(request):
     return render(request, 'reports/payments.html', context)
 
 
+@supervisor_required
+def cycle_register(request):
+    """
+    كشف المجموعة بالدورة — نفس شكل الكشف الورقي: صف لكل طالب، عمود دفع
+    الدورة (تاريخ الدفع لهذه الدورة تحديدًا) ثم عمود لكل حصة من حصص الدورة
+    فيه تاريخ حضور الطالب أو «غ» للغياب.
+    """
+    groups = Group.objects.filter(is_active=True).select_related('teacher').order_by('group_name')
+    group = groups.filter(group_id=_parse_int_param(request.GET.get('group'))).first()
+    context = {'groups': groups, 'group': group}
+    if group is None:
+        return render(request, 'reports/cycle_register.html', context)
+
+    from apps.teachers.models import GroupCycle
+    cycles = list(GroupCycle.objects.filter(group=group, started_on__isnull=False).order_by('-index'))
+    cycle = None
+    cycle_param = _parse_int_param(request.GET.get('cycle'))
+    if cycle_param is not None:
+        cycle = next((c for c in cycles if c.cycle_id == cycle_param), None)
+    if cycle is None and cycles:
+        cycle = next((c for c in cycles if c.is_open), cycles[0])
+    context.update({'cycles': cycles, 'cycle': cycle})
+    if cycle is None:
+        return render(request, 'reports/cycle_register.html', context)
+
+    sessions = list(
+        Session.objects.filter(cycle=cycle, sequence_in_cycle__isnull=False)
+        .order_by('sequence_in_cycle')
+    )
+    slots = max(cycle.sessions_planned or 0, len(sessions))
+    by_seq = {s.sequence_in_cycle: s for s in sessions}
+    columns = [{'seq': i, 'session': by_seq.get(i)} for i in range(1, slots + 1)]
+
+    attended = defaultdict(dict)
+    for student_id, session_id, status, scan_time in Attendance.objects.filter(
+        session__in=sessions
+    ).values_list('student_id', 'session_id', 'status', 'scan_time'):
+        attended[student_id][session_id] = (status, scan_time)
+
+    payments = {
+        p.student_id: p
+        for p in Payment.objects.filter(cycle=cycle).order_by('payment_id')
+    }
+    student_ids = set(payments) | set(attended) | set(
+        StudentGroupEnrollment.objects.filter(group=group, is_active=True)
+        .values_list('student_id', flat=True)
+    )
+    students = Student.objects.filter(pk__in=student_ids).order_by('full_name')
+
+    today = timezone.localdate()
+    rows = []
+    for student in students:
+        cells = []
+        for col in columns:
+            s = col['session']
+            if s is None:
+                cells.append({'kind': 'future'})
+                continue
+            rec = attended[student.pk].get(s.session_id)
+            if rec is None:
+                kind = 'future' if s.session_date > today else ('cancelled' if s.is_cancelled else 'none')
+                cells.append({'kind': kind})
+            else:
+                status, _ = rec
+                cells.append({'kind': status, 'date': s.session_date})
+        p = payments.get(student.pk)
+        pay_date = None
+        if p is not None:
+            pay_date = p.paid_on or (timezone.localtime(p.payment_date).date() if p.payment_date else None)
+        rows.append({'student': student, 'payment': p, 'pay_date': pay_date, 'cells': cells})
+
+    context.update({
+        'columns': columns,
+        'rows': rows,
+        'paid_count': sum(1 for r in rows if r['payment'] and (r['payment'].status == 'paid' or r['payment'].is_exempt)),
+        'unpaid_count': sum(1 for r in rows if not r['payment'] or (r['payment'].status != 'paid' and not r['payment'].is_exempt)),
+    })
+    return render(request, 'reports/cycle_register.html', context)
+
+
 # ==================== Financial report ====================
 
 @admin_required
