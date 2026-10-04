@@ -5,6 +5,7 @@ from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
+from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -26,6 +27,7 @@ logger = logging.getLogger('attendance')
 SERVER_ERROR_MESSAGE = 'حدث خطأ في النظام، يرجى المحاولة مرة أخرى'
 
 
+@never_cache  # a desk page: a restored/cached copy showed yesterday's panel
 @supervisor_required
 def scanner_page(request):
     """
