@@ -778,6 +778,68 @@ def payment_report(request):
     return render(request, 'reports/payments.html', context)
 
 
+def _cycle_register_data(group, cycle):
+    """Columns (one per lesson slot of ``cycle``) and one row per student:
+    the cycle's payment date and, per lesson, the date attended / «غ» / «-»."""
+    sessions = list(
+        Session.objects.filter(cycle=cycle, sequence_in_cycle__isnull=False)
+        .order_by('sequence_in_cycle')
+    )
+    slots = max(cycle.sessions_planned or 0, len(sessions))
+    by_seq = {s.sequence_in_cycle: s for s in sessions}
+    columns = [{'seq': i, 'session': by_seq.get(i)} for i in range(1, slots + 1)]
+
+    attended = defaultdict(dict)
+    for student_id, session_id, status in Attendance.objects.filter(
+        session__in=sessions
+    ).values_list('student_id', 'session_id', 'status'):
+        attended[student_id][session_id] = status
+
+    payments = {p.student_id: p for p in Payment.objects.filter(cycle=cycle).order_by('payment_id')}
+    student_ids = set(payments) | set(attended) | set(
+        StudentGroupEnrollment.objects.filter(group=group, is_active=True)
+        .values_list('student_id', flat=True)
+    )
+    students = Student.objects.filter(pk__in=student_ids).order_by('full_name')
+
+    today = timezone.localdate()
+    rows = []
+    for student in students:
+        cells = []
+        for col in columns:
+            s = col['session']
+            if s is None or (s.session_date > today and s.session_id not in attended[student.pk]):
+                cells.append({'kind': 'future', 'text': '', 'session': s})
+                continue
+            status = attended[student.pk].get(s.session_id)
+            if status in ('present', 'late', 'exception'):
+                text = f'{s.session_date.month}/{s.session_date.day}'
+            elif status == 'absent':
+                text = 'غ'
+            else:
+                status, text = 'none', '-'
+            cells.append({'kind': status, 'text': text, 'session': s})
+
+        p = payments.get(student.pk)
+        pay_date = None
+        if p is not None:
+            pay_date = p.paid_on or (timezone.localtime(p.payment_date).date() if p.payment_date else None)
+        pay_status = 'exempt' if p and p.is_exempt else (p.status if p else 'unpaid')
+        if pay_status == 'exempt':
+            pay_text, note = 'معفى', ''
+        elif pay_status in ('paid', 'partial'):
+            pay_text = f'{pay_date.month}/{pay_date.day}' if pay_date else '✓'
+            note = f'باقي {p.remaining:g}' if pay_status == 'partial' else ''
+        else:
+            pay_text, note = '', 'لم يدفع'
+        rows.append({
+            'student': student, 'payment': p, 'pay_status': pay_status,
+            'pay_text': pay_text, 'note': note, 'cells': cells,
+            'phone': student.parent_phone or student.student_phone,
+        })
+    return columns, rows
+
+
 @supervisor_required
 def cycle_register(request):
     """
@@ -803,57 +865,27 @@ def cycle_register(request):
     if cycle is None:
         return render(request, 'reports/cycle_register.html', context)
 
-    sessions = list(
-        Session.objects.filter(cycle=cycle, sequence_in_cycle__isnull=False)
-        .order_by('sequence_in_cycle')
-    )
-    slots = max(cycle.sessions_planned or 0, len(sessions))
-    by_seq = {s.sequence_in_cycle: s for s in sessions}
-    columns = [{'seq': i, 'session': by_seq.get(i)} for i in range(1, slots + 1)]
+    if request.GET.get('export') == 'xlsx':
+        from django.http import HttpResponse
+        from .excel import build_cycle_register_workbook
+        export_cycles = cycles if request.GET.get('all') else [cycle]
+        content = build_cycle_register_workbook(
+            group, [(c, *_cycle_register_data(group, c)) for c in export_cycles]
+        )
+        response = HttpResponse(
+            content,
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        suffix = 'all' if request.GET.get('all') else f'cycle{cycle.index}'
+        response['Content-Disposition'] = f'attachment; filename="register_{group.group_id}_{suffix}.xlsx"'
+        return response
 
-    attended = defaultdict(dict)
-    for student_id, session_id, status, scan_time in Attendance.objects.filter(
-        session__in=sessions
-    ).values_list('student_id', 'session_id', 'status', 'scan_time'):
-        attended[student_id][session_id] = (status, scan_time)
-
-    payments = {
-        p.student_id: p
-        for p in Payment.objects.filter(cycle=cycle).order_by('payment_id')
-    }
-    student_ids = set(payments) | set(attended) | set(
-        StudentGroupEnrollment.objects.filter(group=group, is_active=True)
-        .values_list('student_id', flat=True)
-    )
-    students = Student.objects.filter(pk__in=student_ids).order_by('full_name')
-
-    today = timezone.localdate()
-    rows = []
-    for student in students:
-        cells = []
-        for col in columns:
-            s = col['session']
-            if s is None:
-                cells.append({'kind': 'future'})
-                continue
-            rec = attended[student.pk].get(s.session_id)
-            if rec is None:
-                kind = 'future' if s.session_date > today else ('cancelled' if s.is_cancelled else 'none')
-                cells.append({'kind': kind})
-            else:
-                status, _ = rec
-                cells.append({'kind': status, 'date': s.session_date})
-        p = payments.get(student.pk)
-        pay_date = None
-        if p is not None:
-            pay_date = p.paid_on or (timezone.localtime(p.payment_date).date() if p.payment_date else None)
-        rows.append({'student': student, 'payment': p, 'pay_date': pay_date, 'cells': cells})
-
+    columns, rows = _cycle_register_data(group, cycle)
     context.update({
         'columns': columns,
         'rows': rows,
-        'paid_count': sum(1 for r in rows if r['payment'] and (r['payment'].status == 'paid' or r['payment'].is_exempt)),
-        'unpaid_count': sum(1 for r in rows if not r['payment'] or (r['payment'].status != 'paid' and not r['payment'].is_exempt)),
+        'paid_count': sum(1 for r in rows if r['pay_text'] and r['pay_status'] != 'partial'),
+        'unpaid_count': sum(1 for r in rows if not r['pay_text'] or r['pay_status'] == 'partial'),
     })
     return render(request, 'reports/cycle_register.html', context)
 

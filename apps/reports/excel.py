@@ -230,3 +230,53 @@ def build_payments_workbook(payments, subtitle=''):
     out = BytesIO()
     wb.save(out)
     return out.getvalue()
+
+
+def build_cycle_register_workbook(group, cycles_data):
+    """كشف الدورة بشكل الكشف الورقي — ورقة لكل دورة. ``cycles_data`` هو
+    ``[(cycle, columns, rows), ...]`` كما يرجعه ``_cycle_register_data``."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    thick = Side(style='medium', color='000000')
+    border = Border(left=thick, right=thick, top=thick, bottom=thick)
+    red = Font(color='B91C1C', bold=True)
+    for cycle, columns, rows in cycles_data:
+        ws = wb.create_sheet(f'دورة {cycle.index}'[:31])
+        headers = ['م', 'ت', 'الاسم'] + [str(c['seq']) for c in columns] + ['رقم الهاتف', 'ملاحظات']
+        ncols = len(headers)
+        span = f"من {cycle.started_on:%d/%m/%Y}" if cycle.started_on else ''
+        if cycle.closed_on:
+            span += f" إلى {cycle.closed_on:%d/%m/%Y}"
+        _title(ws, f'{group.group_name} — دورة {cycle.index}', f'{group.teacher.full_name}  ·  {span}', ncols)
+        dates_row = ['', 'تاريخ الدفع', ''] + [
+            f"{c['session'].session_date.month}/{c['session'].session_date.day}" if c['session'] else ''
+            for c in columns
+        ] + ['', '']
+        for col, title in enumerate(headers, start=1):
+            cell = ws.cell(row=4, column=col, value=title)
+            cell.font, cell.alignment, cell.border = Font(bold=True, size=12), _CENTER, border
+            sub = ws.cell(row=5, column=col, value=dates_row[col - 1])
+            sub.font, sub.alignment, sub.border = Font(color='64748B', size=9), _CENTER, border
+        for i, r in enumerate(rows, start=1):
+            values = [i, r['pay_text'], r['student'].full_name] + [c['text'] for c in r['cells']] + [r['phone'], r['note']]
+            for col, value in enumerate(values, start=1):
+                cell = ws.cell(row=5 + i, column=col, value=value)
+                cell.border = border
+                cell.alignment = _RIGHT if col == 3 else _CENTER
+                if value == 'غ' or (col == ncols and r['pay_status'] in ('unpaid', 'partial')):
+                    cell.font = red
+            ws.row_dimensions[5 + i].height = 24
+        for extra in range(3):
+            for col in range(1, ncols + 1):
+                ws.cell(row=6 + len(rows) + extra, column=col).border = border
+        widths = [5, 10, 26] + [8] * len(columns) + [15, 16]
+        for col, width in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(col)].width = width
+        ws.freeze_panes = 'D6'
+        ws.page_setup.orientation = 'landscape'
+        ws.page_setup.fitToWidth = 1
+        ws.page_setup.fitToHeight = 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
