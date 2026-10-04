@@ -14,6 +14,7 @@ urlpatterns = [
     # were never actually protected; they are guarded by role decorators now.
     path('payments/', views.payment_report, name='payments'),
     path('cycle-register/', views.cycle_register, name='cycle_register'),
+    path('cycle-register/note/', views.cycle_register_note, name='cycle_register_note'),
     path('financial/', views.financial_report, name='financial'),
     path('tsfya/', views.monthly_financial_summary, name='tsfya'),
 

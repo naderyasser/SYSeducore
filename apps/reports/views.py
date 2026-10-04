@@ -778,6 +778,16 @@ def payment_report(request):
     return render(request, 'reports/payments.html', context)
 
 
+def _cycle_cancelled(group, cycle):
+    """الحصص الملغية في الدورة — مش محسوبة من حصصها."""
+    return list(Session.objects.filter(group=group, is_cancelled=True).filter(
+        Q(cycle=cycle) | Q(
+            cycle__isnull=True, session_date__gte=cycle.started_on,
+            **({'session_date__lte': cycle.closed_on} if cycle.closed_on else {}),
+        )
+    ).order_by('session_date'))
+
+
 def _cycle_register_data(group, cycle):
     """Columns (one per lesson slot of ``cycle``) and one row per student:
     the cycle's payment date and, per lesson, the date attended / «غ» / «-»."""
@@ -835,6 +845,7 @@ def _cycle_register_data(group, cycle):
         rows.append({
             'student': student, 'payment': p, 'pay_status': pay_status,
             'pay_text': pay_text, 'note': note, 'cells': cells,
+            'user_note': (p.notes or '') if p else '',
             'phone': student.parent_phone or student.student_phone,
         })
     return columns, rows
@@ -868,7 +879,9 @@ def cycle_register(request):
     if request.GET.get('export') == 'xlsx':
         from django.http import HttpResponse
         from .excel import build_cycle_register_workbook
-        export_cycles = cycles if request.GET.get('all') else [cycle]
+        export_cycles = sorted(cycles, key=lambda c: c.index) if request.GET.get('all') else [cycle]
+        for c in export_cycles:
+            c._cancelled = _cycle_cancelled(group, c)
         content = build_cycle_register_workbook(
             group, [(c, *_cycle_register_data(group, c)) for c in export_cycles]
         )
@@ -880,14 +893,59 @@ def cycle_register(request):
         response['Content-Disposition'] = f'attachment; filename="register_{group.group_id}_{suffix}.xlsx"'
         return response
 
-    columns, rows = _cycle_register_data(group, cycle)
-    context.update({
-        'columns': columns,
-        'rows': rows,
-        'paid_count': sum(1 for r in rows if r['pay_text'] and r['pay_status'] != 'partial'),
-        'unpaid_count': sum(1 for r in rows if not r['pay_text'] or r['pay_status'] == 'partial'),
-    })
+    # الدورات فوق بعض بالترتيب — أول ما الدورة تخلص 8 حصص والجديدة تتفتح،
+    # بتظهر تحتها لوحدها. ``?cycle=`` يعرض دورة واحدة بس.
+    shown = [cycle] if request.GET.get('only') else sorted(cycles, key=lambda c: c.index)
+    sheets = []
+    for c in shown:
+        columns, rows = _cycle_register_data(group, c)
+        cancelled = _cycle_cancelled(group, c)
+        sheets.append({
+            'cycle': c,
+            'columns': columns,
+            'rows': rows,
+            'cancelled': cancelled,
+            'blank_rows': range(max(2, 17 - len(rows))),
+            'paid_count': sum(1 for r in rows if r['pay_status'] in ('paid', 'exempt')),
+            'unpaid_count': sum(1 for r in rows if r['pay_status'] not in ('paid', 'exempt')),
+        })
+    context['sheets'] = sheets
     return render(request, 'reports/cycle_register.html', context)
+
+
+@ajax_supervisor_required
+def cycle_register_note(request):
+    """حفظ ملاحظة من كشف الدورة: ملاحظة طالب (على دفعته في الدورة) أو ملاحظة
+    المجموعة على الدورة نفسها."""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'POST فقط'}, status=405)
+    from apps.teachers.models import GroupCycle
+    text = (request.POST.get('text') or '').strip()[:1000]
+    kind = request.POST.get('kind')
+    if kind == 'student':
+        obj = Payment.objects.filter(pk=_parse_int_param(request.POST.get('id'))).select_related('student', 'cycle').first()
+        if obj is None:
+            return JsonResponse({'success': False, 'error': 'الدفعة غير موجودة'}, status=404)
+        obj.notes = text
+        obj.save(update_fields=['notes'])
+        label = f'ملاحظة الطالب {obj.student.full_name} — دورة {obj.cycle.index if obj.cycle else ""}'
+        model = 'Payment'
+    elif kind == 'cycle':
+        obj = GroupCycle.objects.filter(pk=_parse_int_param(request.POST.get('id'))).select_related('group').first()
+        if obj is None:
+            return JsonResponse({'success': False, 'error': 'الدورة غير موجودة'}, status=404)
+        obj.notes = text
+        obj.save(update_fields=['notes'])
+        label = f'ملاحظة المجموعة {obj.group.group_name} — دورة {obj.index}'
+        model = 'GroupCycle'
+    else:
+        return JsonResponse({'success': False, 'error': 'نوع غير معروف'}, status=400)
+    ActivityLog.log(
+        user=request.user, action='group_update',
+        description=f'{label}: {text or "(اتمسحت)"}',
+        target_model=model, target_id=obj.pk, request=request,
+    )
+    return JsonResponse({'success': True})
 
 
 # ==================== Financial report ====================

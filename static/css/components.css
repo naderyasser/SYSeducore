@@ -156,7 +156,8 @@
  * once that has happened, so with JavaScript off the table stays a table and
  * keeps its (scrollable) header.
  */
-@media (max-width: 767.98px) {
+/* screen only: a printed page is narrower than 768px too, and the card layout turned every printed table into one card per row. */
+@media screen and (max-width: 767.98px) {
     /* Whatever box the table scrolled inside, it has nothing left to scroll:
        `responsive-tables.js` finds that box and marks it, because the
        wrappers across the project share no class of their own. */

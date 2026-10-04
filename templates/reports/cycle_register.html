@@ -30,11 +30,32 @@
     td.unpaid { color:#b91c1c; font-size:.85rem; }
     .reg-legend { font-size:.85rem; color:#6b7280; margin-top:8px; }
     @page { size: A4 landscape; margin: 10mm; }
+    .sheet { margin-bottom:28px; }
+    .note-in { width:100%; border:0; background:transparent; font-size:.85rem; text-align:right; padding:0; min-width:120px; }
+    .note-in:focus { outline:2px solid #93c5fd; background:#eff6ff; }
+    .note-in.saved { background:#dcfce7; }
+    .auto-note { color:#b91c1c; font-size:.8rem; display:block; }
+    .cyc-notes { margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .cyc-notes .box { border:1.5px solid #222; padding:8px 10px; background:#fff; }
+    .cyc-notes h6 { font-weight:700; margin:0 0 6px; font-size:.95rem; }
+    .cyc-notes textarea { width:100%; border:1px solid #d1d5db; border-radius:6px; padding:6px; font-size:.9rem; min-height:60px; }
+    .cancel-list { list-style:none; padding:0; margin:0 0 6px; font-size:.9rem; }
+    .cancel-list li { padding:2px 0; }
+    .print-notes { display:none; white-space:pre-wrap; }
+    @media (max-width: 768px) { .cyc-notes { grid-template-columns:1fr; } }
     @media print {
-        .sidebar, .top-navbar, .reg-filter, .no-print, .page-header { display:none !important; }
-        .main-content { margin:0 !important; padding:0 !important; }
-        table.reg { font-size:11pt; min-width:0; }
-        .reg-wrap { border:0; box-shadow:none; padding:0; }
+        .sidebar, .top-header, .reg-filter, .no-print { display:none !important; }
+        .main-wrapper, .content-area { margin:0 !important; padding:0 !important; }
+        table.reg { font-size:10pt; min-width:0; }
+        table.reg th, table.reg td { height:26px; padding:3px 4px; }
+        .reg-wrap { border:0; box-shadow:none; padding:0; overflow:visible; }
+        .sheet + .sheet { page-break-before: always; }
+        .cyc-notes { page-break-inside: avoid; grid-template-columns:1fr 1fr; }
+        .reg-chip { background:none !important; padding:0; }
+        .note-in { display:none; }
+        .print-notes { display:block; }
+        .cyc-notes textarea { display:none; }
+        a.cell-link { color:inherit !important; }
     }
 </style>
 {% endblock %}
@@ -43,31 +64,33 @@
 <form method="get" class="reg-filter row g-2 align-items-end">
     <div class="col-md-4">
         <label class="form-label">المجموعة</label>
-        <select name="group" class="form-select" onchange="this.form.cycle && (this.form.cycle.value=''); this.form.submit()">
+        <select name="group" class="form-select" onchange="this.form.cycle && (this.form.cycle.value=''); this.form.only && (this.form.only.value=''); this.form.submit()">
             <option value="">— اختر المجموعة —</option>
             {% for g in groups %}
             <option value="{{ g.group_id }}" {% if group and g.group_id == group.group_id %}selected{% endif %}>{{ g.group_name }} — {{ g.teacher.full_name }}</option>
             {% endfor %}
         </select>
     </div>
-    {% if group %}
+    {% if group and cycles %}
     <div class="col-md-3">
         <label class="form-label">الدورة</label>
-        <select name="cycle" class="form-select" onchange="this.form.submit()">
+        <select name="cycle" class="form-select" onchange="this.form.only.value = this.value ? '1' : ''; this.form.submit()">
+            <option value="" {% if not request.GET.only %}selected{% endif %}>كل الدورات (تحت بعض)</option>
             {% for c in cycles %}
-            <option value="{{ c.cycle_id }}" {% if cycle and c.cycle_id == cycle.cycle_id %}selected{% endif %}>
+            <option value="{{ c.cycle_id }}" {% if request.GET.only and cycle and c.cycle_id == cycle.cycle_id %}selected{% endif %}>
                 دورة {{ c.index }} — من {{ c.started_on|date:"n/j" }}{% if c.closed_on %} إلى {{ c.closed_on|date:"n/j" }}{% else %} (الحالية){% endif %}
             </option>
             {% endfor %}
         </select>
+        <input type="hidden" name="only" value="{{ request.GET.only }}">
     </div>
     <div class="col-md-5 d-flex gap-2 flex-wrap">
-        <button class="btn btn-primary flex-fill" type="submit"><i class="bi bi-search"></i> عرض</button>
-        {% if rows %}<button class="btn btn-outline-secondary" type="button" onclick="window.print()" title="طباعة"><i class="bi bi-printer"></i></button>
+        <button class="btn btn-outline-secondary" type="button" onclick="window.print()"><i class="bi bi-printer"></i> طباعة</button>
         <div class="btn-group">
-            <a class="btn btn-success" href="?group={{ group.group_id }}&cycle={{ cycle.cycle_id }}&export=xlsx" title="تصدير الدورة دي Excel"><i class="bi bi-file-earmark-excel"></i> Excel</a>
-            <a class="btn btn-outline-success" href="?group={{ group.group_id }}&cycle={{ cycle.cycle_id }}&export=xlsx&all=1" title="كل الدورات — ورقة لكل دورة">كل الدورات</a>
-        </div>{% endif %}
+            <a class="btn btn-success" href="?group={{ group.group_id }}&cycle={{ cycle.cycle_id }}&export=xlsx" title="الدورة الحالية / المختارة"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+            <a class="btn btn-outline-success" href="?group={{ group.group_id }}&export=xlsx&all=1">كل الدورات</a>
+        </div>
+        <a class="btn btn-outline-primary" href="{% url 'teachers:group_update' group.group_id %}"><i class="bi bi-pencil"></i> تعديل المجموعة</a>
     </div>
     {% endif %}
 </form>
@@ -77,48 +100,135 @@
 {% elif not cycle %}
     <div class="alert alert-warning">المجموعة دي لسه ما بدأتش أي دورة.</div>
 {% else %}
+{% for sh in sheets %}
+<div class="sheet">
     <div class="reg-head">
-        <h2><a href="{% url 'teachers:group_detail' group.group_id %}" class="text-reset">{{ group.group_name }}</a> — دورة {{ cycle.index }}</h2>
-        <a class="btn btn-sm btn-outline-primary no-print" href="{% url 'teachers:group_update' group.group_id %}"><i class="bi bi-pencil"></i> تعديل المجموعة</a>
+        <h2><a href="{% url 'teachers:group_detail' group.group_id %}" class="text-reset">{{ group.group_name }}</a> — دورة {{ sh.cycle.index }}</h2>
         <span class="reg-chip">{{ group.teacher.full_name }}</span>
-        <span class="reg-chip">من {{ cycle.started_on|date:"j/n/Y" }}{% if cycle.closed_on %} إلى {{ cycle.closed_on|date:"j/n/Y" }}{% else %} — مفتوحة{% endif %}</span>
-        <span class="reg-chip ok">دفع: {{ paid_count }}</span>
-        <span class="reg-chip bad">لم يدفع: {{ unpaid_count }}</span>
+        <span class="reg-chip"><span class="d">{{ sh.cycle.started_on|date:"n/j/Y" }}</span>{% if sh.cycle.closed_on %} ← <span class="d">{{ sh.cycle.closed_on|date:"n/j/Y" }}</span>{% else %} — مفتوحة{% endif %}</span>
+        <span class="reg-chip ok">دفع: {{ sh.paid_count }}</span>
+        <span class="reg-chip bad">لم يدفع: {{ sh.unpaid_count }}</span>
     </div>
 
     <div class="reg-wrap">
-    <table class="reg">
+    <table class="reg" data-no-cards>
         <thead>
             <tr>
                 <th class="c-m">م</th>
                 <th class="c-pay">ت</th>
                 <th>الاسم</th>
-                {% for col in columns %}<th class="c-s">{% if col.session %}<a href="{% url 'attendance:session_detail' col.session.session_id %}" class="text-reset" title="حصة {{ col.session.session_date|date:'j/n' }} — تعديل الحضور">{{ col.seq }}</a>{% else %}{{ col.seq }}{% endif %}</th>{% endfor %}
+                {% for col in sh.columns %}<th class="c-s">{% if col.session %}<a href="{% url 'attendance:session_detail' col.session.session_id %}" class="text-reset" title="حصة {{ col.session.session_date|date:'n/j' }}">{{ col.seq }}</a>{% else %}{{ col.seq }}{% endif %}</th>{% endfor %}
                 <th class="c-phone">رقم الهاتف</th>
                 <th class="c-notes">ملاحظات</th>
             </tr>
         </thead>
         <tbody>
-        {% for r in rows %}
+        {% for r in sh.rows %}
             <tr>
                 <td class="c-m">{{ forloop.counter }}</td>
-                <td class="c-pay"><a class="cell-link" title="الحساب — تعديل الدفع" href="{% url 'payments:list' %}?search={{ r.student.full_name|urlencode }}&group={{ group.group_id }}&month={{ cycle.started_on|date:'Y-m' }}"><span class="d">{{ r.pay_text }}</span>{% if r.pay_status == 'partial' %}<small> ج</small>{% endif %}</a></td>
-                <td class="name"><a class="cell-link" href="{% url 'students:detail' r.student.pk %}" title="ملف الطالب">{{ r.student.full_name }}</a></td>
+                <td class="c-pay"><a class="cell-link" title="الحساب" href="{% url 'payments:list' %}?search={{ r.student.full_name|urlencode }}&group={{ group.group_id }}&month={{ sh.cycle.started_on|date:'Y-m' }}"><span class="d">{{ r.pay_text }}</span>{% if r.pay_status == 'partial' %}<small> ج</small>{% endif %}</a></td>
+                <td class="name"><a class="cell-link" href="{% url 'students:detail' r.student.pk %}">{{ r.student.full_name }}</a></td>
                 {% for c in r.cells %}
-                    <td class="c-s {{ c.kind }}">{% if c.session %}<a class="cell-link" href="{% url 'attendance:session_detail' c.session.session_id %}" title="تعديل حضور حصة {{ c.session.session_date|date:'j/n' }}"><span class="d">{{ c.text }}</span></a>{% endif %}</td>
+                    <td class="c-s {{ c.kind }}">{% if c.session %}<a class="cell-link" href="{% url 'attendance:session_detail' c.session.session_id %}"><span class="d">{{ c.text }}</span></a>{% endif %}</td>
                 {% endfor %}
                 <td class="c-phone"><span class="d">{{ r.phone }}</span></td>
-                <td class="c-notes {% if r.note %}unpaid{% endif %}">{{ r.note }}</td>
+                <td class="c-notes">
+                    {% if r.note %}<span class="auto-note">{{ r.note }}</span>{% endif %}
+                    {% if r.payment %}
+                    <input class="note-in" data-kind="student" data-id="{{ r.payment.payment_id }}" value="{{ r.user_note }}" placeholder="اكتب ملاحظة…">
+                    <span class="print-notes">{{ r.user_note }}</span>
+                    {% endif %}
+                </td>
             </tr>
         {% endfor %}
-        {% for _ in "123" %}
-            <tr><td class="c-m"></td><td class="c-pay"></td><td class="name"></td>{% for col in columns %}<td class="c-s"></td>{% endfor %}<td class="c-phone"></td><td class="c-notes"></td></tr>
+        {% for _ in sh.blank_rows %}
+            <tr><td class="c-m"></td><td class="c-pay"></td><td class="name"></td>{% for col in sh.columns %}<td class="c-s"></td>{% endfor %}<td class="c-phone"></td><td class="c-notes"></td></tr>
         {% endfor %}
         </tbody>
     </table>
     </div>
-    <div class="reg-legend no-print">
-        ت = تاريخ دفع الدورة · التاريخ في خانة الحصة = حضر يومها · غ = غائب · - = ما اتسجلش (ماكانش في المجموعة لسه) · خانة فاضية = حصة لسه ما جاتش · ج = دفع جزء · اضغط أي خانة: الاسم = ملف الطالب، ت = الحساب، خانة الحصة = تعديل الحضور
+
+    <div class="cyc-notes">
+        <div class="box">
+            <h6>ملاحظات المجموعة — دورة {{ sh.cycle.index }}</h6>
+            <textarea class="note-in" data-kind="cycle" data-id="{{ sh.cycle.cycle_id }}" placeholder="اكتب ملاحظة للمجموعة في الدورة دي…">{{ sh.cycle.notes }}</textarea>
+            <div class="print-notes">{{ sh.cycle.notes }}</div>
+        </div>
+        <div class="box">
+            <h6>حصص ملغية (مش محسوبة من الـ {{ sh.cycle.sessions_planned }} حصص)</h6>
+            <ul class="cancel-list">
+                {% for s in sh.cancelled %}
+                <li><b class="d">{{ s.session_date|date:"n/j" }}</b> — {{ s.cancellation_reason|default:"بدون سبب" }}
+                    <button type="button" class="btn btn-link btn-sm p-0 no-print js-restore" data-id="{{ s.session_id }}">تراجع</button></li>
+                {% empty %}
+                <li class="text-muted">مافيش.</li>
+                {% endfor %}
+            </ul>
+            {% if not sh.cycle.closed_on %}
+            <div class="d-flex gap-2 flex-wrap no-print">
+                <input type="date" class="form-control form-control-sm js-cancel-date" style="max-width:160px">
+                <input type="text" class="form-control form-control-sm js-cancel-reason" placeholder="سبب الإلغاء" style="max-width:220px">
+                <button type="button" class="btn btn-sm btn-outline-danger js-cancel">إلغاء الحصة</button>
+            </div>
+            {% endif %}
+        </div>
     </div>
+</div>
+{% endfor %}
+<div class="reg-legend no-print">
+    ت = تاريخ دفع الدورة · التاريخ في خانة الحصة = حضر يومها · غ = غائب · - = ما اتسجلش · خانة فاضية = حصة لسه ما جاتش · ج = دفع جزء · الملاحظة بتتحفظ أول ما تخرج من الخانة
+</div>
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    function csrf() { var m = document.cookie.match(/csrftoken=([^;]+)/); return m ? m[1] : ''; }
+    function post(url, data) {
+        return fetch(url, { method: 'POST', headers: { 'X-CSRFToken': csrf(), 'X-Requested-With': 'XMLHttpRequest' }, body: new URLSearchParams(data) })
+            .then(function (r) { return r.json(); });
+    }
+    document.querySelectorAll('.note-in').forEach(function (el) {
+        el.dataset.orig = el.value;
+        el.addEventListener('keydown', function (e) { if (e.key === 'Enter' && el.tagName === 'INPUT') el.blur(); });
+        el.addEventListener('blur', function () {
+            if (el.value === el.dataset.orig) return;
+            post('{% url "reports:cycle_register_note" %}', { kind: el.dataset.kind, id: el.dataset.id, text: el.value })
+                .then(function (res) {
+                    if (!res.success) { alert(res.error || 'ما اتحفظتش'); return; }
+                    el.dataset.orig = el.value;
+                    var p = el.parentNode.querySelector('.print-notes'); if (p) p.textContent = el.value;
+                    el.classList.add('saved'); setTimeout(function () { el.classList.remove('saved'); }, 1200);
+                });
+        });
+    });
+    var sessionsByDate = {
+        {% for sh in sheets %}{% for col in sh.columns %}{% if col.session %}'{{ col.session.session_date|date:"Y-m-d" }}': {{ col.session.session_id }},{% endif %}{% endfor %}{% endfor %}
+    };
+    document.querySelectorAll('.js-cancel').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var box = btn.parentNode, date = box.querySelector('.js-cancel-date').value,
+                reason = box.querySelector('.js-cancel-reason').value.trim();
+            if (!date) { alert('اختار تاريخ الحصة'); return; }
+            if (!reason) { alert('اكتب سبب الإلغاء'); return; }
+            if (!confirm('إلغاء حصة ' + date + '؟ مش هتتحسب من حصص الدورة.')) return;
+            var sid = sessionsByDate[date];
+            var url = sid ? '/attendance/api/cancel-session/' + sid + '/'
+                          : '{% if group %}{% url "attendance:cancel_upcoming_lesson" group.group_id %}{% endif %}';
+            post(url, { date: date, reason: reason, notify: '0' }).then(function (res) {
+                if (res.success) location.reload(); else alert(res.error || res.message || 'ما اتلغتش');
+            });
+        });
+    });
+    document.querySelectorAll('.js-restore').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (!confirm('ترجع الحصة دي تتحسب تاني؟')) return;
+            post('/attendance/api/restore-lesson/' + btn.dataset.id + '/', {}).then(function (res) {
+                if (res.success) location.reload(); else alert(res.error || res.message || 'ما رجعتش');
+            });
+        });
+    });
+})();
+</script>
 {% endblock %}

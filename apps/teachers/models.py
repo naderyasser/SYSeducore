@@ -609,6 +609,11 @@ class GroupCycle(models.Model):
         verbose_name="تاريخ إغلاق الدورة",
         help_text="تاريخ آخر حصة مُحتسَبة — فارغ يعني الدورة مفتوحة حاليًا",
     )
+    notes = models.TextField(
+        blank=True, default='',
+        verbose_name="ملاحظات الدورة",
+        help_text="ملاحظات المجموعة على الدورة دي — بتتكتب من كشف الدورة",
+    )
     is_legacy = models.BooleanField(
         default=False,
         verbose_name="دورة قديمة مُرحَّلة",

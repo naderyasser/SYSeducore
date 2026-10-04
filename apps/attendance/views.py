@@ -288,11 +288,14 @@ def cancel_session(request, session_id):
     # and outside its guard: the cancellation is a bookkeeping fact, and a
     # WhatsApp outage must not undo it.
     notified = 0
-    try:
-        from apps.notifications.tasks import notify_session_cancelled
-        notified, _ = notify_session_cancelled(session, reason)
-    except Exception:  # noqa: BLE001
-        logger.exception('cancellation notice failed for session %s', session.pk)
+    # ``notify=0`` — cancelling from the cycle register records a lesson that
+    # is often already in the past; the families must not get a message.
+    if request.POST.get('notify', '1') != '0':
+        try:
+            from apps.notifications.tasks import notify_session_cancelled
+            notified, _ = notify_session_cancelled(session, reason)
+        except Exception:  # noqa: BLE001
+            logger.exception('cancellation notice failed for session %s', session.pk)
 
     ActivityLog.log(
         user=request.user,
@@ -337,11 +340,14 @@ def cancel_upcoming_lesson(request, group_id):
         return JsonResponse({'success': False, 'message': error}, status=400)
 
     notified = 0
-    try:
-        from apps.notifications.tasks import notify_session_cancelled
-        notified, _ = notify_session_cancelled(session, reason)
-    except Exception:  # noqa: BLE001
-        logger.exception('cancellation notice failed for session %s', session.pk)
+    # ``notify=0`` — cancelling from the cycle register records a lesson that
+    # is often already in the past; the families must not get a message.
+    if request.POST.get('notify', '1') != '0':
+        try:
+            from apps.notifications.tasks import notify_session_cancelled
+            notified, _ = notify_session_cancelled(session, reason)
+        except Exception:  # noqa: BLE001
+            logger.exception('cancellation notice failed for session %s', session.pk)
 
     ActivityLog.log(
         user=request.user, action='session_cancel',

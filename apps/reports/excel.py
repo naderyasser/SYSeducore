@@ -258,7 +258,7 @@ def build_cycle_register_workbook(group, cycles_data):
             sub = ws.cell(row=5, column=col, value=dates_row[col - 1])
             sub.font, sub.alignment, sub.border = Font(color='64748B', size=9), _CENTER, border
         for i, r in enumerate(rows, start=1):
-            values = [i, r['pay_text'], r['student'].full_name] + [c['text'] for c in r['cells']] + [r['phone'], r['note']]
+            values = [i, r['pay_text'], r['student'].full_name] + [c['text'] for c in r['cells']] + [r['phone'], ' — '.join(x for x in (r['note'], r['user_note']) if x)]
             for col, value in enumerate(values, start=1):
                 cell = ws.cell(row=5 + i, column=col, value=value)
                 cell.border = border
@@ -269,7 +269,13 @@ def build_cycle_register_workbook(group, cycles_data):
         for extra in range(3):
             for col in range(1, ncols + 1):
                 ws.cell(row=6 + len(rows) + extra, column=col).border = border
-        widths = [5, 10, 26] + [8] * len(columns) + [15, 16]
+        last = 6 + len(rows) + 3
+        if cycle.notes:
+            ws.cell(row=last + 1, column=1, value=f'ملاحظات المجموعة: {cycle.notes}').font = Font(bold=True)
+        cancelled = [s for s in getattr(cycle, '_cancelled', [])]
+        for k, s in enumerate(cancelled, start=2):
+            ws.cell(row=last + k, column=1, value=f'حصة ملغية {s.session_date.month}/{s.session_date.day}: {s.cancellation_reason or "—"}')
+        widths = [5, 10, 26] + [8] * len(columns) + [15, 24]
         for col, width in enumerate(widths, start=1):
             ws.column_dimensions[get_column_letter(col)].width = width
         ws.freeze_panes = 'D6'
