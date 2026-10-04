@@ -359,6 +359,69 @@ def _payment_statement(student):
     }
 
 
+def _cycle_history(student):
+    """
+    سجل الطالب الكامل بالدورة — زي الكشف الورقي: لكل مجموعة، صف لكل دورة
+    فيه تاريخ دفع الدورة والمبلغ، ثم خانة لكل حصة بتاريخ حضوره أو «غ».
+    تُعرض الدورات اللي للطالب فيها دفعة أو حضور، من أول دورة لآخرها.
+    """
+    from collections import defaultdict
+    from apps.attendance.models import Session
+    from apps.teachers.models import GroupCycle
+
+    payments = {
+        p.cycle_id: p
+        for p in Payment.objects.filter(student=student, cycle__isnull=False).order_by('payment_id')
+    }
+    marks = {
+        a.session_id: a.status
+        for a in Attendance.objects.filter(student=student).only('session_id', 'status')
+    }
+    attended_cycles = set(
+        Session.objects.filter(session_id__in=marks.keys(), cycle__isnull=False)
+        .values_list('cycle_id', flat=True)
+    )
+    cycles = list(
+        GroupCycle.objects.filter(cycle_id__in=set(payments) | attended_cycles)
+        .select_related('group', 'group__teacher')
+        .order_by('group__group_name', 'index')
+    )
+    sessions_by_cycle = defaultdict(dict)
+    for s in Session.objects.filter(cycle__in=cycles, sequence_in_cycle__isnull=False):
+        sessions_by_cycle[s.cycle_id][s.sequence_in_cycle] = s
+
+    today = timezone.localdate()
+    groups, slots = [], 0
+    for cycle in cycles:
+        by_seq = sessions_by_cycle[cycle.cycle_id]
+        n = max(cycle.sessions_planned or 0, max(by_seq, default=0))
+        slots = max(slots, n)
+        cells = []
+        for i in range(1, n + 1):
+            s = by_seq.get(i)
+            status = marks.get(s.session_id) if s else None
+            if s is None or (status is None and s.session_date > today):
+                cells.append({'text': '', 'kind': 'future'})
+            elif status in ('present', 'late', 'exception'):
+                cells.append({'text': f'{s.session_date.month}/{s.session_date.day}', 'kind': status})
+            elif status == 'absent':
+                cells.append({'text': 'غ', 'kind': 'absent'})
+            else:
+                cells.append({'text': '-', 'kind': 'none'})
+        p = payments.get(cycle.cycle_id)
+        pay_date = None
+        if p is not None:
+            pay_date = p.paid_on or (timezone.localtime(p.payment_date).date() if p.payment_date else None)
+        row = {'cycle': cycle, 'payment': p, 'pay_date': pay_date, 'cells': cells}
+        if not groups or groups[-1]['group'].pk != cycle.group_id:
+            groups.append({'group': cycle.group, 'rows': []})
+        groups[-1]['rows'].append(row)
+    for g in groups:
+        for r in g['rows']:
+            r['cells'] += [{'text': '', 'kind': 'pad'}] * (slots - len(r['cells']))
+    return {'cycle_groups': groups, 'cycle_slots': range(1, slots + 1)}
+
+
 @login_required
 @locked_feature
 def student_report(request, student_id):
@@ -405,6 +468,7 @@ def student_report(request, student_id):
         'printed_at': timezone.localtime(),
     }
     context.update(_payment_statement(student))
+    context.update(_cycle_history(student))
     return render(request, 'students/report.html', context)
 
 

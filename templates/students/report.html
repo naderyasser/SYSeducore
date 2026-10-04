@@ -54,6 +54,12 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
         table.rep td.start, table.rep th.start { text-align: right; }
         table.rep tfoot td { font-weight: 700; background: #f8fafc; }
         .num { white-space: nowrap; }
+        table.paper { width:100%; border-collapse:collapse; font-size:.85rem; margin-bottom:10px; }
+        table.paper th, table.paper td { border:1.5px solid #222; padding:5px 4px; text-align:center; white-space:nowrap; }
+        table.paper th { font-weight:700; }
+        table.paper td.cyc { text-align:right; }
+        table.paper small { color:#6b7280; }
+        .ghead { font-weight:700; margin:10px 0 4px; }
         .ok { color: #15803d; } .bad { color: #b91c1c; } .warn { color: #b45309; }
 
         .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; }
@@ -185,6 +191,38 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
             </tbody>
         </table>
         {% endif %}
+
+        <h2 class="sec"><i class="bi bi-table"></i> سجل الدورات — الدفع والحضور</h2>
+        {% for g in cycle_groups %}
+        <div class="ghead">{{ g.group.group_name }} — {{ g.group.teacher.full_name }}</div>
+        <table class="paper">
+            <thead>
+                <tr>
+                    <th>الدورة</th>
+                    <th>ت<br><small>تاريخ الدفع</small></th>
+                    <th>المدفوع / المطلوب</th>
+                    {% for i in cycle_slots %}<th>{{ i }}</th>{% endfor %}
+                    <th>ملاحظات</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in g.rows %}
+                {% with p=r.payment %}
+                <tr>
+                    <td class="cyc">دورة {{ r.cycle.index }}<br><small dir="ltr">{{ r.cycle.started_on|date:"n/j" }}{% if r.cycle.closed_on %} → {{ r.cycle.closed_on|date:"n/j" }}{% else %} (الحالية){% endif %}</small></td>
+                    <td>{% if p.is_exempt %}معفى{% elif p and p.status != 'unpaid' %}<span dir="ltr">{{ r.pay_date|date:"n/j"|default:"✓" }}</span>{% endif %}</td>
+                    <td>{% if p %}{{ p.amount_paid|floatformat:"-2" }} / {{ p.amount_due|floatformat:"-2" }}{% else %}—{% endif %}</td>
+                    {% for c in r.cells %}<td{% if c.kind == 'absent' %} class="bad"{% elif c.kind == 'late' %} class="warn"{% endif %}><span dir="ltr">{{ c.text }}</span></td>{% endfor %}
+                    <td>{% if not p %}<span class="bad">مالوش دفعة</span>{% elif p.is_exempt %}{% elif p.status == 'unpaid' %}<span class="bad">لم يدفع</span>{% elif p.status == 'partial' %}<span class="warn">باقي {{ p.remaining|floatformat:"-2" }}</span>{% endif %}</td>
+                </tr>
+                {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+        {% empty %}
+        <p class="text-muted">لا توجد دورات مسجلة لهذا الطالب.</p>
+        {% endfor %}
+        <p class="text-muted small mb-0">التاريخ في خانة الحصة = حضر يومها · غ = غائب · - = ما اتسجلش · خانة فاضية = حصة لسه ما جاتش</p>
 
         <h2 class="sec"><i class="bi bi-cash-stack"></i> كشف حساب المدفوعات</h2>
         <table class="rep">

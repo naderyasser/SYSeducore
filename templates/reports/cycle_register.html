@@ -56,7 +56,7 @@
         <select name="cycle" class="form-select" onchange="this.form.submit()">
             {% for c in cycles %}
             <option value="{{ c.cycle_id }}" {% if cycle and c.cycle_id == cycle.cycle_id %}selected{% endif %}>
-                دورة {{ c.index }} — من {{ c.started_on|date:"j/n" }}{% if c.closed_on %} إلى {{ c.closed_on|date:"j/n" }}{% else %} (الحالية){% endif %}
+                دورة {{ c.index }} — من {{ c.started_on|date:"n/j" }}{% if c.closed_on %} إلى {{ c.closed_on|date:"n/j" }}{% else %} (الحالية){% endif %}
             </option>
             {% endfor %}
         </select>
