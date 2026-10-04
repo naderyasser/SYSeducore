@@ -1205,15 +1205,13 @@ class TestSettlementPeriodBugs(TestCase):
         self.assertEqual(settlement.lines.count(), 1)
         self.assertEqual(settlement.computed_gross, Decimal('200.00'))
 
-    def test_period_starting_one_day_later_finds_the_same_money(self):
-        """The regression: one day of difference used to zero the sheet."""
-        settlement = self._build(date(2026, 8, 2), date(2026, 9, 1))
-        self.assertEqual(settlement.lines.count(), 1)
-        self.assertEqual(settlement.computed_gross, Decimal('200.00'))
-
-    def test_period_starting_mid_month_finds_the_same_money(self):
-        settlement = self._build(date(2026, 8, 15), date(2026, 9, 14))
-        self.assertEqual(settlement.computed_gross, Decimal('200.00'))
+    def test_a_cycle_lands_in_the_period_it_started_in_only(self):
+        """Settlement is per cycle: the Aug cycle (started 1 Aug) belongs to
+        the sheet whose period holds 1 Aug — and to no later one, however its
+        ``Payment.month`` bucket overlaps."""
+        self.assertEqual(self._build(date(2026, 7, 15), date(2026, 8, 14)).computed_gross, Decimal('200.00'))
+        later = self._build(date(2026, 8, 15), date(2026, 9, 14))
+        self.assertEqual(later.lines.filter(is_excluded=False).count(), 0)
 
     def test_a_period_spanning_two_cycles_does_not_crash(self):
         """Two payments, same student, same group — one line, both summed."""
@@ -1238,11 +1236,9 @@ class TestSettlementPeriodBugs(TestCase):
         self.assertEqual(line.fee_full, Decimal('400.00'))           # 200 x 2 cycles
         self.assertEqual(settlement.computed_gross, Decimal('400.00'))
 
-    def test_each_cycle_is_prorated_on_its_own(self):
-        """
-        Summing sessions before pro-rating would let a fully attended cycle
-        subsidise a barely attended one.
-        """
+    def test_each_cycle_counts_at_its_full_amount_due(self):
+        """Per-cycle settlement: every cycle counts its full amount due, not
+        pro-rated by the lessons attended."""
         sep_cycle = GroupCycle.objects.create(
             group=self.group, index=2, sessions_planned=4,
             started_on=date(2026, 9, 1),
@@ -1255,8 +1251,7 @@ class TestSettlementPeriodBugs(TestCase):
         )
         settlement = self._build(date(2026, 8, 1), date(2026, 9, 30))
         line = settlement.lines.get()
-        # 200 (4/4) + 50 (1/4) = 250, not 400 x 5/8 = 250 by luck — check the parts.
-        self.assertEqual(line.computed_amount, Decimal('250.00'))
+        self.assertEqual(line.computed_amount, Decimal('400.00'))
 
     def test_a_period_with_no_payments_is_genuinely_empty(self):
         """The fix must not start inventing money outside the period."""

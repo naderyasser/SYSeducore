@@ -1019,7 +1019,7 @@ class TeacherSettlementBuildTest(LedgerTestBase):
         )
         self.assertEqual(late.lines.filter(is_excluded=False).count(), 1)
 
-    def test_build_creates_settlement_with_prorated_line(self):
+    def test_build_creates_settlement_with_full_cycle_line(self):
         from apps.payments.services import SettlementService
 
         settlement = SettlementService.build_or_refresh(
@@ -1029,12 +1029,13 @@ class TeacherSettlementBuildTest(LedgerTestBase):
         line = settlement.lines.get(student=self.student, group=self.group)
         self.assertEqual(line.sessions_consumed, 2)
         self.assertEqual(line.sessions_entitled, 4)
-        self.assertEqual(line.computed_amount, Decimal('150.00'))
-        self.assertEqual(line.effective_amount, Decimal('150.00'))
+        # Billed per cycle: the full amount due, not pro-rated by attendance.
+        self.assertEqual(line.computed_amount, Decimal('300.00'))
+        self.assertEqual(line.effective_amount, Decimal('300.00'))
         # 30% default center_percentage
-        self.assertEqual(line.line_center_share, Decimal('45.00'))
-        self.assertEqual(line.line_teacher_share, Decimal('105.00'))
-        self.assertEqual(settlement.adjusted_gross, Decimal('150.00'))
+        self.assertEqual(line.line_center_share, Decimal('90.00'))
+        self.assertEqual(line.line_teacher_share, Decimal('210.00'))
+        self.assertEqual(settlement.adjusted_gross, Decimal('300.00'))
 
     def test_refresh_preserves_manual_override(self):
         from apps.payments.services import SettlementService
@@ -1077,9 +1078,9 @@ class TeacherSettlementBuildTest(LedgerTestBase):
         line.percentage_override = Decimal('50.00')
         line.apply()
 
-        self.assertEqual(line.effective_amount, Decimal('150.00'))  # unchanged
-        self.assertEqual(line.line_center_share, Decimal('75.00'))  # 50% of 150
-        self.assertEqual(line.line_teacher_share, Decimal('75.00'))
+        self.assertEqual(line.effective_amount, Decimal('300.00'))  # unchanged
+        self.assertEqual(line.line_center_share, Decimal('150.00'))  # 50% of 300
+        self.assertEqual(line.line_teacher_share, Decimal('150.00'))
 
     def test_cannot_refresh_approved_settlement(self):
         from apps.payments.models import SettlementLockedError
