@@ -1717,6 +1717,7 @@ function renderDossier(d, targets) {
 
 // Display Result
 function displayResult(data, code) {
+    window._lastScan = data;  // the override's success card re-shows this dossier
     resultDisplay.classList.add('show');
     resultCard.style.background = ''; // reset loading style
 
@@ -1889,8 +1890,21 @@ async function scannerOverride(studentId, groupId, status, button) {
         resultIcon.innerHTML = '<i class="bi bi-check-circle-fill"></i>';
         resultTitle.textContent = 'تم التسجيل بتجاوز إداري';
         resultMessage.textContent = result.message || 'تم تسجيل الحضور';
-        resultDetails.innerHTML = '';
+        // Say where the student went in: the group, its teacher and time —
+        // a bare "تم" left the desk guessing which group the override hit.
+        const last = window._lastScan || {};
+        const enr = (last.dossier?.enrollments || []).find(e => Number(e.group_id) === Number(groupId)) || {};
+        const when = enr.schedule_day_ar && enr.schedule_time ? `${enr.schedule_day_ar} ${enr.schedule_time}` : (enr.schedule || '');
+        const statusLabel = (result.attendance && result.attendance.status_display) || (status === 'late' ? 'متأخر' : 'حاضر');
+        resultDetails.innerHTML = `
+            <div class="detail-row"><span class="detail-label">الطالب</span><span class="detail-value">${detailLink('student', studentId, escHtml(last.dossier?.full_name || last.student_name || ''))}</span></div>
+            <div class="detail-row"><span class="detail-label">دخل مجموعة</span><span class="detail-value highlight">${detailLink('group', groupId, escHtml(enr.group_name || ''))}</span></div>
+            <div class="detail-row"><span class="detail-label">المدرس</span><span class="detail-value">${escHtml(enr.teacher_name || '-')}</span></div>
+            <div class="detail-row"><span class="detail-label">ميعاد المجموعة</span><span class="detail-value">${escHtml(when || '-')}</span></div>
+            <div class="detail-row"><span class="detail-label">اتسجل</span><span class="detail-value">${escHtml(statusLabel)} — ${new Date().toLocaleTimeString('ar-EG-u-nu-latn', {hour: '2-digit', minute: '2-digit'})} (تجاوز إداري)</span></div>`
+            + (last.dossier ? renderDossier(last.dossier, new Set([Number(groupId)])) : '');
         playSound('success');
+        addToHistory(result, '');
         await loadTodayStats();
     } catch (error) {
         if (error.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); }

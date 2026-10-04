@@ -845,7 +845,7 @@ class AttendanceService:
         else:
             message = (
                 f'تم تسجيل {student.full_name} '
-                f'{attendance.get_status_display()} — {group.group_name} {on_date:%Y-%m-%d}'
+                f'{attendance.get_status_display()} — {group.group_name}{_teacher_suffix(group)} {on_date:%Y-%m-%d}'
             )
         logger.info(
             f"MANUAL_ATTENDANCE student={student.student_code} group={group.pk} "
