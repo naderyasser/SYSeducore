@@ -51,3 +51,4 @@ staticfiles/
 .coverage
 coverage.xml
 htmlcov/
+e2e/out/

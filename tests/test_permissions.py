@@ -54,6 +54,17 @@ class TestActivityLogAccess(TestRBACBase):
         response = self.client.get(reverse('reports:activity_log'))
         self.assertEqual(response.status_code, 200)
 
+    def test_activity_log_renders_a_row_without_a_user(self):
+        """A system entry (or one whose user was deleted) has ``user=None`` —
+        the page used to 500 on ``log.user.username``."""
+        from apps.attendance.models import ActivityLog
+        ActivityLog.log(user=None, action='permanent_delete', description='حذف بواسطة النظام',
+                        target_model='Student', target_id=0)
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse('reports:activity_log'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'النظام')
+
     def test_teacher_can_access_activity_log(self):
         """Teacher accessing activity log — currently only @login_required.
         NOTE: This test documents the CURRENT behavior. If @admin_required

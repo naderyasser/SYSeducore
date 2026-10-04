@@ -86,7 +86,7 @@
                 {% for log in logs %}
                 <tr>
                     <td style="white-space: nowrap; color: #6b7280;">{{ log.created_at|date:"Y/m/d H:i" }}</td>
-                    <td style="font-weight: 600;">{{ log.user.get_full_name|default:log.user.username|default:"-" }}</td>
+                    <td style="font-weight: 600;">{% if log.user %}{{ log.user.get_full_name|default:log.user.username }}{% else %}النظام{% endif %}</td>
                     <td>
                         <span class="action-badge {% if 'create' in log.action %}create{% elif 'update' in log.action %}update{% elif 'delete' in log.action %}delete{% else %}other{% endif %}">
                             {{ log.get_action_display }}
