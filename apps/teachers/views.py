@@ -862,6 +862,14 @@ def group_detail(request, group_id):
         except ValueError:
             pass
 
+    grid_cycles = list(
+        GroupCycle.objects.filter(group=group, started_on__isnull=False).order_by('-index')
+    )
+    grid_cycle_id = next(
+        (c.cycle_id for c in grid_cycles
+         if c.started_on == grid_from and (c.closed_on or today) == grid_to),
+        None,
+    )
     grid = build_group_attendance_grid(group, grid_from, grid_to)
 
     payments_by_student = {
@@ -919,6 +927,8 @@ def group_detail(request, group_id):
         'students_rows': students_rows,
         'session_columns': grid['columns'],
         'grid_from': grid_from,
+        'grid_cycles': grid_cycles,
+        'grid_cycle_id': grid_cycle_id,
         'today': today,
         'grid_to': grid_to,
         'open_cycle': open_cycle,

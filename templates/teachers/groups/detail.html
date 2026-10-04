@@ -753,15 +753,37 @@
             one phone-width line, and without it the row ran off the right of
             the screen instead of stacking.
             {% endcomment %}
-            <form method="get" class="d-flex flex-wrap gap-2 align-items-center">
-                <input type="date" name="from" value="{{ grid_from|date:'Y-m-d' }}" class="form-control form-control-sm w-auto">
-                <span>إلى</span>
-                <input type="date" name="to" value="{{ grid_to|date:'Y-m-d' }}" class="form-control form-control-sm w-auto">
-                <button type="submit" class="btn btn-sm btn-outline-primary">تحديث</button>
-                <a href="{% url 'attendance:group_roster_print' group.group_id %}?from={{ grid_from|date:'Y-m-d' }}&to={{ grid_to|date:'Y-m-d' }}" target="_blank" class="btn btn-sm btn-outline-dark">
-                    <i class="bi bi-printer me-1"></i>طباعة كشف الحضور
+            {% comment %}
+            Pick a cycle instead of typing dates: nobody remembers lesson dates.
+            The cycle fills ``from``/``to`` itself; custom dates stay one click away.
+            {% endcomment %}
+            <form method="get" class="d-flex flex-wrap gap-2 align-items-center" id="grid-range-form">
+                <select class="form-select form-select-sm w-auto" id="grid-cycle" aria-label="الدورة">
+                    {% for c in grid_cycles %}
+                    <option value="{{ c.cycle_id }}" data-from="{{ c.started_on|date:'Y-m-d' }}" data-to="{% if c.closed_on %}{{ c.closed_on|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}" {% if c.cycle_id == grid_cycle_id %}selected{% endif %}>دورة {{ c.index }} — {{ c.started_on|date:"n/j" }}{% if c.closed_on %} ← {{ c.closed_on|date:"n/j" }}{% else %} (الحالية){% endif %}</option>
+                    {% endfor %}
+                    <option value="" {% if not grid_cycle_id %}selected{% endif %}>تواريخ مخصصة…</option>
+                </select>
+                <span id="grid-custom" class="d-flex flex-wrap gap-2 align-items-center{% if grid_cycle_id %} d-none{% endif %}">
+                    <input type="date" name="from" value="{{ grid_from|date:'Y-m-d' }}" class="form-control form-control-sm w-auto">
+                    <span>إلى</span>
+                    <input type="date" name="to" value="{{ grid_to|date:'Y-m-d' }}" class="form-control form-control-sm w-auto">
+                    <button type="submit" class="btn btn-sm btn-outline-primary">تحديث</button>
+                </span>
+                <a href="{% url 'reports:cycle_register' %}?group={{ group.group_id }}{% if grid_cycle_id %}&cycle={{ grid_cycle_id }}&only=1{% endif %}" class="btn btn-sm btn-dark">
+                    <i class="bi bi-table me-1"></i>كشف الدورة (زي الورقة) وطباعته
                 </a>
             </form>
+            <script>
+            (function () {
+                var sel = document.getElementById('grid-cycle'), form = document.getElementById('grid-range-form');
+                sel.addEventListener('change', function () {
+                    var o = sel.options[sel.selectedIndex];
+                    if (!o.value) { document.getElementById('grid-custom').classList.remove('d-none'); return; }
+                    form.elements.from.value = o.dataset.from; form.elements.to.value = o.dataset.to; form.submit();
+                });
+            })();
+            </script>
         </div>
         {% if user.is_supervisor %}
         {% comment %}

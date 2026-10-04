@@ -31,6 +31,10 @@
     .reg-legend { font-size:.85rem; color:#6b7280; margin-top:8px; }
     @page { size: A4 landscape; margin: 10mm; }
     .sheet { margin-bottom:28px; }
+    td.editable { cursor:pointer; }
+    td.editable:hover { background:#eef2ff; }
+    td.is-saving { opacity:.4; }
+    .cell-menu { position:absolute; z-index:1050; background:#fff; border:1px solid #cbd5e1; border-radius:10px; padding:6px; box-shadow:0 8px 24px rgba(0,0,0,.15); display:flex; flex-wrap:wrap; gap:4px; max-width:260px; }
     .note-in { width:100%; border:0; background:transparent; font-size:.85rem; text-align:right; padding:0; min-width:120px; }
     .note-in:focus { outline:2px solid #93c5fd; background:#eff6ff; }
     .note-in.saved { background:#dcfce7; }
@@ -129,7 +133,7 @@
                 <td class="c-pay"><a class="cell-link" title="الحساب" href="{% url 'payments:list' %}?search={{ r.student.full_name|urlencode }}&group={{ group.group_id }}&month={{ sh.cycle.started_on|date:'Y-m' }}"><span class="d">{{ r.pay_text }}</span>{% if r.pay_status == 'partial' %}<small> ج</small>{% endif %}</a></td>
                 <td class="name"><a class="cell-link" href="{% url 'students:detail' r.student.pk %}">{{ r.student.full_name }}</a></td>
                 {% for c in r.cells %}
-                    <td class="c-s {{ c.kind }}">{% if c.session %}<a class="cell-link" href="{% url 'attendance:session_detail' c.session.session_id %}"><span class="d">{{ c.text }}</span></a>{% endif %}</td>
+                    <td class="c-s {{ c.kind }}{% if c.session %} editable{% endif %}"{% if c.session %} data-date="{{ c.session.session_date|date:'Y-m-d' }}" data-student="{{ r.student.pk }}" data-session="{{ c.session.session_id }}"{% endif %}><span class="d">{{ c.text }}</span></td>
                 {% endfor %}
                 <td class="c-phone"><span class="d">{{ r.phone }}</span></td>
                 <td class="c-notes">
@@ -176,7 +180,7 @@
 </div>
 {% endfor %}
 <div class="reg-legend no-print">
-    ت = تاريخ دفع الدورة · التاريخ في خانة الحصة = حضر يومها · غ = غائب · - = ما اتسجلش · خانة فاضية = حصة لسه ما جاتش · ج = دفع جزء · الملاحظة بتتحفظ أول ما تخرج من الخانة
+    ت = تاريخ دفع الدورة · التاريخ في خانة الحصة = حضر يومها · غ = غائب · - = ما اتسجلش · خانة فاضية = حصة لسه ما جاتش · ج = دفع جزء · اضغط خانة أي حصة عشان تسجّل حضور/غياب · الملاحظة بتتحفظ أول ما تخرج من الخانة
 </div>
 {% endif %}
 {% endblock %}
@@ -220,6 +224,43 @@
                 if (res.success) location.reload(); else alert(res.error || res.message || 'ما اتلغتش');
             });
         });
+    });
+    var GROUP_ID = {{ group.group_id|default:0 }}, menu = null;
+    function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+    function paint(td, status, date) {
+        td.classList.remove('present', 'late', 'absent', 'exception', 'none');
+        var text = '-', d = date.split('-');
+        if (status === 'present' || status === 'late' || status === 'exception') text = (+d[1]) + '/' + (+d[2]);
+        else if (status === 'absent') text = 'غ';
+        td.classList.add(status === 'no_record' ? 'none' : status);
+        td.querySelector('.d').textContent = text;
+    }
+    document.addEventListener('click', function (e) {
+        if (menu && !menu.contains(e.target)) closeMenu();
+        var td = e.target.closest('td.editable');
+        if (!td || (menu && menu.contains(e.target))) return;
+        e.stopPropagation(); closeMenu();
+        menu = document.createElement('div'); menu.className = 'cell-menu';
+        [['present', 'حاضر', 'success'], ['late', 'متأخر', 'warning'], ['absent', 'غائب', 'danger'], ['exception', 'عذر', 'primary'], ['clear', 'مسح', 'secondary']].forEach(function (o) {
+            var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-sm btn-outline-' + o[2]; b.textContent = o[1];
+            b.onclick = function () {
+                closeMenu(); td.classList.add('is-saving');
+                ManualAttendance.mark({groupId: GROUP_ID, studentId: td.dataset.student, date: td.dataset.date, status: o[0]})
+                    .then(function (data) {
+                        if (!data.success) { alert(data.message || 'ما اتسجلش'); return; }
+                        paint(td, data.attendance ? data.attendance.status : 'no_record', td.dataset.date);
+                    })
+                    .catch(function () { alert('فشل الاتصال بالخادم'); })
+                    .finally(function () { td.classList.remove('is-saving'); });
+            };
+            menu.appendChild(b);
+        });
+        var a = document.createElement('a'); a.className = 'btn btn-sm btn-link'; a.textContent = 'تفاصيل الحصة';
+        a.href = '/attendance/session/' + td.dataset.session + '/'; menu.appendChild(a);
+        document.body.appendChild(menu);
+        var r = td.getBoundingClientRect();
+        menu.style.top = (window.scrollY + r.bottom + 4) + 'px';
+        menu.style.left = Math.max(8, window.scrollX + r.left + r.width / 2 - menu.offsetWidth / 2) + 'px';
     });
     document.querySelectorAll('.js-restore').forEach(function (btn) {
         btn.addEventListener('click', function () {
