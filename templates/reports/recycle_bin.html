@@ -512,12 +512,13 @@ function restoreItem(type, id) {
     .catch(() => alert('حدث خطأ في الاتصال'));
 }
 
-function permanentDelete(type, id, name) {
-    if (!confirm(`⚠️ هل أنت متأكد من الحذف النهائي لـ "${name}"؟\nلا يمكن التراجع عن هذا الإجراء!`)) return;
+function permanentDelete(type, id, name, withRecords) {
+    if (!withRecords && !confirm(`⚠️ هل أنت متأكد من الحذف النهائي لـ "${name}"؟\nلا يمكن التراجع عن هذا الإجراء!`)) return;
 
     const formData = new FormData();
     formData.append('type', type);
     formData.append('id', id);
+    if (withRecords) formData.append('with_records', '1');
 
     fetch('{% url "reports:recycle_permanent_delete" %}', {
         method: 'POST',
@@ -540,6 +541,10 @@ function permanentDelete(type, id, name) {
                     el.remove();
                     location.reload();
                 }, 350);
+            }
+        } else if (data.code === 'has_records') {
+            if (confirm(`"${name}" عليه ${data.payments} دفعة و ${data.attendance} سجل حضور.\n\nالحذف الفعلي هيمسح الحساب ده كله من المدفوعات والجرد والتقارير.\nمتأكد؟`)) {
+                permanentDelete(type, id, name, true);
             }
         } else {
             alert(data.message || 'حدث خطأ');

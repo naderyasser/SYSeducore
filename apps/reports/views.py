@@ -1230,7 +1230,25 @@ def recycle_permanent_delete(request):
             return JsonResponse({'success': False, 'message': 'لا يمكن حذف عنصر غير موجود في سلة المهملات'})
 
         obj_name = str(obj)
-        model.all_objects.filter(pk=item_id).hard_delete()
+        from apps.core.purge import PURGERS, PurgeRefused, records_summary
+        if item_type in PURGERS:
+            summary = records_summary(item_type, obj)
+            has_records = summary['payments'] or summary['attendance']
+            if has_records and request.POST.get('with_records') != '1':
+                # The client asks again, naming what goes with it, then
+                # retries with ``with_records=1`` — a real delete, records too.
+                return JsonResponse({
+                    'success': False, 'code': 'has_records', **summary,
+                    'message': f'مرتبط بـ {summary["payments"]} دفعة و {summary["attendance"]} سجل حضور',
+                })
+            try:
+                PURGERS[item_type](obj)
+            except PurgeRefused as exc:
+                return JsonResponse({'success': False, 'message': str(exc)})
+            if has_records:
+                obj_name += f' (مع {summary["payments"]} دفعة و {summary["attendance"]} سجل حضور)'
+        else:
+            model.all_objects.filter(pk=item_id).hard_delete()
 
         ActivityLog.log(
             user=request.user,

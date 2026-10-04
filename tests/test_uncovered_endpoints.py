@@ -244,6 +244,24 @@ class RecyclePermanentDeleteTests(TestCase):
         self.assertTrue(r.json()['success'], r.content[:200])
         self.assertFalse(Room.all_objects.filter(pk=room.pk).exists())
 
+    def test_student_with_payments_asks_then_purges_records_too(self):
+        """«الحذف فعلي»: a binned student with money is not left half-deleted —
+        the first call names the records, the confirmed one removes them all."""
+        from apps.payments.models import Payment
+        Payment.objects.create(
+            student=self.student, group=self.group, month=datetime.date(2026, 9, 1),
+            amount_due=Decimal('100.00'), amount_paid=Decimal('100.00'), status='paid',
+        )
+        self.student.soft_delete()
+        r = self.client.post(self.url, {'type': 'student', 'id': self.student.pk}).json()
+        self.assertEqual((r['success'], r['code'], r['payments']), (False, 'has_records', 1))
+        self.assertTrue(Payment.objects.filter(student_id=self.student.pk).exists())
+
+        r = self.client.post(self.url, {'type': 'student', 'id': self.student.pk, 'with_records': '1'}).json()
+        self.assertTrue(r['success'], r)
+        self.assertFalse(Payment.objects.filter(student_id=self.student.pk).exists())
+        self.assertFalse(Student.all_objects.filter(pk=self.student.pk).exists())
+
     def test_non_numeric_id_is_a_clean_json_answer(self):
         r = self.client.post(self.url, {'type': 'room', 'id': 'abc'})
         self.assertEqual(r.status_code, 200)
