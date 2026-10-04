@@ -480,9 +480,20 @@ def today_attendees(request):
     the number on the card. Newest scan first.
     """
     today = timezone.localdate()
+    # ``?date=`` — the scanner's day log can look back ("ولي أمر سأل على ابنه
+    # امبارح"); ``?all=1`` adds absences/exceptions for that log. Defaults
+    # keep the counter's contract: today, present + late.
+    raw_date = request.GET.get('date')
+    if raw_date:
+        try:
+            from datetime import date as _date
+            today = _date.fromisoformat(raw_date)
+        except ValueError:
+            pass
+    statuses = ['present', 'late', 'absent', 'exception'] if request.GET.get('all') else ['present', 'late']
     rows = (
-        Attendance.objects.filter(session__session_date=today, status__in=['present', 'late'])
-        .select_related('student', 'session__group')
+        Attendance.objects.filter(session__session_date=today, status__in=statuses)
+        .select_related('student', 'session__group', 'session__group__teacher')
         .order_by('-scan_time')
     )
     return JsonResponse({
@@ -495,6 +506,8 @@ def today_attendees(request):
                 'full_name': a.student.full_name,
                 'student_code': a.student.student_code,
                 'group_name': a.session.group.group_name,
+                'group_id': a.session.group_id,
+                'teacher_name': a.session.group.teacher.full_name if a.session.group.teacher_id else '',
                 'session_id': a.session_id,
                 'status': a.status,
                 'status_display': a.get_status_display(),

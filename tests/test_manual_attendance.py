@@ -483,6 +483,22 @@ class SessionDeleteTests(ManualAttendanceBase):
 
 
 class ScannerClientRequestsTests(ManualAttendanceBase):
+    def test_day_log_includes_absences_and_other_days(self):
+        """The scanner's day log (``?all=1``) lists absences too, carries the
+        group, and ``?date=`` reads a past day — it is the desk's record."""
+        from datetime import timedelta
+        yesterday = self.today - timedelta(days=1)
+        session = Session.objects.create(group=self.group, session_date=yesterday)
+        Attendance.objects.create(student=self.student, session=session, status='absent', supervisor=self.supervisor)
+        self.client.force_login(self.teacher_user)
+        url = reverse('attendance:today_attendees')
+        self.assertEqual(self.client.get(url, {'all': '1'}).json()['count'], 0)
+        data = self.client.get(url, {'all': '1', 'date': yesterday.isoformat()}).json()
+        self.assertEqual(data['count'], 1)
+        self.assertEqual(data['attendees'][0]['status'], 'absent')
+        self.assertEqual(data['attendees'][0]['group_id'], self.group.pk)
+        self.assertEqual(self.client.get(url, {'date': yesterday.isoformat()}).json()['count'], 0)
+
     def test_today_attendees_lists_exactly_what_the_counter_counts(self):
         session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today))
         other = Student.objects.create(

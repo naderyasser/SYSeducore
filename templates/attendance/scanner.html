@@ -481,12 +481,21 @@
     }
 
     /* Recent Scans */
+    .day-group { border:1px solid #e5e7eb; border-radius:10px; margin-bottom:10px; overflow:hidden; }
+    .day-group-head { background:#f1f5f9; padding:8px 12px; font-weight:700; font-size:.9rem; display:flex; justify-content:space-between; gap:8px; }
+    .day-group-head small { font-weight:400; color:#64748b; }
+    .day-row { display:flex; align-items:center; gap:8px; padding:6px 12px; border-top:1px solid #f1f5f9; font-size:.88rem; }
+    .day-row a { flex:1; color:#111827; text-decoration:none; font-weight:600; }
+    .day-row a:hover { text-decoration:underline; }
+    .day-row .t { color:#64748b; direction:ltr; }
+    .st-present { color:#15803d; } .st-late { color:#b45309; } .st-absent { color:#b91c1c; } .st-exception { color:#1d4ed8; }
+
     .recent-scans {
         background: #fff;
         border-radius: 12px;
         padding: 20px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        max-height: 500px;
+        max-height: 640px;
         overflow-y: auto;
     }
 
@@ -1191,25 +1200,23 @@
             <!-- Recent Scans -->
             <div class="recent-scans">
                 <div class="section-header">
-                    <h5><i class="bi bi-clock-history"></i> آخر عمليات التسجيل</h5>
+                    <h5><i class="bi bi-clock-history"></i> سجل الحضور بالمجموعة</h5>
                 </div>
-
-                <div class="filter-tabs">
-                    <button class="filter-tab active" onclick="filterScans('all')" id="filterAll">
-                        الكل <span class="count" id="countAll">0</span>
-                    </button>
-                    <button class="filter-tab" onclick="filterScans('success')" id="filterSuccess">
-                        النجاح <span class="count" id="countSuccess">0</span>
-                    </button>
-                    <button class="filter-tab" onclick="filterScans('error')" id="filterError">
-                        الفشل <span class="count" id="countError">0</span>
-                    </button>
+                {% comment %}
+                Loaded from the server (attendance of the chosen day), grouped
+                by group — a refresh or a deploy no longer wipes it, and a new
+                day simply starts its own list. Clicking a name opens the
+                student's full report.
+                {% endcomment %}
+                <div class="d-flex gap-2 mb-2">
+                    <input type="date" id="dayLogDate" class="form-control form-control-sm" style="max-width:150px" value="{% now 'Y-m-d' %}" max="{% now 'Y-m-d' %}">
+                    <input type="search" id="dayLogSearch" class="form-control form-control-sm" placeholder="ابحث باسم الطالب أو الكود…">
                 </div>
-
+                <div class="small text-muted mb-2" id="dayLogSummary"></div>
                 <div id="scansList">
                     <div class="empty-state">
                         <i class="bi bi-inbox"></i>
-                        <p>لا توجد عمليات تسجيل بعد</p>
+                        <p>لا توجد تسجيلات حضور في اليوم ده</p>
                     </div>
                 </div>
             </div>
@@ -1347,12 +1354,10 @@
 <script src="{% static 'js/vendor/html5-qrcode-2.3.8.min.js' %}"></script>
 <script>
 // Global State
-let scansHistory = [];
 let cameraStream = null;
 let isCameraRunning = false;
 let lastScannedCode = null;
 let lastScanTime = 0;
-let currentFilter = 'all';
 let todayStats = { present: 0, total: 0 };
 
 // DOM Elements
@@ -2060,84 +2065,50 @@ function showLoading() {
 }
 
 // Add to History
+// Day log — the server's attendance for the chosen day, grouped by group.
+let dayLog = [], dayLogTimer = null;
+const REPORT_URL = '{% url "students:report" 0 %}';
 function addToHistory(data, code) {
-    const scan = {
-        code: code,
-        success: data.success,
-        status: data.status || (data.success ? 'registered' : 'error'),
-        message: data.message,
-        student: data.student?.full_name || data.student?.name || '-',
-        time: new Date().toLocaleTimeString('ar-EG-u-nu-latn'),
-        timestamp: Date.now()
-    };
-
-    scansHistory.unshift(scan);
-
-    // Keep only last 50
-    if (scansHistory.length > 50) {
-        scansHistory.pop();
-    }
-
-    renderScansList();
-    updateCounts();
+    // Any scan may have written a row: refresh from the server (debounced).
+    clearTimeout(dayLogTimer);
+    dayLogTimer = setTimeout(loadDayLog, 400);
 }
-
-// Render Scans List
+async function loadDayLog() {
+    const d = document.getElementById('dayLogDate').value;
+    try {
+        const r = await fetch('{% url "attendance:today_attendees" %}?all=1&date=' + encodeURIComponent(d), {headers: {'X-Requested-With': 'XMLHttpRequest'}});
+        const data = await r.json();
+        dayLog = data.success ? data.attendees : [];
+    } catch (e) { dayLog = []; }
+    renderScansList();
+}
 function renderScansList() {
-    const filtered = currentFilter === 'all'
-        ? scansHistory
-        : scansHistory.filter(s => s.success === (currentFilter === 'success'));
-
-    if (filtered.length === 0) {
-        scansList.innerHTML = `
-            <div class="empty-state">
-                <i class="bi bi-inbox"></i>
-                <p>لا توجد عمليات ${currentFilter === 'all' ? '' : (currentFilter === 'success' ? 'ناجحة' : 'فاشلة')}</p>
-            </div>
-        `;
+    const q = (document.getElementById('dayLogSearch').value || '').trim().toLowerCase();
+    const rows = dayLog.filter(a => !q || a.full_name.toLowerCase().includes(q) || String(a.student_code || '').toLowerCase().includes(q));
+    const present = dayLog.filter(a => a.status === 'present' || a.status === 'late').length;
+    document.getElementById('dayLogSummary').textContent = dayLog.length ? `حضر ${present} · غاب ${dayLog.length - present} · ${new Set(dayLog.map(a => a.group_id)).size} مجموعة` : '';
+    if (!rows.length) {
+        scansList.innerHTML = `<div class="empty-state"><i class="bi bi-inbox"></i><p>${q ? 'مافيش طالب بالاسم ده في اليوم ده' : 'لا توجد تسجيلات حضور في اليوم ده'}</p></div>`;
         return;
     }
-
-    scansList.innerHTML = filtered.slice(0, 20).map(scan => {
-        let itemClass = scan.success ? (scan.status === 'already_registered' ? 'info' : 'success') : 'error';
-        let icon = scan.success ? (scan.status === 'already_registered' ? 'info' : 'check') : 'x';
-        return `
-        <div class="scan-item ${itemClass}">
-            <div class="scan-item-icon">
-                <i class="bi bi-${icon}-circle-fill"></i>
-            </div>
-            <div class="scan-item-info">
-                <h6>${escHtml(scan.student)}</h6>
-                <p>${escHtml(scan.message)}</p>
-            </div>
-            <div class="scan-item-time">${scan.time}</div>
-        </div>
-    `}).join('');
+    const groups = new Map();
+    rows.forEach(a => { if (!groups.has(a.group_id)) groups.set(a.group_id, {name: a.group_name, teacher: a.teacher_name, rows: []}); groups.get(a.group_id).rows.push(a); });
+    scansList.innerHTML = [...groups.values()].sort((x, y) => x.name.localeCompare(y.name, 'ar')).map(g => `
+        <div class="day-group">
+            <div class="day-group-head"><span>${escHtml(g.name)}</span><small>${escHtml(g.teacher)} · ${g.rows.length}</small></div>
+            ${g.rows.slice().sort((x, y) => x.time.localeCompare(y.time)).map(a => `
+                <div class="day-row">
+                    <a href="${REPORT_URL.replace('/0/', '/' + a.student_id + '/')}" title="تقرير الطالب">${escHtml(a.full_name)}</a>
+                    <span class="st-${a.status}">${escHtml(a.status_display)}</span>
+                    <span class="t">${a.time}</span>
+                </div>`).join('')}
+        </div>`).join('');
 }
-
-// Update Counts
-function updateCounts() {
-    const all = scansHistory.length;
-    const success = scansHistory.filter(s => s.success).length;
-    const error = scansHistory.filter(s => !s.success).length;
-
-    document.getElementById('countAll').textContent = all;
-    document.getElementById('countSuccess').textContent = success;
-    document.getElementById('countError').textContent = error;
-}
-
-// Filter Scans
-function filterScans(filter) {
-    currentFilter = filter;
-
-    // Update tabs
-    document.querySelectorAll('.filter-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    document.getElementById('filter' + filter.charAt(0).toUpperCase() + filter.slice(1)).classList.add('active');
-
-    renderScansList();
-}
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('dayLogDate').addEventListener('change', loadDayLog);
+    document.getElementById('dayLogSearch').addEventListener('input', renderScansList);
+    loadDayLog();
+});
 
 // Load Today Stats
 async function loadTodayStats() {
