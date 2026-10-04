@@ -1,4 +1,5 @@
 from datetime import date
+from django.db.models import Q
 from decimal import Decimal
 
 from apps.teachers.models import Group
@@ -206,22 +207,21 @@ class SettlementService:
         group_ids = [g.group_id for g in groups]
         groups_by_id = {g.group_id: g for g in groups}
 
-        # ``Payment.month`` is a *bucket* — always the first of the month — not
-        # the day the money moved. Comparing it against ``period_start``
-        # directly therefore drops a whole month whenever the period does not
-        # begin on the 1st: a sheet for 2 Aug — 1 Sep excluded every August
-        # payment and came out at 0.00 next to an identical-looking sheet for
-        # 1 Aug — 31 Aug worth 5,653 EGP. One day of difference, the teacher's
-        # entire month of earnings. The bucket is included when it *overlaps*
-        # the period, which is what the desk means by "this period".
+        # التصفية بالدورة لا بالشهر: كل دورة (8 حصص عادة) تدخل كشف الفترة
+        # التي *بدأت* فيها، بالكامل وبحصصها هي فقط — فلا تتكرر دورة في
+        # كشفين، ولا يدخل كشف 15/8 → 15/9 دورةٌ بدأت 30/9 لمجرد أن
+        # ``Payment.month`` الخاص بها هو سبتمبر. كان الكشف يجمع دورتين أو
+        # ثلاثًا لكل طالب (حصص 7/20 و 8/20) فتطلع مبالغ مثل 109.38 و 262.51.
+        # الدفعات القديمة بلا دورة فقط تبقى على منطق "الشهر يتقاطع مع الفترة".
         period_first_bucket = period_start.replace(day=1)
         payments = (
-            Payment.objects.filter(
-                group_id__in=group_ids,
-                month__gte=period_first_bucket, month__lte=period_end,
+            Payment.objects.filter(group_id__in=group_ids)
+            .filter(
+                Q(cycle__started_on__gte=period_start, cycle__started_on__lte=period_end)
+                | Q(cycle__isnull=True, month__gte=period_first_bucket, month__lte=period_end)
             )
             .select_related('student', 'cycle')
-            .order_by('month', 'payment_id')
+            .order_by('cycle__started_on', 'month', 'payment_id')
         )
 
         enrollments = {

@@ -437,7 +437,7 @@ def settlement_detail(request, settlement_id):
         TeacherSettlement.objects.select_related('teacher'), pk=settlement_id,
     )
     lines = (
-        settlement.lines.select_related('group', 'student')
+        settlement.lines.select_related('group', 'student', 'cycle')
         .order_by('group__group_name', 'student__full_name')
     )
 
@@ -460,7 +460,7 @@ def settlement_print(request, settlement_id):
         TeacherSettlement.objects.select_related('teacher'), pk=settlement_id,
     )
     lines = (
-        settlement.lines.select_related('group', 'student')
+        settlement.lines.select_related('group', 'student', 'cycle')
         .order_by('group__group_name', 'student__full_name')
     )
     groups = {}

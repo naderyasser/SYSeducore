@@ -86,7 +86,7 @@
                 {% for line in lines %}
                 <tr>
                     <td>{{ line.student.full_name }}</td>
-                    <td>{{ line.sessions_consumed }}/{{ line.sessions_entitled }}</td>
+                    <td>{{ line.sessions_consumed }}/{{ line.sessions_entitled }}{% if line.cycle %}<br><small class="text-muted">دورة {{ line.cycle.index }}</small>{% endif %}</td>
                     <td>{{ line.effective_amount }}</td>
                     <td>{{ line.line_center_share }}</td>
                     <td>{{ line.line_teacher_share }}</td>

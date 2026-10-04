@@ -980,7 +980,7 @@ class TeacherSettlementBuildTest(LedgerTestBase):
         from apps.teachers.models import GroupCycle
 
         self.cycle = GroupCycle.objects.create(
-            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate().replace(day=1),
         )
         self.payment.cycle = self.cycle
         self.payment.sessions_total = 4
@@ -1000,6 +1000,24 @@ class TeacherSettlementBuildTest(LedgerTestBase):
         from apps.payments.services import SettlementService
         amount = SettlementService._prorate_by_sessions(Decimal('300.00'), 99, 4)
         self.assertEqual(amount, Decimal('300.00'))
+
+    def test_cycle_counts_only_in_the_period_it_started(self):
+        """A cycle belongs to the sheet of the period it started in — a cycle
+        starting after the period end must not leak in via ``Payment.month``."""
+        from apps.payments.services import SettlementService
+        from datetime import timedelta
+
+        self.cycle.started_on = self.month_start + timedelta(days=20)
+        self.cycle.save()
+        early = SettlementService.build_or_refresh(
+            self.teacher, self.month_start, self.month_start + timedelta(days=10), user=self.admin,
+        )
+        self.assertFalse(early.lines.filter(is_excluded=False).exists())
+        late = SettlementService.build_or_refresh(
+            self.teacher, self.month_start + timedelta(days=11), self.month_start + timedelta(days=40),
+            user=self.admin,
+        )
+        self.assertEqual(late.lines.filter(is_excluded=False).count(), 1)
 
     def test_build_creates_settlement_with_prorated_line(self):
         from apps.payments.services import SettlementService
@@ -1099,7 +1117,7 @@ class TeacherSettlementViewsTest(LedgerTestBase):
         from apps.teachers.models import GroupCycle
 
         self.cycle = GroupCycle.objects.create(
-            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate(),
+            group=self.group, index=1, sessions_planned=4, started_on=timezone.localdate().replace(day=1),
         )
         self.payment.cycle = self.cycle
         self.payment.sessions_total = 4

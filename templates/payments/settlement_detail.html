@@ -85,7 +85,7 @@
             {% for line in lines %}
             <tr data-line-id="{{ line.line_id }}" class="{% if line.is_excluded %}excluded-row{% endif %}">
                 <td>{{ line.student.full_name }}</td>
-                <td>{{ line.sessions_consumed }}/{{ line.sessions_entitled }}</td>
+                <td>{{ line.sessions_consumed }}/{{ line.sessions_entitled }}{% if line.cycle %}<br><small class="text-muted">دورة {{ line.cycle.index }}</small>{% endif %}</td>
                 <td><small>{{ line.session_dates|join:", " }}</small></td>
                 <td class="system-value">{{ line.computed_amount|egp }}</td>
                 <td class="editable"><input type="number" step="0.01" class="form-control form-control-sm f-amount" value="{{ line.amount_override|default_if_none:'' }}" placeholder="{{ line.computed_amount }}" {% if settlement.status == 'approved' %}disabled{% endif %}></td>
