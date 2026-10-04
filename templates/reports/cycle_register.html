@@ -244,8 +244,13 @@
         [['present', 'حاضر', 'success'], ['late', 'متأخر', 'warning'], ['absent', 'غائب', 'danger'], ['exception', 'عذر', 'primary'], ['clear', 'مسح', 'secondary']].forEach(function (o) {
             var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-sm btn-outline-' + o[2]; b.textContent = o[1];
             b.onclick = function () {
+                var note = '';
+                if (o[0] === 'exception') {
+                    note = window.prompt('سبب العذر / الاستثناء؟');
+                    if (note === null) { return; }
+                }
                 closeMenu(); td.classList.add('is-saving');
-                ManualAttendance.mark({groupId: GROUP_ID, studentId: td.dataset.student, date: td.dataset.date, status: o[0]})
+                ManualAttendance.mark({groupId: GROUP_ID, studentId: td.dataset.student, date: td.dataset.date, status: o[0], note: note})
                     .then(function (data) {
                         if (!data.success) { alert(data.message || 'ما اتسجلش'); return; }
                         paint(td, data.attendance ? data.attendance.status : 'no_record', td.dataset.date);

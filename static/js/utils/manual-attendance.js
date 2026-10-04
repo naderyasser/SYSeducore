@@ -61,7 +61,8 @@
             group_id: opts.groupId,
             student_id: opts.studentId,
             date: opts.date || '',
-            status: opts.status || 'present'
+            status: opts.status || 'present',
+            note: opts.note || ''
         });
     }
 

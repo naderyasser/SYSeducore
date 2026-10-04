@@ -739,7 +739,7 @@ class AttendanceService:
         return True, len(student_ids)
 
     @staticmethod
-    def record_manual(student, group, on_date, status, supervisor):
+    def record_manual(student, group, on_date, status, supervisor, note=''):
         """
         تسجيل حضور يدوي — بديل/مكمل للباركود.
 
@@ -825,12 +825,16 @@ class AttendanceService:
                 attendance = Attendance.objects.create(
                     student=student, session=session, status=status,
                     scan_time=scan_time, supervisor=supervisor,
+                    note=(note or '')[:255] if status == 'exception' else '',
                 )
                 created = True
             else:
                 attendance.status = status
                 attendance.supervisor = supervisor
-                attendance.save(update_fields=['status', 'supervisor'])
+                # The reason belongs to the excuse: a new excuse writes its
+                # reason, any other status drops a stale one.
+                attendance.note = (note or '')[:255] if status == 'exception' else ''
+                attendance.save(update_fields=['status', 'supervisor', 'note'])
 
             # The counter lives on the *open* cycle's Payment and
             # ``update_payment_sessions`` creates that row when missing —

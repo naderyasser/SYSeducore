@@ -483,6 +483,17 @@ class SessionDeleteTests(ManualAttendanceBase):
 
 
 class ScannerClientRequestsTests(ManualAttendanceBase):
+    def test_manual_excuse_keeps_its_reason(self):
+        """«عايز ملاحظة سبب الاستثناء»: a manual عذر stores the reason typed with
+        it, and switching the cell to another status drops it."""
+        from apps.attendance.services import AttendanceService
+        AttendanceService.record_manual(self.student, self.group, self.today, 'exception', self.supervisor, note='ظرف عائلي')
+        att = Attendance.objects.get(student=self.student, session__session_date=self.today)
+        self.assertEqual(att.note, 'ظرف عائلي')
+        AttendanceService.record_manual(self.student, self.group, self.today, 'present', self.supervisor, note='x')
+        att.refresh_from_db()
+        self.assertEqual(att.note, '')
+
     def test_day_log_includes_absences_and_other_days(self):
         """The scanner's day log (``?all=1``) lists absences too, carries the
         group, and ``?date=`` reads a past day — it is the desk's record."""

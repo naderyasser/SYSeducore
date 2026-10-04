@@ -926,6 +926,7 @@ def group_detail(request, group_id):
         'schedule_entries': group.get_schedule_entries(),
         'students_rows': students_rows,
         'session_columns': grid['columns'],
+        'grid_notes': grid['notes'],
         'grid_from': grid_from,
         'grid_cycles': grid_cycles,
         'grid_cycle_id': grid_cycle_id,

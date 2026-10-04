@@ -79,6 +79,11 @@ class Attendance(models.Model):
     scan_time = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=15, choices=STATUS_CHOICES)
     rejection_reason = models.CharField(max_length=255, blank=True)
+    note = models.CharField(
+        max_length=255, blank=True, default='',
+        verbose_name="ملاحظة الحصة",
+        help_text="سبب العذر/الاستثناء اليدوي — بيظهر على الخانة وتحت جدول الحضور",
+    )
     
     supervisor = models.ForeignKey(
         'accounts.User',

@@ -255,6 +255,11 @@
         gap: 4px;
     }
     .cell-chooser .btn { min-width: 3.2rem; }
+    .grid-notes { margin-top:12px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px 14px; }
+    .grid-notes h6 { font-weight:700; font-size:.9rem; margin-bottom:6px; }
+    .grid-notes ul { margin:0; padding-inline-start:18px; font-size:.88rem; }
+    .grid-notes li.cancelled { color:#64748b; }
+    .attendance-grid td.has-note { box-shadow: inset 0 0 0 2px #1d4ed8; }
     .grid-legend {
         margin-top: 12px;
         font-size: 0.82rem;
@@ -817,8 +822,8 @@
                     <tr data-student-id="{{ row.student.student_id }}">
                         <th class="sticky-name">{{ row.student.full_name }} {% plan_badge row.student %}</th>
                         {% for cell in row.cells %}
-                        {% with col=session_columns|index:forloop.counter0 locked=row.locked|index:forloop.counter0 %}
-                        <td class="cell cell-{{ cell }}" data-state="{{ cell }}" data-date="{{ col.date|date:'Y-m-d' }}"{% if col.session_id %} data-session-id="{{ col.session_id }}"{% endif %}{% if locked %} data-locked="1" title="استثناء معتمد — يُدار من صفحة الاستثناءات"{% endif %}>{{ cell|cell_glyph }}</td>
+                        {% with col=session_columns|index:forloop.counter0 locked=row.locked|index:forloop.counter0 note=row.notes|index:forloop.counter0 %}
+                        <td class="cell cell-{{ cell }}{% if note %} has-note{% endif %}" data-state="{{ cell }}" data-date="{{ col.date|date:'Y-m-d' }}"{% if col.session_id %} data-session-id="{{ col.session_id }}"{% endif %}{% if locked %} data-locked="1"{% endif %}{% if note %} title="{{ note }}"{% elif col.is_cancelled %} title="حصة ملغية — {{ col.cancellation_reason|default:'بدون سبب مكتوب' }}"{% elif cell == 'not_enrolled' %} title="قبل ما الطالب يدخل المجموعة"{% endif %}>{{ cell|cell_glyph }}</td>
                         {% endwith %}
                         {% endfor %}
                     </tr>
@@ -830,11 +835,21 @@
             <span class="cell cell-present">✓</span> حاضر
             <span class="cell cell-late">م</span> متأخر
             <span class="cell cell-absent">✗</span> غائب
-            <span class="cell cell-exception">س</span> استثناء / عذر
+            <span class="cell cell-exception">س</span> استثناء / عذر (مرّر الماوس على الخانة أو شوف السبب تحت)
             <span class="cell cell-no_record">—</span> بلا سجل
             <span class="cell cell-cancelled">//</span> ملغاة
             <span class="cell cell-not_enrolled"></span> قبل تاريخ تسجيله (يمكن الضغط للتسجيل)
         </div>
+        {% if grid_notes %}
+        <div class="grid-notes">
+            <h6><i class="bi bi-chat-left-text me-1"></i>ملاحظات الحصص في الفترة دي (الأعذار والحصص الملغية وأسبابها)</h6>
+            <ul>
+                {% for n in grid_notes %}
+                <li class="{{ n.kind }}"><b dir="ltr">{{ n.date|date:"d/m" }}</b> — {% if n.student %}{{ n.student.full_name }}: {% endif %}{{ n.text }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         {% else %}
         <div class="empty-state">
             <i class="bi bi-calendar-x"></i>
@@ -866,13 +881,20 @@
     }
 
     function save(cell, status) {
-        var row = cell.closest('tr');
+        var row = cell.closest('tr'), note = '';
+        if (status === 'exception') {
+            // An excuse without a reason explained nothing later — ask for it.
+            note = window.prompt('سبب العذر / الاستثناء؟ (هيظهر على الخانة وتحت الجدول)');
+            if (note === null) { return; }
+        }
         cell.classList.add('is-saving');
-        ManualAttendance.mark({groupId: GROUP_ID, studentId: row.dataset.studentId, date: cell.dataset.date, status: status})
+        ManualAttendance.mark({groupId: GROUP_ID, studentId: row.dataset.studentId, date: cell.dataset.date, status: status, note: note})
             .then(function (data) {
                 if (!data.success) { alert(data.message || 'فشل التسجيل'); return; }
                 if (data.session_id) { cell.dataset.sessionId = data.session_id; }
                 paint(cell, data.attendance ? data.attendance.status : 'no_record');
+                cell.title = status === 'exception' ? 'عذر — ' + (note || 'بدون سبب مكتوب') : '';
+                cell.classList.toggle('has-note', status === 'exception');
             })
             .catch(function (err) { if (err.message !== 'الجلسة منتهية') { alert('فشل الاتصال بالخادم'); } })
             .finally(function () { cell.classList.remove('is-saving'); });

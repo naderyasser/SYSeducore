@@ -156,6 +156,7 @@ def manual_attendance(request):
     try:
         result = AttendanceService.record_manual(
             student=student, group=group, on_date=on_date, status=status, supervisor=request.user,
+            note=(data.get('note') or '').strip(),
         )
     except Exception:
         logger.exception('manual_attendance failed')

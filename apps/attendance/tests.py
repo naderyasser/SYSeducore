@@ -1873,6 +1873,19 @@ class AttendanceGridTest(TestCase):
         self.assertEqual(len(grid['rows']), 1)
         self.assertEqual(grid['rows'][0]['cells'], ['present', 'absent'])
 
+    def test_excuse_and_cancellation_carry_their_reason(self):
+        """«مش عارف إيه الاستثناء»: an excused cell says why, and a cancelled
+        lesson its reason, both on the cell and in the list under the grid."""
+        from apps.attendance.grids import build_group_attendance_grid
+
+        Attendance.objects.filter(student=self.student_a, session=self.session2).update(status='exception')
+        Session.objects.filter(pk=self.session1.pk).update(is_cancelled=True, cancellation_reason='عطلة رسمية')
+        grid = build_group_attendance_grid(self.group, self.today, self.today + timedelta(days=1))
+        self.assertIn('بدون سبب مكتوب', grid['rows'][0]['notes'][1])
+        texts = [n['text'] for n in grid['notes']]
+        self.assertTrue(any('عطلة رسمية' in t for t in texts))
+        self.assertTrue(any('بدون سبب مكتوب' in t for t in texts))
+
     def test_pre_enrollment_sessions_are_masked(self):
         """A session before the student joined must read 'not_enrolled', not 'no_record'."""
         from apps.attendance.grids import build_group_attendance_grid
