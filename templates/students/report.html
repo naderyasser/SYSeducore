@@ -169,33 +169,11 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
             <div class="kpi"><div class="n bad">{{ attendance_all.absent }}</div><div class="l">غائب — الإجمالي</div></div>
         </div>
 
-        {% if recent_rows %}
-        <table class="rep mt-3">
-            <thead>
-                <tr><th>التاريخ</th><th class="start">المجموعة</th><th>الحالة</th><th>الوقت</th></tr>
-            </thead>
-            <tbody>
-                {% for a in recent_rows %}
-                <tr>
-                    <td class="num">{{ a.scan_time|date:"Y-m-d" }}</td>
-                    <td class="start">{{ a.session.group.group_name|default:"—" }}</td>
-                    <td>
-                        {% if a.status == 'present' %}<span class="ok">حاضر</span>
-                        {% elif a.status == 'late' %}<span class="warn">متأخر</span>
-                        {% elif a.status == 'absent' %}<span class="bad">غائب</span>
-                        {% else %}استثناء{% endif %}
-                    </td>
-                    <td class="num">{{ a.scan_time|time:"H:i" }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% endif %}
 
-        <h2 class="sec"><i class="bi bi-table"></i> سجل الدورات — الدفع والحضور</h2>
+        <h2 class="sec"><i class="bi bi-table"></i> الحضور والدفع لكل مجموعة — بالدورة</h2>
         {% for g in cycle_groups %}
-        <div class="ghead">{{ g.group.group_name }} — {{ g.group.teacher.full_name }}</div>
-        <table class="paper">
+        <div class="ghead" style="page-break-after:avoid">{{ g.group.group_name }} — {{ g.group.teacher.full_name }}</div>
+        <table class="paper" style="page-break-inside:avoid">
             <thead>
                 <tr>
                     <th>الدورة</th>
@@ -223,6 +201,7 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
         <p class="text-muted">لا توجد دورات مسجلة لهذا الطالب.</p>
         {% endfor %}
         <p class="text-muted small mb-0">التاريخ في خانة الحصة = حضر يومها · غ = غائب · - = ما اتسجلش · خانة فاضية = حصة لسه ما جاتش</p>
+
 
         <h2 class="sec"><i class="bi bi-cash-stack"></i> كشف حساب المدفوعات</h2>
         <table class="rep">

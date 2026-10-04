@@ -453,17 +453,12 @@ def student_report(request, student_id):
     )
     attendance_all = attendance.aggregate(**counts)
     attendance_recent = attendance.filter(scan_time__gte=thirty_days_ago).aggregate(**counts)
-    recent_rows = (
-        attendance.select_related('session', 'session__group')
-        .order_by('-scan_time')[:15]
-    )
 
     context = {
         'student': student,
         'enrollments': enrollments,
         'attendance_all': attendance_all,
         'attendance_recent': attendance_recent,
-        'recent_rows': recent_rows,
         'today': timezone.localdate(),
         'printed_at': timezone.localtime(),
     }
