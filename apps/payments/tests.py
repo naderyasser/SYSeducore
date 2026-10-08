@@ -968,6 +968,68 @@ class CollectPaymentApiTest(LedgerTestBase):
         self.assertTrue(all(p.status == 'paid' for p in payments))
 
 
+class DiscountExemptDeleteTest(LedgerTestBase):
+    """
+    Client: «مفيش ملاحظه دفع مخفض … بيدفع نسبه او مجاني بالتالي مش بيضاف
+    لحساب المدرس» و«معنديش حذف من قاعدة البيانات».
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+        self.client.login(username='ledger_supervisor', password='TestPass123!')
+
+    def _collect(self, **extra):
+        from apps.teachers.models import GroupCycle
+        data = {'student_id': self.student.pk, 'group_id': self.group.pk}
+        data.update(extra)
+        r = self.client.post(reverse('api_collect'), data).json()
+        cycle = GroupCycle.objects.filter(group=self.group, closed_on__isnull=True).first()
+        if cycle and not cycle.started_on:
+            cycle.started_on = timezone.localdate()
+            cycle.save(update_fields=['started_on'])
+        return r, Payment.objects.filter(student=self.student, cycle=cycle).first()
+
+    def test_discount_needs_a_reason_and_makes_the_amount_the_whole_due(self):
+        r, _ = self._collect(amount='150', kind='discount')
+        self.assertFalse(r['success'])
+        r, p = self._collect(amount='150', kind='discount', note='أخوات')
+        self.assertTrue(r['success'])
+        self.assertEqual((p.amount_due, p.amount_paid, p.status), (Decimal('150.00'), Decimal('150.00'), 'paid'))
+        self.assertIn('أخوات', p.notes)
+
+    def test_exempt_is_paid_for_nothing_and_kept_out_of_the_teacher_account(self):
+        r, p = self._collect(amount='0', kind='exempt', note='منحة')
+        self.assertTrue(r['success'], r)
+        self.assertTrue(p.is_exempt)
+        self.assertEqual((p.amount_due, p.status), (Decimal('0.00'), 'paid'))
+        s = SettlementService.build_or_refresh(self.teacher, p.cycle.started_on, p.cycle.started_on, user=self.admin)
+        self.assertEqual(s.computed_gross, Decimal('0.00'))
+
+    def test_unpaid_cycle_adds_nothing_and_discount_adds_the_discounted_amount(self):
+        _, p = self._collect(amount='100')               # partial: 100 of 300
+        s = SettlementService.build_or_refresh(self.teacher, p.cycle.started_on, p.cycle.started_on, user=self.admin)
+        self.assertEqual(s.computed_gross, Decimal('100.00'))
+        r = self.client.post(reverse('api_payment_adjust', args=[p.pk]),
+                             {'kind': 'discount', 'amount_due': '200', 'note': 'نسبة'}).json()
+        self.assertTrue(r['success'], r)
+        p.refresh_from_db(); s.refresh_from_db()
+        self.assertEqual((p.amount_due, p.status), (Decimal('200.00'), 'partial'))
+        self.assertIn('نسبة', p.notes)
+        r = self.client.post(reverse('api_payment_adjust', args=[p.pk]),
+                             {'kind': 'discount', 'amount_due': '50', 'note': 'x'}).json()
+        self.assertFalse(r['success'])                     # below what was already paid
+
+    def test_delete_is_admin_only_and_really_deletes(self):
+        _, p = self._collect(amount='300')
+        url = reverse('api_payment_delete', args=[p.pk])
+        self.assertEqual(self.client.post(url).status_code, 403)
+        self.client.login(username='ledger_admin', password='TestPass123!')
+        self.assertTrue(self.client.post(url).json()['success'])
+        self.assertFalse(Payment.objects.filter(pk=p.pk).exists())
+        self.assertFalse(PaymentTransaction.objects.filter(payment_id=p.pk).exists())
+
+
 class TeacherSettlementBuildTest(LedgerTestBase):
     """
     SettlementService.build_or_refresh — persisted, session-aware, editable

@@ -458,6 +458,21 @@
                class="btn btn-outline-primary btn-sm w-100 mt-2">
                 <i class="bi bi-journal-text me-1"></i> كشف الطالب: الدفع والحضور
             </a>
+            {% if payment.notes %}
+            <div class="small text-muted mt-2 pay-notes" style="white-space:pre-line"><i class="bi bi-sticky me-1"></i>{{ payment.notes }}</div>
+            {% endif %}
+            <div class="d-flex gap-2 mt-2">
+                <button type="button" class="btn btn-outline-warning btn-sm flex-fill"
+                        onclick="openAdjust({{ payment.payment_id }}, '{{ payment.student.full_name|escapejs }}', '{% localize off %}{{ payment.amount_due }}{% endlocalize %}', '{% localize off %}{{ payment.amount_paid }}{% endlocalize %}')">
+                    <i class="bi bi-percent me-1"></i> خصم / مجاني / ملاحظة
+                </button>
+                {% if user.is_admin %}
+                <button type="button" class="btn btn-outline-danger btn-sm"
+                        onclick="deletePayment({{ payment.payment_id }}, '{{ payment.student.full_name|escapejs }}')" title="حذف الدفعة نهائيًا من قاعدة البيانات">
+                    <i class="bi bi-trash"></i> حذف نهائي
+                </button>
+                {% endif %}
+            </div>
             {% if payment.amount_paid > 0 %}
             <a href="{% url 'payments:receipt' payment.payment_id %}" target="_blank"
                class="btn btn-outline-secondary btn-sm w-100 mt-2">
@@ -497,10 +512,109 @@
     </div>
 </div>
 
+
+<div class="modal fade" id="adjModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">خصم / مجاني / ملاحظة — <span class="adj-name"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+      </div>
+      <div class="modal-body">
+        <div class="btn-group w-100 mb-3" role="group">
+          <input type="radio" class="btn-check" name="adjKind" id="adjDiscount" value="discount" checked onchange="adjKindChanged()">
+          <label class="btn btn-outline-warning" for="adjDiscount">مخفض / نسبة</label>
+          <input type="radio" class="btn-check" name="adjKind" id="adjExempt" value="exempt" onchange="adjKindChanged()">
+          <label class="btn btn-outline-secondary" for="adjExempt">مجاني</label>
+          <input type="radio" class="btn-check" name="adjKind" id="adjNote" value="note" onchange="adjKindChanged()">
+          <label class="btn btn-outline-primary" for="adjNote">ملاحظة بس</label>
+        </div>
+        <div class="mb-3" id="adjDueWrap">
+          <label class="form-label" for="adjDue">المطلوب من الطالب بعد الخصم (ج.م)</label>
+          <input type="number" class="form-control" id="adjDue" min="0" step="0.01">
+          <div class="form-text">المطلوب الحالي <span class="adj-cur"></span> — المدفوع <span class="adj-paid"></span></div>
+        </div>
+        <label class="form-label" for="adjNoteText" id="adjNoteLabel">السبب (مطلوب)</label>
+        <textarea class="form-control" id="adjNoteText" rows="2" maxlength="500"></textarea>
+        <div class="form-text mt-2">تصفية المدرس بتحسب اللي الطالب دفعه فعلًا: المجاني مش بيتضاف لحسابه، والمخفض بيتضاف بالمبلغ المخفض.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button type="button" class="btn btn-success" onclick="submitAdjust()"><i class="bi bi-check2"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+function openAdjust(paymentId, name, due, paid) {
+    const m = document.getElementById('adjModal');
+    m.dataset.payment = paymentId;
+    m.querySelector('.adj-name').textContent = name;
+    m.querySelector('.adj-cur').textContent = due;
+    m.querySelector('.adj-paid').textContent = paid;
+    m.querySelector('#adjDue').value = '';
+    m.querySelector('#adjNoteText').value = '';
+    m.querySelector('#adjDiscount').checked = true;
+    adjKindChanged();
+    bootstrap.Modal.getOrCreateInstance(m).show();
+}
+
+function adjKindChanged() {
+    const kind = document.querySelector('input[name="adjKind"]:checked').value;
+    document.getElementById('adjDueWrap').classList.toggle('d-none', kind !== 'discount');
+    document.getElementById('adjNoteLabel').textContent = kind === 'note' ? 'الملاحظة' : 'السبب (مطلوب)';
+}
+
+function postForm(url, params) {
+    return fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+            'X-CSRFToken': '{{ csrf_token }}',
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        credentials: 'same-origin',
+        body: new URLSearchParams(params).toString()
+    }).then(r => {
+        if (r.status === 401) { window.location.href = '/accounts/login/'; throw new Error('الجلسة منتهية'); }
+        return r.json();
+    });
+}
+
+function submitAdjust() {
+    const m = document.getElementById('adjModal');
+    const kind = document.querySelector('input[name="adjKind"]:checked').value;
+    const note = m.querySelector('#adjNoteText').value.trim();
+    const due = m.querySelector('#adjDue').value.trim();
+    if (kind === 'discount' && !due) { showToast('اكتب المطلوب بعد الخصم', 'warning'); return; }
+    if (!note) { showToast(kind === 'note' ? 'اكتب الملاحظة' : 'اكتب السبب', 'warning'); return; }
+    showLoading();
+    postForm(`/api/payments/${m.dataset.payment}/adjust/`, {kind: kind, note: note, amount_due: due})
+        .then(data => {
+            hideLoading();
+            if (!data.success) throw new Error(data.message || 'تعذر الحفظ');
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 600);
+        })
+        .catch(e => { hideLoading(); showToast(e.message, 'danger'); });
+}
+
+function deletePayment(paymentId, name) {
+    if (!confirm(`حذف دفعة "${name}" نهائيًا من قاعدة البيانات؟\nالخانة والمبالغ المسجلة فيها هتتمسح، ومش هتتحسب في تصفية المدرس.`)) return;
+    showLoading();
+    postForm(`/api/payments/${paymentId}/delete/`, {})
+        .then(data => {
+            hideLoading();
+            if (!data.success) throw new Error(data.message || 'تعذر الحذف');
+            showToast(data.message, 'success');
+            setTimeout(() => location.reload(), 600);
+        })
+        .catch(e => { hideLoading(); showToast(e.message, 'danger'); });
+}
+
 function showLoading() {
     document.getElementById('loadingOverlay').style.display = 'flex';
 }

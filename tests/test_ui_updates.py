@@ -1234,11 +1234,12 @@ class TestSettlementPeriodBugs(TestCase):
         self.assertEqual(line.sessions_consumed, 8)
         self.assertEqual(line.collected_amount, Decimal('350.00'))   # 200 + 150
         self.assertEqual(line.fee_full, Decimal('400.00'))           # 200 x 2 cycles
-        self.assertEqual(settlement.computed_gross, Decimal('400.00'))
+        self.assertEqual(settlement.computed_gross, Decimal('350.00'))   # what was paid
 
-    def test_each_cycle_counts_at_its_full_amount_due(self):
-        """Per-cycle settlement: every cycle counts its full amount due, not
-        pro-rated by the lessons attended."""
+    def test_each_cycle_counts_what_was_actually_paid(self):
+        """Per-cycle settlement counts the money the student actually paid —
+        not pro-rated by lessons attended, and nothing for an unpaid cycle
+        (client: مجاني أو مخفض مش بيتضاف لحساب المدرس)."""
         sep_cycle = GroupCycle.objects.create(
             group=self.group, index=2, sessions_planned=4,
             started_on=date(2026, 9, 1),
@@ -1251,7 +1252,7 @@ class TestSettlementPeriodBugs(TestCase):
         )
         settlement = self._build(date(2026, 8, 1), date(2026, 9, 30))
         line = settlement.lines.get()
-        self.assertEqual(line.computed_amount, Decimal('400.00'))
+        self.assertEqual(line.computed_amount, Decimal('200.00'))   # Aug paid, Sep unpaid
 
     def test_a_period_with_no_payments_is_genuinely_empty(self):
         """The fix must not start inventing money outside the period."""

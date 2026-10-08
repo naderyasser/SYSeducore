@@ -276,10 +276,10 @@ class SettlementService:
             # Pro-rated per cycle and then added up: pro-rating the summed
             # totals against a summed entitlement would silently let a fully
             # attended cycle subsidise a barely attended one.
-            # التصفية بالدورة: كل دورة بمبلغها المستحق كاملًا (``amount_due``
-            # = سعر الدورة الـ 8 حصص، أو أقل لو الطالب دخل في نصها) — مش بنسبة
-            # الحصص اللي حضرها، اللي كانت بتطلع مبالغ زي 131.25 و 153.13.
-            computed = sum((to_money(p.amount_due) for p in key_payments), to_money(0))
+            # التصفية بالدورة وبالفلوس اللي اتدفعت فعلًا: اللي مدفعش لسه أو
+            # المعفي = 0، واللي دفع مخفض = المبلغ المخفض. مش بالمستحق (كان
+            # بيحسب للمدرس فلوس طلبة مدفعوش) ولا بنسبة الحصص (131.25 و 153.13).
+            computed = sum((to_money(p.amount_paid) for p in key_payments), to_money(0))
 
             session_dates = []
             for p in key_payments:

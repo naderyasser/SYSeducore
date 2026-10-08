@@ -209,6 +209,8 @@ def collect_payment(request):
       * student_id, group_id (required)
       * amount (required) — the amount actually handed over
       * paid_on (optional, YYYY-MM-DD, defaults to today)
+      * kind (optional): ``normal`` | ``discount`` (المبلغ ده هو كل المطلوب)
+        | ``exempt`` (مجاني)؛ note — السبب، مطلوب للخصم والإعفاء
       * package_cycles (optional, int >= 2) — pay for several upcoming
         cycles at once (see ``apps.payments.models.PaymentPackage``); when
         given, ``amount`` is the TOTAL handed over across all of them.
@@ -234,6 +236,12 @@ def collect_payment(request):
 
         raw_amount = request.POST.get('amount', '0')
         paid_on = _parse_paid_on(request)
+        kind = request.POST.get('kind') or 'normal'
+        note = (request.POST.get('note') or '').strip()[:500]
+        if kind not in ('normal', 'discount', 'exempt'):
+            return _error('نوع الدفع غير صالح')
+        if kind != 'normal' and not note:
+            return _error('اكتب سبب الخصم أو الإعفاء في الملاحظة')
 
         try:
             package_cycles = int(request.POST.get('package_cycles') or 0)
@@ -244,6 +252,8 @@ def collect_payment(request):
 
         with transaction.atomic():
             if package_cycles >= 2:
+                if kind == 'exempt':
+                    return _error('الإعفاء بيتسجل دورة دورة مش باقة')
                 if not group.sessions_per_month:
                     return _error('هذه المجموعة غير محسوبة بالحصص')
                 enrollment = StudentGroupEnrollment.objects.get(student=student, group=group)
@@ -266,7 +276,9 @@ def collect_payment(request):
 
                 first_payment.amount_due = first_amount
                 first_payment.package = package
-                first_payment.save(update_fields=['amount_due', 'package'])
+                if note:
+                    first_payment.notes = (f'{first_payment.notes}\n{note}' if first_payment.notes else note).strip()
+                first_payment.save(update_fields=['amount_due', 'package', 'notes'])
                 first_payment.settle_full(user=request.user, note='دفعة باقة', effective_on=paid_on)
                 activate_payment(first_payment, paid_on=paid_on, user=request.user, request=request)
 
@@ -293,9 +305,28 @@ def collect_payment(request):
                 payment = _get_or_create_open_cycle_payment(student, group)
                 if payment is None:
                     return _error('هذه المجموعة غير محسوبة بالحصص')
-                payment.record_transaction(
-                    raw_amount, user=request.user, note='تسجيل دفع', effective_on=paid_on,
-                )
+                # «مخفض»: المطلوب يبقى اللي اتدفع (والتصفية تحسبه للمدرس كده)،
+                # «إعفاء»: مجاني ومش بيتضاف لحساب المدرس. السبب بيتحفظ في الملاحظات.
+                if kind == 'exempt':
+                    payment.amount_due = to_money(0)
+                    payment.is_exempt = True
+                    stamp = f'معفي (مجاني) — {note}'
+                elif kind == 'discount':
+                    new_due = to_money(payment.amount_paid) + to_money(raw_amount)
+                    stamp = f'دفع مخفض {new_due} بدل {to_money(payment.amount_due)} — {note}'
+                    payment.amount_due = new_due
+                else:
+                    stamp = note
+                if stamp:
+                    payment.notes = (f'{payment.notes}\n{stamp}' if payment.notes else stamp).strip()
+                if kind != 'normal' or stamp:
+                    payment.save()
+                if kind == 'exempt':
+                    payment.reconcile(user=request.user)
+                else:
+                    payment.record_transaction(
+                        raw_amount, user=request.user, note='تسجيل دفع', effective_on=paid_on,
+                    )
                 if payment.status == 'paid':
                     activate_payment(payment, paid_on=paid_on, user=request.user, request=request)
     except (Student.DoesNotExist, Group.DoesNotExist):
@@ -316,6 +347,111 @@ def collect_payment(request):
             'status': payment.status,
         },
     })
+
+
+@ajax_supervisor_required
+@require_http_methods(["POST"])
+def adjust_payment(request, payment_id):
+    """
+    «خصم / إعفاء / ملاحظة» على دفعة دورة. Body:
+      * kind: ``discount`` (amount_due = المبلغ الجديد)، ``exempt`` (مجاني)،
+        أو ``note`` (ملاحظة بس)
+      * amount_due: للخصم — المطلوب الجديد من الطالب للدورة دي
+      * note: السبب — مطلوب للخصم والإعفاء، وبيتحفظ في ``Payment.notes``
+
+    التصفية بتحسب للمدرس اللي اتدفع فعلًا، فالمعفي مش بيتضاف لحسابه والمخفض
+    بيتضاف بالمبلغ المخفض بس. الكشوف المسودة اللي فيها الدفعة دي بيتعاد حسابها.
+    """
+    from apps.payments.models import TeacherSettlement, TeacherSettlementLine, to_money
+    from apps.payments.services import SettlementService
+
+    kind = request.POST.get('kind', '')
+    note = (request.POST.get('note') or '').strip()[:500]
+    if kind not in ('discount', 'exempt', 'note'):
+        return _error('نوع التعديل غير صالح')
+    if kind != 'note' and not note:
+        return _error('اكتب سبب الخصم أو الإعفاء')
+    try:
+        with transaction.atomic():
+            payment = Payment.objects.select_for_update().select_related('student', 'group').get(pk=payment_id)
+            lines = TeacherSettlementLine.objects.filter(payment=payment)
+            if kind != 'note' and lines.filter(settlement__status=TeacherSettlement.STATUS_APPROVED).exists():
+                return _error('الدفعة دي في كشف تصفية معتمد — افتح الكشف الأول')
+            old_due = to_money(payment.amount_due)
+            if kind == 'discount':
+                try:
+                    new_due = to_money(Decimal(str(request.POST.get('amount_due', '')).strip()))
+                except (InvalidOperation, ValueError):
+                    return _error('المبلغ غير صالح')
+                if new_due <= 0:
+                    return _error('المبلغ لازم يكون أكبر من صفر — للمجاني اختار «إعفاء»')
+                if new_due < to_money(payment.amount_paid):
+                    return _error(f'الطالب دافع {payment.amount_paid} بالفعل — المبلغ الجديد مينفعش يكون أقل')
+                payment.amount_due = new_due
+                payment.is_exempt = False
+                label = f'دفع مخفض {new_due} بدل {old_due}'
+            elif kind == 'exempt':
+                payment.amount_due = to_money(0)
+                payment.is_exempt = True
+                label = 'معفي (مجاني)'
+            else:
+                label = 'ملاحظة'
+            stamp = f'{label} — {note}' if kind != 'note' else note
+            payment.notes = (f'{payment.notes}\n{stamp}' if payment.notes else stamp).strip()
+            payment.save()
+            if kind != 'note':
+                payment.reconcile(user=request.user)
+                if payment.status == 'paid':
+                    activate_payment(payment, user=request.user, request=request)
+            ActivityLog.log(
+                user=request.user, action='payment_record',
+                description=f'{label}: {payment.student.full_name} — {payment.group.group_name} — {note}',
+                target_model='Payment', target_id=payment.pk, request=request,
+            )
+            for s in TeacherSettlement.objects.filter(lines__in=lines, status=TeacherSettlement.STATUS_DRAFT).distinct():
+                SettlementService.build_or_refresh(s.teacher, s.period_start, s.period_end, user=request.user)
+    except Payment.DoesNotExist:
+        return _error('سجل الدفع غير موجود', status=404)
+    except Exception:
+        logger.exception('adjust_payment failed')
+        return _error(GENERIC_ERROR, status=500)
+    return JsonResponse({
+        'success': True,
+        'message': f'تم الحفظ — {label}',
+        'amount_due': float(payment.amount_due),
+        'amount_paid': float(payment.amount_paid),
+        'status': payment.status,
+        'notes': payment.notes,
+    })
+
+
+@ajax_admin_required
+@require_http_methods(["POST"])
+def delete_payment(request, payment_id):
+    """
+    حذف فعلي لدفعة دورة من قاعدة البيانات — الخانة وحركاتها، ومن كشوف التصفية
+    المسودة (اللي بيتعاد حسابها). مرفوض لو الدفعة في كشف تصفية معتمد.
+    """
+    from apps.core.purge import PurgeRefused, _drop_settlement_lines
+    from apps.payments.models import TeacherSettlementLine
+
+    try:
+        with transaction.atomic():
+            payment = Payment.objects.select_related('student', 'group').get(pk=payment_id)
+            desc = (f'حذف نهائي لدفعة: {payment.student.full_name} — {payment.group.group_name} — '
+                    f'مطلوب {payment.amount_due} / مدفوع {payment.amount_paid}')
+            _drop_settlement_lines(TeacherSettlementLine.objects.filter(payment=payment))
+            payment.delete()          # transactions cascade
+            ActivityLog.log(user=request.user, action='payment_record', description=desc,
+                            target_model='Payment', target_id=payment_id, request=request)
+    except Payment.DoesNotExist:
+        return _error('سجل الدفع غير موجود', status=404)
+    except PurgeRefused as exc:
+        return _error(str(exc))
+    except Exception:
+        logger.exception('delete_payment failed')
+        return _error(GENERIC_ERROR, status=500)
+    return JsonResponse({'success': True, 'message': 'اتحذفت الدفعة نهائيًا'})
 
 
 # ─────────────────────────────────────────────────────────────

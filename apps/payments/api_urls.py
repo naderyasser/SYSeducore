@@ -4,6 +4,8 @@ from . import api_views
 urlpatterns = [
     path('<int:payment_id>/record/', api_views.record_payment, name='api_record_payment'),
     path('<int:payment_id>/mark-paid/', api_views.mark_as_paid, name='api_mark_paid'),
+    path('<int:payment_id>/adjust/', api_views.adjust_payment, name='api_payment_adjust'),
+    path('<int:payment_id>/delete/', api_views.delete_payment, name='api_payment_delete'),
     path('collect/', api_views.collect_payment, name='api_collect'),
 
     path('settlements/build/', api_views.settlement_build, name='api_settlement_build'),

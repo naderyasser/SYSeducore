@@ -799,6 +799,54 @@ recent-attendance list and the 30-day counters show the new row.
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="payModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-cash-coin me-1"></i> تسجيل دفع — <span class="pm-group"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="form-label fw-bold">نوع الدفع</div>
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="pmKind" id="pmKindNormal" value="normal" checked onchange="pmKindChanged()">
+            <label class="btn btn-outline-success" for="pmKindNormal">عادي</label>
+            <input type="radio" class="btn-check" name="pmKind" id="pmKindDiscount" value="discount" onchange="pmKindChanged()">
+            <label class="btn btn-outline-warning" for="pmKindDiscount">مخفض / نسبة</label>
+            <input type="radio" class="btn-check" name="pmKind" id="pmKindExempt" value="exempt" onchange="pmKindChanged()">
+            <label class="btn btn-outline-secondary" for="pmKindExempt">مجاني</label>
+          </div>
+          <div class="form-text">المخفض: المبلغ اللي دفعه هو كل المطلوب منه للدورة. المجاني: مش بيتضاف لحساب المدرس.</div>
+        </div>
+        <div class="mb-3" id="pmAmountWrap">
+          <label class="form-label" for="pmAmount">المبلغ المدفوع (ج.م)</label>
+          <input type="number" class="form-control" id="pmAmount" min="0" step="0.01">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col">
+            <label class="form-label" for="pmDate">تاريخ الدفع</label>
+            <input type="date" class="form-control" id="pmDate">
+            <div class="form-text">فاضي = النهارده</div>
+          </div>
+          <div class="col" id="pmCyclesWrap">
+            <label class="form-label" for="pmCycles">عدد الدورات</label>
+            <input type="number" class="form-control" id="pmCycles" min="1" max="24" value="1">
+          </div>
+        </div>
+        <div>
+          <label class="form-label" id="pmNoteLabel" for="pmNote">ملاحظة (اختياري)</label>
+          <textarea class="form-control" id="pmNote" rows="2" maxlength="500"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">إلغاء</button>
+        <button type="button" class="btn btn-success" onclick="submitPayment()"><i class="bi bi-check2"></i> حفظ</button>
+      </div>
+    </div>
+  </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -965,24 +1013,48 @@ function sendWhatsApp(phone) {
 }
 
 // تسجيل دفع لمجموعة واحدة فقط — لا يُفعّل أي مجموعة أخرى للطالب.
+// شباك فيه: المبلغ، التاريخ، نوع الدفع (عادي / مخفض / مجاني) وملاحظة بالسبب.
+// المخفض والمجاني بيتحسبوا في تصفية المدرس باللي اتدفع فعلًا.
 function collectPayment(groupId, groupName) {
-    const amount = prompt(`المبلغ المدفوع لمجموعة "${groupName}" (ج.م):`);
-    if (!amount) return;
-    if (isNaN(amount) || parseFloat(amount) <= 0) {
-        alert('مبلغ غير صالح');
-        return;
+    const m = document.getElementById('payModal');
+    m.dataset.group = groupId;
+    m.querySelector('.pm-group').textContent = groupName;
+    m.querySelector('#pmAmount').value = '';
+    m.querySelector('#pmDate').value = '';
+    m.querySelector('#pmCycles').value = '1';
+    m.querySelector('#pmNote').value = '';
+    m.querySelector('#pmKindNormal').checked = true;
+    pmKindChanged();
+    bootstrap.Modal.getOrCreateInstance(m).show();
+}
+
+function pmKindChanged() {
+    const kind = document.querySelector('input[name="pmKind"]:checked').value;
+    document.getElementById('pmAmountWrap').classList.toggle('d-none', kind === 'exempt');
+    document.getElementById('pmCyclesWrap').classList.toggle('d-none', kind === 'exempt');
+    document.getElementById('pmNoteLabel').textContent =
+        kind === 'normal' ? 'ملاحظة (اختياري)' : 'السبب (مطلوب) — مثلًا: أخوات، ظروف، منحة';
+}
+
+function submitPayment() {
+    const m = document.getElementById('payModal');
+    const kind = document.querySelector('input[name="pmKind"]:checked').value;
+    const amount = m.querySelector('#pmAmount').value.trim();
+    const note = m.querySelector('#pmNote').value.trim();
+    const cycles = m.querySelector('#pmCycles').value;
+    const paidOn = m.querySelector('#pmDate').value;
+    if (kind !== 'exempt' && (!amount || isNaN(amount) || parseFloat(amount) <= 0)) {
+        alert('اكتب المبلغ المدفوع'); return;
     }
-
-    const paidOn = prompt('تاريخ الدفع (YYYY-MM-DD) — اتركه فارغاً لتاريخ اليوم:', '');
-    const cycles = prompt('عدد الدورات المدفوعة (اتركه فارغاً أو 1 لدفع دورة واحدة فقط):', '1');
-
+    if (kind !== 'normal' && !note) {
+        alert('اكتب سبب الخصم أو الإعفاء'); m.querySelector('#pmNote').focus(); return;
+    }
     const body = new URLSearchParams({
-        student_id: '{{ student.student_id }}',
-        group_id: groupId,
-        amount: amount,
+        student_id: '{{ student.student_id }}', group_id: m.dataset.group,
+        amount: kind === 'exempt' ? '0' : amount, kind: kind, note: note,
     });
     if (paidOn) body.set('paid_on', paidOn);
-    if (cycles && parseInt(cycles) >= 2) body.set('package_cycles', cycles);
+    if (kind !== 'exempt' && cycles && parseInt(cycles) >= 2) body.set('package_cycles', cycles);
 
     fetch('{% url "api_collect" %}', {
         method: 'POST',
