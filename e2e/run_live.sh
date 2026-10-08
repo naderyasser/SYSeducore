@@ -3,6 +3,7 @@
 #
 #   sh e2e/run_live.sh            # run from the repo root on the server
 #   sh e2e/run_live.sh --buttons  # also click every button on every page
+#   sh e2e/run_live.sh --shots    # screenshots + print previews in e2e/out/
 #
 # Read-only: every POST/PUT/DELETE the pages send is intercepted in the browser
 # and answered with a fake success, so nothing is ever written — the test only
@@ -48,7 +49,9 @@ print(json.dumps({
 }))
 " 2>/dev/null | tail -1 > "$TMP"
 
-if [ "${1:-}" = "--buttons" ]; then
+if [ "${1:-}" = "--shots" ]; then
+    nice -n 19 python3 "${SHOT_SCRIPT:-e2e/live_shots.py}" "$TMP"
+elif [ "${1:-}" = "--buttons" ]; then
     nice -n 19 python3 e2e/live_buttons.py "$TMP"
 else
     nice -n 19 python3 e2e/live_smoke.py "$TMP"

@@ -90,7 +90,7 @@
                     <td>{{ line.effective_amount }}</td>
                     <td>{{ line.line_center_share }}</td>
                     <td>{{ line.line_teacher_share }}</td>
-                    <td>{% if line.is_excluded %}مستبعد{% elif line.is_free %}مجاني{% else %}{{ line.override_reason }}{% endif %}</td>
+                    <td>{% if line.is_excluded %}مستبعد{% elif line.is_free %}مجاني{% elif line.payment.is_exempt %}معفي{% elif not line.collected_amount %}لم يدفع{% endif %}{% if line.override_reason and not line.is_excluded %} {{ line.override_reason }}{% endif %}{% if line.payment.notes %} {{ line.payment.notes|linebreaksbr }}{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

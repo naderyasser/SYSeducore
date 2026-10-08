@@ -111,6 +111,13 @@
 
 {% block extra_js %}
 <script>
+// Ctrl+P هنا بيطبع شاشة التعديل مقصوصة — افتح صفحة الطباعة المظبوطة بدلها.
+document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        window.open('{% url "payments:settlement_print" settlement.settlement_id %}', '_blank');
+    }
+});
 const settlementId = document.getElementById('settlementRoot').dataset.settlementId;
 const csrfToken = '{{ csrf_token }}';
 const isApproved = {{ settlement.status|yesno:"true,false" }};
