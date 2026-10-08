@@ -790,6 +790,23 @@
             })();
             </script>
         </div>
+        {% comment %}
+        Client: «عايز شكل كشف الحضور والغياب زى الورقه». The paper sheet of the
+        chosen cycle (the same page as «كشف الدورة», without its menus) is the
+        default view here; the ✓/✗ grid stays one tab away for custom ranges.
+        {% endcomment %}
+        {% if user.is_supervisor and grid_cycle_id %}
+        <div class="btn-group btn-group-sm mt-2" role="group" id="grid-view-tabs">
+            <button type="button" class="btn btn-outline-primary active" data-view="paper"><i class="bi bi-file-earmark-text me-1"></i>شكل الورقة</button>
+            <button type="button" class="btn btn-outline-primary" data-view="classic"><i class="bi bi-grid-3x3 me-1"></i>جدول بالعلامات</button>
+        </div>
+        <div id="grid-paper" class="mt-2">
+            <iframe id="paper-frame" title="كشف الدورة" loading="lazy"
+                    src="{% url 'reports:cycle_register' %}?group={{ group.group_id }}&cycle={{ grid_cycle_id }}&only=1&embed=1"
+                    style="width:100%;border:0;min-height:600px;display:block"></iframe>
+        </div>
+        {% endif %}
+        <div id="grid-classic"{% if user.is_supervisor and grid_cycle_id %} class="d-none"{% endif %}>
         {% if user.is_supervisor %}
         {% comment %}
         Manual attendance. Tapping a cell — blank/striped ones included —
@@ -856,8 +873,33 @@
             <p>لا توجد حصص مسجلة في هذا النطاق</p>
         </div>
         {% endif %}
+        </div>
     </div>
 </div>
+<script>
+(function () {
+    var tabs = document.getElementById('grid-view-tabs');
+    if (!tabs) return;
+    var paper = document.getElementById('grid-paper'), classic = document.getElementById('grid-classic');
+    var frame = document.getElementById('paper-frame');
+    function show(view) {
+        paper.classList.toggle('d-none', view !== 'paper');
+        classic.classList.toggle('d-none', view === 'paper');
+        tabs.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.view === view); });
+        try { localStorage.setItem('groupGridView', view); } catch (e) {}
+    }
+    tabs.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) show(b.dataset.view); });
+    try { if (localStorage.getItem('groupGridView') === 'classic') show('classic'); } catch (e) {}
+    // The sheet grows (menus, notes, cancelled lessons): keep the frame as tall as its page.
+    frame.addEventListener('load', function () {
+        var doc = frame.contentDocument;
+        if (!doc) return;
+        var fit = function () { frame.style.height = doc.documentElement.scrollHeight + 'px'; };
+        fit();
+        if (window.ResizeObserver) new ResizeObserver(fit).observe(doc.body);
+    });
+})();
+</script>
 {% endblock %}
 
 {% block extra_js %}

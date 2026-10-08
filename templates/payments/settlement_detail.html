@@ -14,7 +14,15 @@
     .settle-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-bottom: 24px; }
     .settle-table th, .settle-table td { border: 1px solid #eef0f3; padding: 8px 10px; text-align: center; }
     .settle-table th { background: #f8fafc; font-weight: 600; }
-    .settle-table td.editable input { width: 90px; text-align: center; }
+    .settle-table td.editable input { width: 80px; text-align: center; margin: 0 auto; }
+    .settle-table td { vertical-align: middle; }
+    .settle-table td.name { text-align: right; min-width: 150px; font-weight: 600; }
+    .settle-table .dates { display: flex; flex-wrap: wrap; gap: 3px; justify-content: center; min-width: 190px; max-width: 250px; margin: 0 auto; }
+    .settle-table .dates span { background: #eef2f7; border-radius: 4px; padding: 0 5px; font-size: .78rem; direction: ltr; white-space: nowrap; }
+    .settle-table .pay-tag { font-size: .72rem; font-weight: 600; border-radius: 4px; padding: 0 6px; }
+    .settle-table .pay-tag.unpaid { background: #fdecec; color: #c0392b; }
+    .settle-table .pay-tag.exempt { background: #eef2f7; color: #555; }
+    .settle-table .pay-note { font-size: .72rem; color: #8a6d00; font-weight: 400; }
     .settle-table .excluded-row { opacity: 0.5; text-decoration: line-through; }
     .group-title { background: #eef2ff; padding: 8px 14px; border-radius: 8px; font-weight: 700; margin: 16px 0 6px; }
     .system-value { color: #6b7280; font-size: 0.78rem; }
@@ -84,9 +92,9 @@
         <tbody>
             {% for line in lines %}
             <tr data-line-id="{{ line.line_id }}" class="{% if line.is_excluded %}excluded-row{% endif %}">
-                <td>{{ line.student.full_name }}</td>
+                <td class="name">{{ line.student.full_name }}{% if line.payment.is_exempt %}<br><span class="pay-tag exempt">معفي</span>{% elif not line.collected_amount %}<br><span class="pay-tag unpaid">لم يدفع</span>{% endif %}{% if line.payment.notes %}<div class="pay-note" title="{{ line.payment.notes }}">{{ line.payment.notes|truncatechars:40 }}</div>{% endif %}</td>
                 <td>{{ line.sessions_consumed }}/{{ line.sessions_entitled }}{% if line.cycle %}<br><small class="text-muted">دورة {{ line.cycle.index }}</small>{% endif %}</td>
-                <td><small>{{ line.session_dates|join:", " }}</small></td>
+                <td><div class="dates">{% for d in line.short_dates %}<span>{{ d }}</span>{% empty %}<span class="text-muted">—</span>{% endfor %}</div></td>
                 <td class="system-value">{{ line.computed_amount|egp }}</td>
                 <td class="editable"><input type="number" step="0.01" class="form-control form-control-sm f-amount" value="{{ line.amount_override|default_if_none:'' }}" placeholder="{{ line.computed_amount }}" {% if settlement.status == 'approved' %}disabled{% endif %}></td>
                 <td class="v-effective fw-bold">{{ line.effective_amount|egp }}</td>

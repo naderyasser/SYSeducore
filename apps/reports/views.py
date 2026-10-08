@@ -25,6 +25,7 @@ import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.contrib import messages
 
 from config import feature_lock
@@ -851,6 +852,7 @@ def _cycle_register_data(group, cycle):
     return columns, rows
 
 
+@xframe_options_sameorigin     # embedded in the group page (``embed=1``)
 @supervisor_required
 def cycle_register(request):
     """
@@ -860,7 +862,7 @@ def cycle_register(request):
     """
     groups = Group.objects.filter(is_active=True).select_related('teacher').order_by('group_name')
     group = groups.filter(group_id=_parse_int_param(request.GET.get('group'))).first()
-    context = {'groups': groups, 'group': group}
+    context = {'groups': groups, 'group': group, 'embed': request.GET.get('embed') == '1'}
     if group is None:
         return render(request, 'reports/cycle_register.html', context)
 

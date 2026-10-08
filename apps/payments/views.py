@@ -447,6 +447,8 @@ def settlement_detail(request, settlement_id):
 
     groups = {}
     for line in lines:
+        # «9/6» بدل «2026-09-06» — التاريخ الكامل كان بيطوّل الصف لشاشتين.
+        line.short_dates = [f'{int(d[5:7])}/{int(d[8:10])}' for d in (line.session_dates or []) if len(d) >= 10]
         groups.setdefault(line.group, []).append(line)
 
     return render(request, 'payments/settlement_detail.html', {

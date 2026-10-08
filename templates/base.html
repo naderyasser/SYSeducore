@@ -832,9 +832,19 @@
         a.feature-locked, button.feature-locked { pointer-events:auto; cursor:not-allowed; }
         @media print { .feature-lock-chip { display:none !important; } }
     </style>
+    {% if embed %}
+    {# A page shown inside another one (e.g. the paper sheet on the group page): no menus, links open in the whole window. #}
+    <base target="_top">
+    <style>
+        body.embed .sidebar, body.embed .sidebar-overlay, body.embed .top-header, body.embed .no-embed { display: none !important; }
+        body.embed .main-wrapper { margin: 0 !important; width: 100% !important; min-height: 0 !important; }
+        body.embed .content-area { padding: 0 !important; }
+        body.embed { background: #fff !important; }
+    </style>
+    {% endif %}
     {% block extra_css %}{% endblock %}
 </head>
-<body data-manual-attendance-url="{% url 'attendance:manual_attendance' %}">
+<body data-manual-attendance-url="{% url 'attendance:manual_attendance' %}"{% if embed %} class="embed"{% endif %}>
     <!-- Sidebar Overlay for Mobile -->
     <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar()"></div>
 
