@@ -190,6 +190,18 @@ def main():
             with page.expect_navigation(wait_until='networkidle'):
                 page.select_option('#grid-cycle', index=min(1, page.locator('#grid-cycle option').count() - 2))
             check('صفحة المجموعة: تغيير الدورة بيغير الجدول', 'from=' in page.url)
+            # default view: the paper sheet of the cycle, editable in place
+            if page.locator('#paper-frame').count():
+                page.locator('#paper-frame').scroll_into_view_if_needed(); page.wait_for_timeout(1500)
+                fr = page.frame_locator('#paper-frame')
+                check('صفحة المجموعة: كشف الورقة ظاهر', fr.locator('table.reg').first.is_visible())
+                pc = fr.locator('td.editable').first
+                if pc.count():
+                    writes.clear(); fake['next'] = {'success': True, 'attendance': {'status': 'absent'}}
+                    pc.click(); fr.locator('.cell-menu button', has_text='غائب').first.click(); page.wait_for_timeout(600)
+                    check('صفحة المجموعة: خانة الورقة بتتسجل', any('"absent"' in w['body'] for w in writes) and pc.inner_text().strip() == 'غ',
+                          pc.inner_text())
+                page.locator('#grid-view-tabs button[data-view=classic]').click()
             cell = page.locator('.attendance-grid td.cell:not(.cell-cancelled):not([data-locked])').first
             if cell.count():
                 cell.scroll_into_view_if_needed(); page.wait_for_timeout(300)
@@ -200,6 +212,17 @@ def main():
                 go(f'/teachers/groups/{cfg["exc_group"]}/?from={cfg["exc_date"]}&to={cfg["exc_date"]}')
                 check('صفحة المجموعة: ملاحظات الأعذار تحت الجدول', page.locator('.grid-notes li').count() >= 1)
         run('صفحة المجموعة', group_page)
+
+        # ── settlement sheet: short dates side by side, unpaid marked ──
+        if cfg.get('settlement_id'):
+            def settlement():
+                go(f'/payments/settlements/{cfg["settlement_id"]}/')
+                h = page.evaluate('document.documentElement.scrollHeight')
+                rows = page.locator('.settle-table tbody tr').count()
+                check('التصفية: التواريخ مختصرة', page.locator('.settle-table .dates span').count() > 0
+                      and page.locator('.settle-table td:has-text("2026-")').count() == 0)
+                check('التصفية: الصف مش طويل', rows == 0 or h / rows < 140, f'{h}px / {rows} صف')
+            run('التصفية', settlement)
 
         # ── 3. printing stays a table ──
         def printing():

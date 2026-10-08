@@ -49,6 +49,11 @@ def main():
 
         for name, url in sheets:
             page.goto(BASE + url, wait_until='networkidle', timeout=60000)
+            frame = page.locator('#paper-frame')     # lazy iframe on the group page
+            if frame.count():
+                frame.scroll_into_view_if_needed()
+                page.wait_for_load_state('networkidle')
+                page.wait_for_timeout(1500)
             shot(name + '-شاشة')
             pdf = os.path.join(OUT, name + '-طباعة.pdf')
             page.pdf(path=pdf, prefer_css_page_size=True, print_background=True)
