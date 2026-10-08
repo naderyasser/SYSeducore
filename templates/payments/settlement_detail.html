@@ -23,6 +23,15 @@
     .settle-table .pay-tag.unpaid { background: #fdecec; color: #c0392b; }
     .settle-table .pay-tag.exempt { background: #eef2f7; color: #555; }
     .settle-table .pay-note { font-size: .72rem; color: #8a6d00; font-weight: 400; }
+    /* لو اتطبعت صفحة التعديل نفسها (من قائمة المتصفح): بالعرض وكل الأعمدة ظاهرة */
+    @media print {
+        @page { size: A4 landscape; margin: 8mm; }
+        .settle-table { font-size: .72rem; }
+        .settle-table th, .settle-table td { padding: 3px 4px; }
+        .settle-table td.editable input { width: 60px; border: 0; padding: 0; background: none; }
+        .settle-table .dates { min-width: 0; }
+        #btnRefresh, .btn { display: none !important; }
+    }
     .settle-table .excluded-row { opacity: 0.5; text-decoration: line-through; }
     .group-title { background: #eef2ff; padding: 8px 14px; border-radius: 8px; font-weight: 700; margin: 16px 0 6px; }
     .system-value { color: #6b7280; font-size: 0.78rem; }
