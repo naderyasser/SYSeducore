@@ -15,19 +15,38 @@ from django.db import transaction
 from .models import GroupCycle
 
 
+def pick_current(cycles):
+    """
+    The group's current cycle among its unclosed ``cycles``: the running one
+    (started), else the *earliest* reserved one — never a later cycle a
+    package reserved ahead of it. Taking the highest index (as this module
+    used to) handed a reserved package cycle to the gate, to the next lesson
+    and to the roll-over in place of the cycle actually running.
+    """
+    cycles = list(cycles)
+    started = [c for c in cycles if c.started_on is not None]
+    if started:
+        return max(started, key=lambda c: c.index)
+    return min(cycles, key=lambda c: c.index) if cycles else None
+
+
+def current_cycles(group_ids):
+    """``{group_id: current cycle}`` for many groups in one query (no creation)."""
+    by_group = {}
+    for cycle in GroupCycle.objects.filter(group_id__in=list(group_ids), closed_on__isnull=True):
+        by_group.setdefault(cycle.group_id, []).append(cycle)
+    return {group_id: pick_current(cycles) for group_id, cycles in by_group.items()}
+
+
 def open_cycle_for(group):
     """
-    Return the group's open cycle, creating one if none exists.
+    Return the group's current cycle (see :func:`pick_current`), creating one
+    if none exists.
 
     The new cycle starts "reserved" (``started_on=None``) until
     :func:`assign_to_cycle` sees its first real session.
     """
-    cycle = (
-        GroupCycle.objects
-        .filter(group=group, closed_on__isnull=True)
-        .order_by('-index')
-        .first()
-    )
+    cycle = pick_current(GroupCycle.objects.filter(group=group, closed_on__isnull=True))
     if cycle is not None:
         return cycle
 
@@ -112,21 +131,35 @@ def renumber_cycle(cycle):
         _renumber(cycle)
 
 
-def ensure_next(group, count=1):
+def ensure_next(group, count=1, student=None):
     """
-    Pre-create ``count`` reserved (not-yet-started) future cycles for
-    ``group``, for a multi-cycle package purchase. Returns the created
-    :class:`GroupCycle` list in order.
+    The ``count`` reserved (not-yet-started) cycles that follow ``group``'s
+    current one, for a multi-cycle package purchase — reusing those already
+    reserved, creating only what is missing. Returns them in order.
     """
+    current = open_cycle_for(group)
+    # Cycles are the group's, not the buyer's: a second package bought while
+    # the first one's cycles are still waiting uses those same cycles — it
+    # used to stack new ones after them, so its prepaid cycle 2 was really
+    # the group's cycle 3.
+    # ``student``'s own earlier package is skipped: a cycle they already
+    # prepaid cannot be sold to them twice.
+    reserved = GroupCycle.objects.filter(
+        group=group, closed_on__isnull=True, started_on__isnull=True,
+        index__gt=current.index,
+    )
+    if student is not None:
+        reserved = reserved.exclude(payments__student=student)
+    reserved = list(reserved.order_by('index')[:count])
     last_index = (
         GroupCycle.objects.filter(group=group).order_by('-index')
         .values_list('index', flat=True).first()
     ) or 0
     created = []
-    for offset in range(1, count + 1):
+    for offset in range(1, count - len(reserved) + 1):
         created.append(GroupCycle(
             group=group,
             index=last_index + offset,
             sessions_planned=group.sessions_per_month or 4,
         ))
-    return GroupCycle.objects.bulk_create(created)
+    return reserved + (GroupCycle.objects.bulk_create(created) if created else [])

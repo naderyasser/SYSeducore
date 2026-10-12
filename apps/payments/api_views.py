@@ -258,7 +258,7 @@ def collect_payment(request):
                     return _error('هذه المجموعة غير محسوبة بالحصص')
                 enrollment = StudentGroupEnrollment.objects.get(student=student, group=group)
                 first_payment = _get_or_create_open_cycle_payment(student, group)
-                extra_cycles = ensure_next(group, package_cycles - 1)
+                extra_cycles = ensure_next(group, package_cycles - 1, student=student)
 
                 list_amount = to_money(first_payment.amount_due) + to_money(
                     base_fee(enrollment, group)

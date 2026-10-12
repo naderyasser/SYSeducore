@@ -436,10 +436,15 @@ def payment_receipt(request, payment_id):
 def settlement_detail(request, settlement_id):
     """عرض/تعديل كشف تصفية محدد."""
     from .models import TeacherSettlement
+    from .sync import refresh_settlement_if_draft
 
     settlement = get_object_or_404(
         TeacherSettlement.objects.select_related('teacher'), pk=settlement_id,
     )
+    # A draft always shows today's attendance, payments and group terms —
+    # it used to keep its build-time numbers until «تحديث» was pressed.
+    # Manual line edits survive (build_or_refresh never touches them).
+    settlement = refresh_settlement_if_draft(settlement)
     lines = (
         settlement.lines.select_related('group', 'student', 'cycle', 'payment')
         .order_by('group__group_name', 'student__full_name')
@@ -461,10 +466,15 @@ def settlement_detail(request, settlement_id):
 def settlement_print(request, settlement_id):
     """نسخة قابلة للطباعة من كشف التصفية."""
     from .models import TeacherSettlement
+    from .sync import refresh_settlement_if_draft
 
     settlement = get_object_or_404(
         TeacherSettlement.objects.select_related('teacher'), pk=settlement_id,
     )
+    # A draft always shows today's attendance, payments and group terms —
+    # it used to keep its build-time numbers until «تحديث» was pressed.
+    # Manual line edits survive (build_or_refresh never touches them).
+    settlement = refresh_settlement_if_draft(settlement)
     lines = (
         settlement.lines.select_related('group', 'student', 'cycle', 'payment')
         .order_by('group__group_name', 'student__full_name')

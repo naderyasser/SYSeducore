@@ -201,6 +201,9 @@ class SettlementPrintTests(TestCase):
             fee_full=Decimal('50.00'), computed_amount=Decimal('50.00'),
             collected_amount=Decimal('50.00'), effective_amount=Decimal('50.00'),
             line_center_share=Decimal('15.00'), line_teacher_share=Decimal('35.00'))
+        # Approved: a draft is recomputed from real payments when opened, and
+        # these figures are hand-made.
+        TeacherSettlement.objects.filter(pk=self.settlement.pk).update(status=TeacherSettlement.STATUS_APPROVED)
 
     def test_renders_with_grouped_lines_and_money(self):
         r = self.client.get(reverse('payments:settlement_print', kwargs={'settlement_id': self.settlement.pk}))

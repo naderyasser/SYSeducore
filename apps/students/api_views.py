@@ -26,6 +26,7 @@ from .utils import (
 from apps.accounts.decorators import ajax_login_required, ajax_supervisor_required
 from apps.teachers.models import Group
 from apps.attendance.models import Attendance, ActivityLog
+from apps.payments.sync import drop_unused_invoices, resync_enrollment
 from apps.notifications.services import WhatsAppService, NotificationService
 
 logger = logging.getLogger(__name__)
@@ -204,15 +205,31 @@ def add_to_group(request):
         ).first()
 
         if enrollment:
+            old_terms = (enrollment.financial_status, enrollment.custom_fee)
+            old_display = enrollment.get_financial_status_display()
             enrollment.financial_status = financial_status
             enrollment.custom_fee = custom_fee
             enrollment.is_active = True
             enrollment.save(update_fields=['financial_status', 'custom_fee', 'is_active'])
+            # «اربط كله بكله»: the open cycle's invoice follows the new terms.
+            repriced = resync_enrollment(
+                enrollment, old_status=old_terms[0], old_custom_fee=old_terms[1],
+            )
             message = 'تم تحديث تسجيل الطالب في المجموعة'
+            new_display = enrollment.get_financial_status_display()
             log_description = (
                 f'تحديث تسجيل الطالب {student.full_name} في المجموعة {group.group_name} '
-                f'(الحالة المالية: {enrollment.get_financial_status_display()})'
+                + (
+                    f'(الحالة المالية: {new_display})'
+                    if (enrollment.financial_status, enrollment.custom_fee) == old_terms
+                    else f'(الحالة المالية: من {old_display}'
+                         f'{f" ({old_terms[1]})" if old_terms[1] else ""} إلى {new_display}'
+                         f'{f" ({enrollment.custom_fee})" if enrollment.custom_fee else ""})'
+                )
             )
+            if repriced:
+                log_description += f' — اتحدّث مبلغ {repriced} فاتورة لسه متدفعتش'
+                message += ' — واتحدّث مبلغ فاتورة الدورة الحالية'
         else:
             enrollment = StudentGroupEnrollment.objects.create(
                 student=student,
@@ -273,14 +290,18 @@ def remove_from_group(request):
         StudentGroupEnrollment.objects.select_related('student', 'group'),
         pk=enrollment_id,
     )
-    enrollment.is_active = False
-    enrollment.save(update_fields=['is_active'])
+    with transaction.atomic():
+        enrollment.is_active = False
+        enrollment.save(update_fields=['is_active'])
+        # «اربط كله بكله»: the running cycle's invoice they never used goes too.
+        dropped = drop_unused_invoices(enrollment.student, enrollment.group)
 
     ActivityLog.log(
         user=request.user, action='enrollment_remove',
         description=(
             f'إزالة الطالب {enrollment.student.full_name} '
             f'من المجموعة {enrollment.group.group_name}'
+            + (f' — اتشالت فاتورة الدورة الحالية ({dropped}) لأنه محضرش فيها' if dropped else '')
         ),
         target_model='StudentGroupEnrollment', target_id=enrollment.pk,
         request=request,
@@ -715,7 +736,6 @@ def entitlement_status(request, student_id):
     ``attendance:scanner_pay_now``) التي تمر عبر السجل المحاسبي.
     """
     from apps.payments.models import Payment
-    from apps.teachers.models import GroupCycle
 
     try:
         student = Student.all_objects.get(pk=student_id)
@@ -727,10 +747,8 @@ def entitlement_status(request, student_id):
         .select_related('group')
     )
     group_ids = [e.group_id for e in enrollments]
-    open_cycles = {
-        c.group_id: c
-        for c in GroupCycle.objects.filter(group_id__in=group_ids, closed_on__isnull=True)
-    }
+    from apps.teachers.cycles import current_cycles
+    open_cycles = current_cycles(group_ids)
     payments = {
         p.group_id: p
         for p in Payment.objects.filter(

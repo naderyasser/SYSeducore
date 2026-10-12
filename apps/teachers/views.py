@@ -35,6 +35,8 @@ from .forms import TeacherForm, GroupForm, RoomForm, SubjectForm
 
 from apps.students.models import Student, StudentGroupEnrollment
 from apps.attendance.models import Session, Attendance, ActivityLog
+from apps.core.changes import describe_changes, snapshot
+from apps.payments.sync import refresh_draft_settlements, resync_group
 
 logger = logging.getLogger(__name__)
 
@@ -402,11 +404,13 @@ def teacher_update(request, teacher_id):
     teacher = get_object_or_404(Teacher, pk=teacher_id)
     if request.method == 'POST':
         form = TeacherForm(request.POST, request.FILES, instance=teacher)
+        before = snapshot(teacher, form.fields)
         if form.is_valid():
             form.save()
+            changes = describe_changes(before, snapshot(teacher, form.fields))
             ActivityLog.log(
                 user=request.user, action='teacher_update',
-                description=f'تعديل بيانات المدرس: {teacher.full_name}',
+                description=f'تعديل بيانات المدرس: {teacher.full_name}' + (f' — {changes}' if changes else ''),
                 target_model='Teacher', target_id=teacher.pk, request=request
             )
             messages.success(request, 'تم تحديث بيانات المدرس بنجاح')
@@ -950,6 +954,12 @@ def group_update(request, group_id):
     rooms = Room.objects.filter(is_active=True).order_by('name')
     if request.method == 'POST':
         form = GroupForm(request.POST, instance=group)
+        # Read before validation writes the POST onto ``group``.
+        before = snapshot(group, form.fields)
+        before['المواعيد'] = group.get_schedule_display()
+        before['القاعة'] = group.get_rooms_display()
+        old_fee, old_size = group.standard_fee, group.sessions_per_month
+        old_teacher_id, old_percentage = group.teacher_id, group.center_percentage
         try:
             # Parsed ahead of validation and stashed on the instance so
             # Group.clean()'s room-conflict check sees the schedule the user is
@@ -966,16 +976,42 @@ def group_update(request, group_id):
                 return render(request, 'teachers/groups/form.html', {'form': form, 'group': group, 'rooms': rooms})
 
             try:
-                form.save_with_schedules(schedule_data)
+                # «اربط كله بكله»: the running cycle and its invoices follow
+                # the edit in the same transaction — never one without the other.
+                with transaction.atomic():
+                    form.save_with_schedules(schedule_data)
+                    saved = Group.objects.get(pk=group.pk)
+                    synced = resync_group(saved, old_fee=old_fee, old_sessions_per_month=old_size)
             except ValidationError as e:
                 _report_validation_error(request, e)
             else:
+                after = snapshot(saved, form.fields)
+                after['المواعيد'] = saved.get_schedule_display()
+                after['القاعة'] = saved.get_rooms_display()
+
+                if (synced['cycles'] or synced['invoices'] or old_fee != saved.standard_fee
+                        or old_size != saved.sessions_per_month
+                        or old_teacher_id != saved.teacher_id
+                        or old_percentage != saved.center_percentage):
+                    refresh_draft_settlements([old_teacher_id, saved.teacher_id])
+
+                changes = describe_changes(before, after)
+                description = f'تعديل بيانات المجموعة: {saved.group_name}'
+                if changes:
+                    description += f' — {changes}'
+                if synced['cycles']:
+                    description += f' — اتعدّل عدد حصص الدورة الحالية ({synced["cycles"]} دورة)'
+                if synced['invoices']:
+                    description += f' — اتحدّث مبلغ {synced["invoices"]} فاتورة لسه متدفعتش'
                 ActivityLog.log(
                     user=request.user, action='group_update',
-                    description=f'تعديل بيانات المجموعة: {group.group_name}',
+                    description=description,
                     target_model='Group', target_id=group.pk, request=request
                 )
-                messages.success(request, 'تم تحديث بيانات المجموعة بنجاح')
+                message = 'تم تحديث بيانات المجموعة بنجاح'
+                if synced['invoices']:
+                    message += f' — واتحدّث مبلغ {synced["invoices"]} فاتورة لسه متدفعتش في الدورة الحالية'
+                messages.success(request, message)
                 return redirect('teachers:group_list')
         else:
             # Do not fall through silently: the user must be told the save failed.

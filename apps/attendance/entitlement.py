@@ -200,6 +200,23 @@ def recount_payment(payment):
     return count
 
 
+def recount_cycle(cycle, student_ids=None):
+    """
+    :func:`recount_payment` for every existing invoice on ``cycle`` (or only
+    ``student_ids``'). For edits that change *which* lessons count — a
+    cancellation, a restore, a deleted lesson, a correction in a closed
+    cycle — without creating any row: a closed cycle's history is
+    re-counted, never re-billed.
+    """
+    if cycle is None:
+        return
+    payments = Payment.objects.filter(cycle=cycle).select_related('student', 'cycle')
+    if student_ids is not None:
+        payments = payments.filter(student_id__in=list(student_ids))
+    for payment in payments:
+        recount_payment(payment)
+
+
 def bundle_paid(student):
     """
     "الباقة مدفوعة" — there is no bundle-payment entity, so this is defined

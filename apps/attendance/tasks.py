@@ -241,14 +241,24 @@ def roll_group_cycles():
                 billing_cycle_completed=True
             )
 
-            next_index = (
-                GroupCycle.objects.filter(group=group).order_by('-index')
-                .values_list('index', flat=True).first()
-            ) or cycle.index
-            next_cycle = GroupCycle.objects.create(
-                group=group, index=next_index + 1,
-                sessions_planned=group.sessions_per_month,
+            # A cycle a package already reserved is the group's next one —
+            # creating a fresh cycle past it (as this used to) meant the
+            # prepaid cycle never ran and its buyer was billed again.
+            next_cycle = (
+                GroupCycle.objects.filter(
+                    group=group, closed_on__isnull=True, started_on__isnull=True,
+                    index__gt=cycle.index,
+                ).order_by('index').first()
             )
+            if next_cycle is None:
+                next_index = (
+                    GroupCycle.objects.filter(group=group).order_by('-index')
+                    .values_list('index', flat=True).first()
+                ) or cycle.index
+                next_cycle = GroupCycle.objects.create(
+                    group=group, index=next_index + 1,
+                    sessions_planned=group.sessions_per_month,
+                )
 
             already_billed = set(
                 Payment.objects.filter(cycle=next_cycle).values_list('student_id', flat=True)

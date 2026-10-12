@@ -604,7 +604,11 @@ class AttendanceService:
                 session.save(update_fields=['is_cancelled', 'cancellation_reason'])
                 if session.cycle_id:
                     from apps.teachers.cycles import renumber_cycle
+                    from .entitlement import recount_cycle
                     renumber_cycle(session.cycle)
+                    # A student scanned in before the call-off got the lesson
+                    # counted; it stops counting now.
+                    recount_cycle(session.cycle)
         return session, None
 
     @staticmethod
@@ -627,14 +631,18 @@ class AttendanceService:
         if session.cycle_id is None and not session.attendances.exists():
             session.delete()
             return None
-        session.is_cancelled = False
-        session.cancellation_reason = ''
-        session.save(update_fields=['is_cancelled', 'cancellation_reason'])
         from apps.teachers.cycles import assign_to_cycle, renumber_cycle
-        if session.cycle_id:
-            renumber_cycle(session.cycle)
-        else:
-            assign_to_cycle(session)
+        from .entitlement import recount_cycle
+        with transaction.atomic():
+            session.is_cancelled = False
+            session.cancellation_reason = ''
+            session.save(update_fields=['is_cancelled', 'cancellation_reason'])
+            if session.cycle_id:
+                renumber_cycle(session.cycle)
+            else:
+                assign_to_cycle(session)
+            # Its attendance rows count again.
+            recount_cycle(session.cycle)
         return None
 
     @staticmethod
@@ -741,6 +749,10 @@ class AttendanceService:
             if group.sessions_per_month and (cycle is None or cycle.closed_on is None):
                 for student in Student.objects.filter(pk__in=student_ids):
                     AttendanceService.update_payment_sessions(student, group)
+            elif cycle is not None:
+                # Closed cycle: re-count its existing invoices, never bill.
+                from .entitlement import recount_cycle
+                recount_cycle(cycle, student_ids)
         return True, len(student_ids)
 
     @staticmethod
@@ -848,6 +860,12 @@ class AttendanceService:
             cycle = session.cycle
             if group.sessions_per_month and (cycle is None or cycle.closed_on is None):
                 AttendanceService.update_payment_sessions(student, group)
+            elif cycle is not None:
+                # A correction in a closed cycle still reaches that cycle's own
+                # invoice (its counter, and so the settlement) — re-counted,
+                # never re-billed: no row is created.
+                from .entitlement import recount_cycle
+                recount_cycle(cycle, [student.pk])
 
         if attendance is None:
             message = f'تم مسح سجل {student.full_name} ليوم {on_date:%Y-%m-%d}'
@@ -1069,10 +1087,7 @@ class AttendanceService:
         if not group.sessions_per_month:
             cycle = None
         else:
-            cycle = (
-                group.cycles.filter(closed_on__isnull=True).order_by('-index').first()
-                or open_cycle_for(group)
-            )
+            cycle = open_cycle_for(group)
 
         return entitlement.evaluate(enrollment, cycle)
 
@@ -1144,11 +1159,8 @@ class AttendanceService:
         # الدورة المفتوحة الحالية لكل مجموعة، ثم مدفوعات تلك الدورات — كل ذلك
         # في استعلامين فقط (كان استعلاماً لكل مجموعة داخل الحلقة).
         group_ids = [enr.group_id for enr in enrollments]
-        from apps.teachers.models import GroupCycle
-        open_cycles_by_group = {
-            c.group_id: c
-            for c in GroupCycle.objects.filter(group_id__in=group_ids, closed_on__isnull=True)
-        }
+        from apps.teachers.cycles import current_cycles
+        open_cycles_by_group = current_cycles(group_ids)
         payments_by_group = {
             p.group_id: p
             for p in Payment.objects.filter(

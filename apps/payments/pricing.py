@@ -65,7 +65,18 @@ def prorated_fee(enrollment, *, cycle_size, first_sequence, group=None):
     read as "this student's price for a full cycle", and a late joiner pays
     their fraction of it exactly like anyone paying the standard fee would.
     """
-    fee = base_fee(enrollment, group)
+    return prorate(
+        base_fee(enrollment, group), cycle_size=cycle_size, first_sequence=first_sequence,
+    )
+
+
+def prorate(fee, *, cycle_size, first_sequence):
+    """
+    :func:`prorated_fee` for a full-cycle ``fee`` already in hand — what
+    :mod:`apps.payments.sync` needs to price an invoice under terms that are
+    no longer the enrollment's current ones (the price *before* an edit).
+    """
+    fee = to_money(fee or 0)
     if fee <= 0 or cycle_size <= 0:
         return ZERO
     remaining = entitled_sessions(cycle_size=cycle_size, first_sequence=first_sequence)

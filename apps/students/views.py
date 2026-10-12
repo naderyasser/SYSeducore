@@ -24,6 +24,8 @@ from apps.accounts.decorators import (
 )
 from apps.attendance.models import Attendance, ActivityLog
 from apps.payments.models import Payment
+from apps.payments.sync import drop_unused_invoices, resync_enrollment
+from apps.core.changes import describe_changes, snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -685,6 +687,9 @@ def student_update(request, student_id):
 
     if request.method == 'POST':
         form = StudentForm(request.POST, instance=student)
+        # Read before validation writes the POST onto ``student``.
+        before = snapshot(student, form.fields)
+        enrollment_notes = []
 
         # Get selected groups
         selected_groups = request.POST.getlist('groups')
@@ -730,8 +735,12 @@ def student_update(request, student_id):
                             'is_active': True
                         }
                     )
-                    if not created:
+                    if created:
+                        enrollment_notes.append(f'إضافة لمجموعة {group.group_name}')
+                    else:
                         updated_fields = []
+                        old_terms = (enrollment.financial_status, enrollment.custom_fee)
+                        old_display = enrollment.get_financial_status_display()
                         # Only overwrite the financial terms when the request
                         # actually carried them, so a caller that posts nothing
                         # cannot silently reset an exemption to 'normal'.
@@ -742,8 +751,20 @@ def student_update(request, student_id):
                         if not enrollment.is_active:
                             enrollment.is_active = True
                             updated_fields.append('is_active')
+                            enrollment_notes.append(f'إضافة لمجموعة {group.group_name}')
                         if updated_fields:
                             enrollment.save(update_fields=updated_fields)
+                        if (enrollment.financial_status, enrollment.custom_fee) != old_terms:
+                            # «اربط كله بكله»: the open cycle's invoice follows.
+                            resync_enrollment(
+                                enrollment, old_status=old_terms[0], old_custom_fee=old_terms[1],
+                            )
+                            enrollment_notes.append(
+                                f'الحالة المالية في {group.group_name}: من {old_display}'
+                                f'{f" ({old_terms[1]})" if old_terms[1] else ""} '
+                                f'إلى {enrollment.get_financial_status_display()}'
+                                f'{f" ({enrollment.custom_fee})" if enrollment.custom_fee else ""}'
+                            )
 
                 # Deactivate removed enrollments
                 for group_id in current_group_ids - selected_group_ids:
@@ -751,10 +772,21 @@ def student_update(request, student_id):
                         student=student,
                         group_id=group_id
                     ).update(is_active=False)
+                    removed_group = Group.all_objects.filter(pk=group_id).first()
+                    if removed_group is not None:
+                        drop_unused_invoices(student, removed_group)
+                        enrollment_notes.append(f'إزالة من مجموعة {removed_group.group_name}')
 
+            changes = '، '.join(
+                part for part in [describe_changes(before, snapshot(student, form.fields)), *enrollment_notes]
+                if part
+            )
             ActivityLog.log(
                 user=request.user, action='student_update',
-                description=f'تعديل بيانات الطالب: {student.full_name} (كود: {student.student_code})',
+                description=(
+                    f'تعديل بيانات الطالب: {student.full_name} (كود: {student.student_code})'
+                    + (f' — {changes}' if changes else '')
+                ),
                 target_model='Student', target_id=student.student_id, request=request
             )
             messages.success(request, 'تم تحديث بيانات الطالب بنجاح')

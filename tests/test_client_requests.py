@@ -153,10 +153,15 @@ class QuickSearchTests(TestCase):
             self.assertEqual(qs[param], [term], key)
 
     def test_throttled_search_answers_json_429_not_a_login_bounce(self):
+        from unittest.mock import patch
         from django.test import override_settings
         from django.core.cache import cache
         cache.clear()
-        with override_settings(RATELIMIT_ENABLE=True):
+        # Pin the limiter's clock: on a loaded box the 301 requests could
+        # straddle a minute boundary, reset the fixed window and pass as 200.
+        frozen = int(__import__('time').time())
+        with override_settings(RATELIMIT_ENABLE=True), \
+                patch('django_ratelimit.core.time.time', return_value=frozen):
             last = None
             for _ in range(301):
                 last = self.client.get(self.url, {'q': 'محمد'})

@@ -224,6 +224,17 @@ class GroupForm(forms.ModelForm):
             raise forms.ValidationError(
                 f'الدورة المحاسبية {MAX_SESSIONS_PER_CYCLE} حصص كحد أقصى'
             )
+        # The new size applies to the running cycle too (apps.payments.sync),
+        # so it cannot drop below the lessons that cycle has already held —
+        # the extra ones would sit in a cycle that closed before them.
+        if sessions is not None and self.instance.pk:
+            from apps.payments.sync import held_in_open_cycle
+            held = held_in_open_cycle(self.instance)
+            if sessions < held:
+                raise forms.ValidationError(
+                    f'الدورة الحالية اتعمل فيها {held} حصص بالفعل — '
+                    f'عدد حصص الدورة مينفعش يبقى أقل من {held}'
+                )
         return sessions
 
     @transaction.atomic

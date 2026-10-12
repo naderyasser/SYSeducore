@@ -273,19 +273,24 @@ def cancel_session(request, session_id):
 
     reason = request.POST.get('reason', '')
 
-    session.is_cancelled = True
-    session.cancellation_reason = reason
-    session.save(update_fields=['is_cancelled', 'cancellation_reason'])
-
     # A cancelled session must stop counting toward the cycle: clear its
     # sequence and close the gap it left. Refused on a closed cycle — that
     # billing is settled, so a correction there goes through an exception.
-    if session.cycle_id:
-        from apps.teachers.cycles import renumber_cycle
-        try:
-            renumber_cycle(session.cycle)
-        except ValueError as exc:
-            return JsonResponse({'success': False, 'error': str(exc)}, status=409)
+    # One transaction: a refusal used to return 409 *after* the cancellation
+    # had already been saved, so the lesson ended up cancelled anyway.
+    from apps.teachers.cycles import renumber_cycle
+    from .entitlement import recount_cycle
+    try:
+        with transaction.atomic():
+            session.is_cancelled = True
+            session.cancellation_reason = reason
+            session.save(update_fields=['is_cancelled', 'cancellation_reason'])
+            if session.cycle_id:
+                renumber_cycle(session.cycle)
+                # Whoever attended it gets the lesson back on their invoice.
+                recount_cycle(session.cycle)
+    except ValueError as exc:
+        return JsonResponse({'success': False, 'error': str(exc)}, status=409)
 
     # Tell the families before they set out. Deliberately after the DB write
     # and outside its guard: the cancellation is a bookkeeping fact, and a
