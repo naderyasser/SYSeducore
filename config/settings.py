@@ -383,9 +383,12 @@ if crontab is not None:
         # Every 10 minutes: the next cycle ("8 حصص = شهر") must open right
         # after the 8th lesson, not up to six hours later — a session
         # recorded in that gap landed in the finished cycle.
+        # Odd minutes (1, 11, 21…): on the even ones it ran together with
+        # auto-mark-absent, both writing the same group's payments, and
+        # Postgres killed the roll-over with a deadlock (group 125, 2026-10-12).
         'roll-group-cycles': {
             'task': 'apps.attendance.tasks.roll_group_cycles',
-            'schedule': crontab(minute='*/10'),
+            'schedule': crontab(minute='1-59/10'),
         },
     }
 else:
