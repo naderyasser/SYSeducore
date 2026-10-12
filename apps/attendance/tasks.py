@@ -161,15 +161,21 @@ def auto_mark_absent_sessions():
         if not to_create:
             continue
 
-        with transaction.atomic():
-            Attendance.objects.bulk_create(to_create, ignore_conflicts=True)
-            # bulk_create bypasses update_payment_sessions, so the absences
-            # never reached Payment.sessions_attended — yet an absence counts
-            # toward the billing cycle exactly like an attended session.
-            for attendance in to_create:
-                AttendanceService.update_payment_sessions(
-                    attendance.student, session.group
-                )
+        # One session's failure must not stop the absences of every other
+        # group today (a single bad row used to abort the whole run).
+        try:
+            with transaction.atomic():
+                Attendance.objects.bulk_create(to_create, ignore_conflicts=True)
+                # bulk_create bypasses update_payment_sessions, so the absences
+                # never reached Payment.sessions_attended — yet an absence counts
+                # toward the billing cycle exactly like an attended session.
+                for attendance in to_create:
+                    AttendanceService.update_payment_sessions(
+                        attendance.student, session.group
+                    )
+        except Exception:  # noqa: BLE001
+            logger.exception('auto-absence failed for session %s', session.session_id)
+            continue
 
         count_created += len(to_create)
         logger.info(
@@ -205,11 +211,7 @@ def roll_group_cycles():
     stays cheap without needing the old task's single-giant-query batching
     — a few queries per group, over ~dozens of groups.
     """
-    from apps.teachers.models import Group, GroupCycle
-    from apps.teachers.cycles import open_cycle_for
-    from apps.students.models import StudentGroupEnrollment
-    from apps.payments.models import Payment
-    from apps.payments.pricing import base_fee
+    from apps.teachers.models import Group
 
     closed_count = 0
 
@@ -219,71 +221,13 @@ def roll_group_cycles():
     )
 
     for group in groups:
-        cycle = open_cycle_for(group)
-        if cycle.started_on is None:
-            continue  # no session has happened in this cycle yet
-
-        counted = cycle.sessions.filter(is_cancelled=False).count()
-        if counted < cycle.sessions_planned:
-            continue
-
-        closing_session = (
-            cycle.sessions.filter(is_cancelled=False)
-            .order_by('sequence_in_cycle')[cycle.sessions_planned - 1:cycle.sessions_planned]
-            .first()
-        )
-
-        with transaction.atomic():
-            cycle.closed_on = closing_session.session_date if closing_session else timezone.localdate()
-            cycle.save(update_fields=['closed_on'])
-
-            Payment.objects.filter(cycle=cycle, billing_cycle_completed=False).update(
-                billing_cycle_completed=True
-            )
-
-            # A cycle a package already reserved is the group's next one —
-            # creating a fresh cycle past it (as this used to) meant the
-            # prepaid cycle never ran and its buyer was billed again.
-            next_cycle = (
-                GroupCycle.objects.filter(
-                    group=group, closed_on__isnull=True, started_on__isnull=True,
-                    index__gt=cycle.index,
-                ).order_by('index').first()
-            )
-            if next_cycle is None:
-                next_index = (
-                    GroupCycle.objects.filter(group=group).order_by('-index')
-                    .values_list('index', flat=True).first()
-                ) or cycle.index
-                next_cycle = GroupCycle.objects.create(
-                    group=group, index=next_index + 1,
-                    sessions_planned=group.sessions_per_month,
-                )
-
-            already_billed = set(
-                Payment.objects.filter(cycle=next_cycle).values_list('student_id', flat=True)
-            )
-            enrollments = (
-                StudentGroupEnrollment.objects.filter(group=group, is_active=True)
-                .exclude(financial_status='exempt')
-                .exclude(student_id__in=already_billed)
-                .select_related('student')
-            )
-            to_create = []
-            for enr in enrollments:
-                fee = base_fee(enr, group)
-                if fee <= 0:
-                    continue
-                to_create.append(Payment(
-                    student=enr.student, group=group, cycle=next_cycle,
-                    month=timezone.localdate().replace(day=1),
-                    amount_due=fee, status='unpaid',
-                    sessions_total=next_cycle.sessions_planned,
-                ))
-            if to_create:
-                Payment.objects.bulk_create(to_create, ignore_conflicts=True)
-
-        closed_count += 1
+        # One group's bad row must not stop every other group's roll-over:
+        # a single failure used to abort the whole run, every run.
+        try:
+            if _roll_group(group):
+                closed_count += 1
+        except Exception:  # noqa: BLE001
+            logger.exception('roll_group_cycles failed for group %s', group.pk)
 
     return f"Group cycles checked: {closed_count} cycle(s) closed and rolled"
 
@@ -327,3 +271,107 @@ def send_exception_notification(student_id, group_name, exception_type, reason_d
         notification_service.whatsapp_service.send_message(student.parent_phone, message)
 
     return f"Exception notification sent for {student.full_name}"
+
+
+def _roll_group(group):
+    """
+    Close ``group``'s running cycle once it holds ``sessions_planned``
+    lessons and open the next one. Returns ``True`` if it rolled.
+
+    Lessons held *past* the cycle's size — the roll-over ran late (the
+    worker was down, or the task kept failing, as it did 2026-10-04 →
+    10-12) — belong to the next cycle and move there, so they are billed
+    and counted in the cycle they were really part of.
+    """
+    from apps.attendance.entitlement import recount_cycle
+    from apps.attendance.models import Session
+    from apps.payments.models import Payment
+    from apps.payments.pricing import base_fee
+    from apps.students.models import StudentGroupEnrollment
+    from apps.teachers.cycles import _renumber, open_cycle_for
+    from apps.teachers.models import GroupCycle
+
+    cycle = open_cycle_for(group)
+    if cycle.started_on is None:
+        return False  # no session has happened in this cycle yet
+
+    counted = cycle.sessions.filter(is_cancelled=False).count()
+    if counted < cycle.sessions_planned:
+        return False
+
+    closing_session = (
+        cycle.sessions.filter(is_cancelled=False)
+        .order_by('sequence_in_cycle')[cycle.sessions_planned - 1:cycle.sessions_planned]
+        .first()
+    )
+
+    with transaction.atomic():
+        cycle.closed_on = closing_session.session_date if closing_session else timezone.localdate()
+        cycle.save(update_fields=['closed_on'])
+
+        Payment.objects.filter(cycle=cycle, billing_cycle_completed=False).update(
+            billing_cycle_completed=True
+        )
+
+        # A cycle a package already reserved is the group's next one —
+        # creating a fresh cycle past it (as this used to) meant the
+        # prepaid cycle never ran and its buyer was billed again.
+        next_cycle = (
+            GroupCycle.objects.filter(
+                group=group, closed_on__isnull=True, started_on__isnull=True,
+                index__gt=cycle.index,
+            ).order_by('index').first()
+        )
+        if next_cycle is None:
+            next_index = (
+                GroupCycle.objects.filter(group=group).order_by('-index')
+                .values_list('index', flat=True).first()
+            ) or cycle.index
+            next_cycle = GroupCycle.objects.create(
+                group=group, index=next_index + 1,
+                sessions_planned=group.sessions_per_month,
+            )
+
+        overflow = list(cycle.sessions.filter(session_date__gt=cycle.closed_on))
+        if overflow:
+            moved_ids = [s.session_id for s in overflow]
+            Session.objects.filter(session_id__in=moved_ids).update(cycle=next_cycle)
+            live_dates = [s.session_date for s in overflow if not s.is_cancelled]
+            if live_dates:
+                next_cycle.started_on = min(live_dates)
+                next_cycle.save(update_fields=['started_on'])
+            _renumber(next_cycle)
+            # An entitlement anchor on a lesson that moved now points into
+            # the next cycle; let the closed cycle re-derive its own.
+            Payment.objects.filter(cycle=cycle, entitlement_start_session_id__in=moved_ids).update(
+                entitlement_start_session=None, entitlement_start_seq=None,
+            )
+
+        already_billed = set(
+            Payment.objects.filter(cycle=next_cycle).values_list('student_id', flat=True)
+        )
+        enrollments = (
+            StudentGroupEnrollment.objects.filter(group=group, is_active=True)
+            .exclude(financial_status='exempt')
+            .exclude(student_id__in=already_billed)
+            .select_related('student')
+        )
+        to_create = []
+        for enr in enrollments:
+            fee = base_fee(enr, group)
+            if fee <= 0:
+                continue
+            to_create.append(Payment(
+                student=enr.student, group=group, cycle=next_cycle,
+                month=timezone.localdate().replace(day=1),
+                amount_due=fee, status='unpaid',
+                sessions_total=next_cycle.sessions_planned,
+            ))
+        if to_create:
+            Payment.objects.bulk_create(to_create, ignore_conflicts=True)
+
+        if overflow:
+            recount_cycle(cycle)
+            recount_cycle(next_cycle)
+
+    return True

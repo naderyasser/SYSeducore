@@ -280,3 +280,56 @@ class PackageCyclesTests(LinkageBase):
                 'amount': '400.00', 'package_cycles': '2',
             })
         self.assertEqual(GroupCycle.objects.filter(group=self.group).count(), 2)
+
+
+class LateRollOverTests(LinkageBase):
+    """
+    The roll-over task failed 2026-10-04 → 10-12 (a worker on code older than
+    the cycle-notes migration), so cycles kept collecting lessons past their
+    size. When it runs again, the extra lessons move to the next cycle.
+    """
+
+    def test_lessons_past_the_cycle_size_move_to_the_next_cycle(self):
+        from apps.attendance.tasks import roll_group_cycles
+
+        sessions = [self._attend(offset) for offset in (-9, -8, -7, -6, -5, -4)]
+        first = sessions[0].cycle
+        paid = self._invoice(self.student, first, amount_paid=Decimal('200.00'), status='paid')
+        AttendanceService.update_payment_sessions(self.student, self.group)
+        paid.refresh_from_db()
+        self.assertEqual(paid.sessions_attended, 6)
+
+        roll_group_cycles()
+
+        first.refresh_from_db()
+        self.assertEqual(first.closed_on, sessions[3].session_date)
+        second = open_cycle_for(self.group)
+        self.assertEqual(second.started_on, sessions[4].session_date)
+        moved = list(second.sessions.order_by('session_date').values_list('sequence_in_cycle', flat=True))
+        self.assertEqual(moved, [1, 2])
+        paid.refresh_from_db()
+        self.assertEqual(paid.sessions_attended, 4)
+        self.assertEqual(Payment.objects.get(student=self.student, cycle=second).sessions_attended, 2)
+
+    def test_one_failing_group_does_not_stop_the_others(self):
+        from unittest.mock import patch
+        from apps.attendance import tasks
+
+        calls = []
+
+        def flaky(group):
+            calls.append(group.pk)
+            if len(calls) == 1:
+                raise RuntimeError('boom')
+            return False
+
+        from datetime import time
+        from tests.factories import create_group_with_schedule
+        create_group_with_schedule(
+            group_name='مجموعة تانية', teacher=self.teacher, room=None,
+            schedule_day='Friday', schedule_time=time(9, 0), duration_minutes=60,
+            sessions_per_month=4, standard_fee=Decimal('100.00'),
+        )
+        with patch.object(tasks, '_roll_group', side_effect=flaky):
+            tasks.roll_group_cycles()
+        self.assertEqual(len(calls), 2)
