@@ -192,6 +192,51 @@ def send_attendance_correction(session_id, student_id):
     return 'Correction sent' if _finalize_message(record, result) else 'Correction failed'
 
 
+@shared_task
+def send_cancellation_corrections(session_id):
+    """A lesson cancelled *after* its 10-minute messages went out, without a
+    cancellation notice to the families (``notify=0``): every parent who was
+    told «تغيب ابنكم» about it is told the lesson was cancelled instead."""
+    from apps.attendance.models import Session
+
+    notification_service = NotificationService()
+    if notification_service.is_disabled:
+        return 'Notifications disabled'
+    session = Session.objects.select_related('group').filter(pk=session_id, is_cancelled=True).first()
+    if session is None:
+        return 'Not a cancelled session'
+    if session.session_date < timezone.localdate() - timedelta(days=CORRECTION_MAX_AGE_DAYS):
+        return 'Too old to correct'
+
+    sent = 0
+    told = WhatsAppMessage.objects.filter(
+        dedup_key__startswith=f'attendance:{session_id}:', status__in=('sent', 'delivered'),
+    ).select_related('student')
+    for message in told:
+        if _told(message.message_text) != 'absent' or message.student is None:
+            continue
+        record = _reserve_message(
+            f'attendance-fix:{session_id}:{message.student_id}:cancelled',
+            phone_number=message.phone_number,
+            message_text=(
+                '🔄 *تصحيح للرسالة السابقة*\n\n'
+                f'حصة *{session.group.group_name}* يوم {session.session_date:%Y/%m/%d} اتلغت — '
+                f'ابنكم *{message.student.full_name}* مش غايب.\n\n_نظام الحضور الآلي_'
+            ),
+            message_type='attendance', student=message.student, group=session.group, status='pending',
+        )
+        if record is None:
+            continue
+        try:
+            result = notification_service.send_text(message.phone_number, record.message_text,
+                                                    idempotency_key=record.dedup_key)
+        except Exception:
+            logger.exception('Cancellation correction failed (session %s)', session_id)
+            result = {'success': False, 'error': 'خطأ غير متوقع أثناء الإرسال'}
+        sent += _finalize_message(record, result)
+    return f'Cancellation corrections: {sent} sent'
+
+
 def queue_attendance_correction(session_id, student_id):
     """Queue :func:`send_attendance_correction` once the caller's transaction
     commits (the task must see the new status). Never raises: a broker

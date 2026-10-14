@@ -304,6 +304,14 @@ def cancel_session(request, session_id):
             notified, _ = notify_session_cancelled(session, reason)
         except Exception:  # noqa: BLE001
             logger.exception('cancellation notice failed for session %s', session.pk)
+    else:
+        # No notice to the families — but anyone already told «غياب» about
+        # this lesson must hear it was cancelled (8 such parents, Sept–Oct).
+        try:
+            from apps.notifications.tasks import send_cancellation_corrections
+            send_cancellation_corrections.delay(session.pk)
+        except Exception:  # noqa: BLE001
+            logger.warning('could not queue cancellation corrections for session %s', session.pk)
 
     ActivityLog.log(
         user=request.user,

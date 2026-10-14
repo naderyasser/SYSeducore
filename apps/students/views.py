@@ -191,7 +191,10 @@ def student_detail(request, student_id):
     # Get active enrollments
     active_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
-        is_active=True
+        is_active=True,
+        # A group in the recycle bin keeps its enrollments (a restore brings
+        # them back) but is not shown as one of the student's groups.
+        group__deleted_at__isnull=True,
     ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')
 
     # Get recent attendance (last 30 days)
@@ -449,7 +452,7 @@ def student_report(request, student_id):
     student = get_object_or_404(Student, pk=student_id)
 
     enrollments = (
-        StudentGroupEnrollment.objects.filter(student=student, is_active=True)
+        StudentGroupEnrollment.objects.filter(student=student, is_active=True, group__deleted_at__isnull=True)
         .select_related('group', 'group__teacher')
         .prefetch_related('group__schedules__room')
     )
@@ -680,7 +683,10 @@ def student_update(request, student_id):
     # Get currently enrolled groups
     current_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
-        is_active=True
+        is_active=True,
+        # A group in the recycle bin keeps its enrollments (a restore brings
+        # them back) but is not shown as one of the student's groups.
+        group__deleted_at__isnull=True,
     )
     current_group_ids = set(current_enrollments.values_list('group_id', flat=True))
     
@@ -865,7 +871,10 @@ def student_id_card(request, student_id):
     # Get active enrollments (max 3 for card)
     active_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
-        is_active=True
+        is_active=True,
+        # A group in the recycle bin keeps its enrollments (a restore brings
+        # them back) but is not shown as one of the student's groups.
+        group__deleted_at__isnull=True,
     ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')[:3]
 
     # Generate barcode base64 for the card
@@ -890,7 +899,10 @@ def student_id_card_print(request, student_id):
 
     active_enrollments = StudentGroupEnrollment.objects.filter(
         student=student,
-        is_active=True
+        is_active=True,
+        # A group in the recycle bin keeps its enrollments (a restore brings
+        # them back) but is not shown as one of the student's groups.
+        group__deleted_at__isnull=True,
     ).select_related('group', 'group__teacher').prefetch_related('group__schedules__room')[:3]
 
     barcode_base64 = student.get_barcode_base64()

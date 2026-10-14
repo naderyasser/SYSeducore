@@ -518,6 +518,17 @@ class AttendanceCorrectionTest(TestCase):
         self.assertEqual(send_attendance_correction(self.session.pk, self.student.pk), 'No record')
         mock_post.assert_not_called()
 
+    @patch('apps.notifications.services.requests.post')
+    def test_cancelled_lesson_corrects_absence_message(self, mock_post):
+        from apps.notifications.tasks import send_cancellation_corrections
+        mock_post.return_value = _api_success()
+        WhatsAppMessage.objects.filter(dedup_key__startswith='attendance:').update(student=self.student)
+        self.session.is_cancelled = True
+        self.session.save()
+        self.assertEqual(send_cancellation_corrections(self.session.pk), 'Cancellation corrections: 1 sent')
+        self.assertIn('اتلغت', self._corrections().get().message_text)
+        self.assertEqual(send_cancellation_corrections(self.session.pk), 'Cancellation corrections: 0 sent')
+
 
 @override_settings(**WAPILOT_TEST_SETTINGS)
 class RateLimitRetryTest(TestCase):
@@ -542,3 +553,4 @@ class RateLimitRetryTest(TestCase):
         result = WhatsAppService().send_message('01234567891', 'x')
         self.assertFalse(result['success'])
         self.assertEqual(mock_post.call_count, 3)
+
