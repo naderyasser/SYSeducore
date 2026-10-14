@@ -2046,6 +2046,19 @@ class ScanAfterAutoAbsenceTest(AuditFixturesMixin, TestCase):
         attendance = Attendance.objects.get(student=self.student, session=self.session)
         self.assertEqual(attendance.status, 'absent')
 
+    def test_refused_for_fees_is_recorded_for_the_parent_message(self):
+        from apps.notifications.tasks import notice_status
+        from apps.notifications.services import WhatsAppService
+        Attendance.objects.filter(student=self.student, session=self.session).delete()
+        with self.settings(BILLING_GRACE_SESSIONS=0):
+            result = AttendanceService.process_scan(self.student.student_code, self.supervisor)
+        self.assertFalse(result['success'])
+        attendance = Attendance.objects.get(student=self.student, session=self.session)
+        self.assertEqual((attendance.status, attendance.rejection_reason), ('absent', 'payment'))
+        status = notice_status(attendance)
+        self.assertEqual(status, 'refused_payment')
+        self.assertIn('منع الدخول', WhatsAppService().build_attendance_message('x', status, timezone.now()))
+
     def test_second_scan_is_already_registered(self):
         self._pay()
         AttendanceService.process_scan(self.student.student_code, self.supervisor)
@@ -2071,3 +2084,27 @@ class CycleRegisterExcuseTest(AuditFixturesMixin, TestCase):
         _, rows = _cycle_register_data(self.group, session.cycle)
         cell = next(c for c in rows[0]['cells'] if c['session'] == session)
         self.assertEqual((cell['kind'], cell['text']), ('excused', 'عذر'))
+
+
+class LastLessonOfCycleCountTest(AuditFixturesMixin, TestCase):
+    """The last lesson closes its cycle on creation; a scan in it must still
+    land on that cycle's invoice (455 invoices were one lesson short)."""
+
+    def test_scan_in_closed_cycle_counts_on_its_invoice(self):
+        self.build_fixtures()
+        session = assign_to_cycle(Session.objects.create(
+            group=self.group, session_date=timezone.localdate(),
+        ))
+        payment = Payment.objects.create(
+            student=self.student, group=self.group, cycle=session.cycle,
+            month=timezone.localdate().replace(day=1),
+            amount_due=200, amount_paid=200, status='paid', paid_on=timezone.localdate(),
+        )
+        GroupCycle.objects.filter(pk=session.cycle_id).update(closed_on=timezone.localdate())
+        session.refresh_from_db()
+        Attendance.objects.create(student=self.student, session=session, status='present',
+                                  scan_time=timezone.now())
+        AttendanceService.count_on_own_cycle(self.student, session)
+        payment.refresh_from_db()
+        self.assertEqual(payment.sessions_attended, 1)
+        self.assertFalse(Payment.objects.exclude(pk=payment.pk).filter(student=self.student).exists())

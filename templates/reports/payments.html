@@ -430,12 +430,12 @@
                                 {{ payment.student.full_name|slice:":1" }}
                             </div>
                             <div class="student-info">
-                                <h6>{{ payment.student.full_name }}</h6>
+                                <h6><a href="{% url 'students:detail' payment.student.pk %}" class="text-reset">{{ payment.student.full_name }}</a></h6>
                             </div>
                         </div>
                     </td>
                     <td>
-                        <span class="group-badge">{{ payment.group.group_name }}</span>
+                        <a href="{% url 'teachers:group_detail' payment.group.pk %}" class="group-badge text-decoration-none">{{ payment.group.group_name }}</a>
                     </td>
                     <td>{{ payment.month|date:"Y-m" }}</td>
                     <td class="amount-cell text-danger">{{ payment.amount_due|egp }}</td>

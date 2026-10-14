@@ -49,6 +49,7 @@ class SettlementService:
 
             breakdown.append({
                 'group_name': group.group_name,
+                'group_id': group.pk,
                 'group_active': group.is_active and group.deleted_at is None,
                 'students': group_data['students'],
                 'revenue': float(group_revenue),

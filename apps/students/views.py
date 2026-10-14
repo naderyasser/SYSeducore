@@ -826,9 +826,17 @@ def student_delete(request, student_id):
             # notification crons, which join through the FK and never look at
             # student.deleted_at — a deleted student kept collecting absences
             # and WhatsApp messages. Deactivate them with the student.
-            StudentGroupEnrollment.objects.filter(
+            stopped = list(StudentGroupEnrollment.objects.filter(
                 student=student, is_active=True,
+            ).select_related('group'))
+            StudentGroupEnrollment.objects.filter(
+                pk__in=[e.pk for e in stopped],
             ).update(is_active=False)
+            # Same as taking them off a group: the running cycle's invoice they
+            # never used goes too — 38 such zero-session invoices were still
+            # counted as «متبقي» on 2026-10-14.
+            for enrollment in stopped:
+                drop_unused_invoices(student, enrollment.group)
 
         # Log the deletion
         ActivityLog.log(

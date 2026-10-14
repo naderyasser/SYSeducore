@@ -667,7 +667,7 @@
                                         <small class="d-block text-muted">{{ payment.sessions_attended }}/{{ payment.sessions_total }} حصة</small>
                                     {% else %}{{ payment.month|date:"Y-m" }}{% endif %}
                                 </td>
-                                <td>{{ payment.group.group_name }}</td>
+                                <td><a href="{% url 'teachers:group_detail' payment.group.pk %}">{{ payment.group.group_name }}</a></td>
                                 <td class="table-num">{{ payment.amount_due|egp }}</td>
                                 <td class="table-num text-success">{{ payment.amount_paid|egp }}</td>
                                 <td class="table-num {% if payment.remaining > 0 and not payment.is_exempt %}text-danger{% endif %}">

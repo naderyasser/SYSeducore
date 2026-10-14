@@ -54,7 +54,7 @@
           <tbody>
             {% for row in settlement.breakdown %}
             <tr{% if not row.group_active %} class="text-muted"{% endif %}>
-              <td>{{ row.group_name }}{% if not row.group_active %} (محذوفة){% endif %}</td>
+              <td>{% if row.group_id and row.group_active %}<a href="{% url 'teachers:group_detail' row.group_id %}">{{ row.group_name }}</a>{% else %}{{ row.group_name }}{% endif %}{% if not row.group_active %} (محذوفة){% endif %}</td>
               <td>{{ row.students }}</td>
               <td>{{ row.revenue|egp }}</td>
               <td>{{ row.center_percentage }}%</td>

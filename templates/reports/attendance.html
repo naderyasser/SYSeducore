@@ -348,16 +348,16 @@
                                 {{ attendance.student.full_name|slice:":1" }}
                             </div>
                             <div class="student-info">
-                                <h6>{{ attendance.student.full_name }}</h6>
+                                <h6><a href="{% url 'students:detail' attendance.student.pk %}" class="text-reset">{{ attendance.student.full_name }}</a></h6>
                                 <span class="student-code">{{ attendance.student.student_code }}</span>
                             </div>
                         </div>
                     </td>
                     <td>
-                        <span class="group-badge">{{ attendance.session.group.group_name }}</span>
+                        <a href="{% url 'teachers:group_detail' attendance.session.group.pk %}" class="group-badge text-decoration-none">{{ attendance.session.group.group_name }}</a>
                     </td>
-                    <td>{{ attendance.session.group.teacher.full_name }}</td>
-                    <td>{{ attendance.session.session_date|date:"Y-m-d" }}</td>
+                    <td>{% if attendance.session.group.teacher %}<a href="{% url 'teachers:detail' attendance.session.group.teacher.pk %}">{{ attendance.session.group.teacher.full_name }}</a>{% else %}—{% endif %}</td>
+                    <td><a href="{% url 'attendance:session_detail' attendance.session.pk %}" title="الحصة">{{ attendance.session.session_date|date:"Y-m-d" }}</a></td>
                     <td>{{ attendance.scan_time|time:"H:i" }}</td>
                     <td>
                         {% if attendance.status == 'present' %}

@@ -145,8 +145,8 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
             <tbody>
                 {% for e in enrollments %}
                 <tr>
-                    <td class="start">{{ e.group.group_name }}</td>
-                    <td class="start">{{ e.group.teacher.full_name|default:"—" }}</td>
+                    <td class="start"><a href="{% url 'teachers:group_detail' e.group.pk %}">{{ e.group.group_name }}</a></td>
+                    <td class="start">{% if e.group.teacher %}<a href="{% url 'teachers:detail' e.group.teacher.pk %}">{{ e.group.teacher.full_name }}</a>{% else %}—{% endif %}</td>
                     <td>{{ e.group.get_schedule_display }}</td>
                     <td>{{ e.group.get_rooms_display }}</td>
                     <td class="num">{% if e.custom_fee is not None %}{{ e.custom_fee|egp }}{% else %}{{ e.group.standard_fee|egp }}{% endif %}</td>
@@ -220,7 +220,7 @@ DOCTYPE, no sidebar) so it prints cleanly and can be handed to a parent.
                 {% for p in payments %}
                 <tr>
                     <td class="num">{% if p.cycle %}دورة {{ p.cycle.index }}{% else %}{{ p.month|date:"Y-m" }}{% endif %}</td>
-                    <td class="start">{{ p.group.group_name }}</td>
+                    <td class="start"><a href="{% url 'teachers:group_detail' p.group.pk %}">{{ p.group.group_name }}</a></td>
                     <td class="num">{{ p.amount_due|egp }}</td>
                     <td class="num ok">{{ p.amount_paid|egp }}</td>
                     <td class="num {% if p.remaining > 0 and not p.is_exempt %}bad{% endif %}">{% if p.is_exempt %}—{% else %}{{ p.remaining|egp }}{% endif %}</td>

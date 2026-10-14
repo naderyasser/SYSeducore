@@ -448,7 +448,7 @@
             </div>
             <div class="info-card-value">
                 {% if group.teacher %}
-                    {{ group.teacher.full_name }}
+                    <a href="{% url 'teachers:detail' group.teacher.pk %}">{{ group.teacher.full_name }}</a>
                 {% else %}
                     -
                 {% endif %}

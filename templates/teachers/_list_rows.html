@@ -16,7 +16,7 @@ find out defeats the point.
                 <i class="bi bi-person-fill text-white"></i>
             </div>
             <div>
-                <div class="fw-semibold">{{ teacher.full_name }}</div>
+                <div class="fw-semibold"><a href="{% url 'teachers:detail' teacher_id=teacher.teacher_id %}" class="text-reset">{{ teacher.full_name }}</a></div>
             </div>
         </div>
     </td>

@@ -97,12 +97,14 @@ def notice_status(attendance):
         return 'absent'
     if attendance.status == 'exception' and attendance.exception_record_id is None:
         return 'excused'
+    if attendance.status == 'absent' and attendance.rejection_reason == 'payment':
+        return 'refused_payment'
     return attendance.status
 
 
 def _told(message_text):
     """Which of absent / excused / came a sent attendance message announced."""
-    if 'تنبيه غياب' in message_text:
+    if 'تنبيه غياب' in message_text or 'منع الدخول' in message_text:
         return 'absent'
     if 'غياب بعذر' in message_text:
         return 'excused'
@@ -160,7 +162,8 @@ def send_attendance_correction(session_id, student_id):
         # wrong mark must not send the family an absence notice.
         return 'No record'
     status = notice_status(attendance)
-    now_kind = 'came' if status in ('present', 'late', 'exception') else status
+    now_kind = {'present': 'came', 'late': 'came', 'exception': 'came',
+                'refused_payment': 'absent'}.get(status, status)
     if _told(delivered[-1].message_text) == now_kind:
         return 'Already consistent'
 

@@ -693,9 +693,14 @@ def bulk_action(request):
             Student.objects.filter(student_id__in=pks).update(
                 deleted_at=now, deleted_by=request.user, is_active=False,
             )
-            StudentGroupEnrollment.objects.filter(
+            stopped = list(StudentGroupEnrollment.objects.filter(
                 student_id__in=pks, is_active=True,
+            ).select_related('student', 'group'))
+            StudentGroupEnrollment.objects.filter(
+                pk__in=[e.pk for e in stopped],
             ).update(is_active=False)
+            for enrollment in stopped:
+                drop_unused_invoices(enrollment.student, enrollment.group)
             message = f'تم نقل {count} طالب إلى سلة المهملات'
             log_action = 'student_delete'
             log_description = f'حذف جماعي (سلة المهملات) لعدد {count} طالب'

@@ -45,8 +45,8 @@
       <div class="row mb-3">
         <div class="col-md-4">
           <h5>معلومات الحصة</h5>
-          <p><strong>المجموعة:</strong> {{ session.group.group_name }}</p>
-          <p><strong>المدرس:</strong> {{ session.group.teacher.full_name }}</p>
+          <p><strong>المجموعة:</strong> <a href="{% url 'teachers:group_detail' session.group.pk %}">{{ session.group.group_name }}</a></p>
+          <p><strong>المدرس:</strong> {% if session.group.teacher %}<a href="{% url 'teachers:detail' session.group.teacher.pk %}">{{ session.group.teacher.full_name }}</a>{% else %}—{% endif %}</p>
           <p><strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}</p>
           <p><strong>الوقت:</strong> {% if schedule_entry %}{{ schedule_entry.start_time|time:"H:i" }}{% else %}<span class="text-muted">حصة تعويضية</span>{% endif %}</p>
           <p>
@@ -103,7 +103,7 @@
                     <span class="status-label status-{{ att.status|default:'none' }}">
                       {% if att.status == 'present' %}حاضر
                       {% elif att.status == 'late' %}متأخر
-                      {% elif att.status == 'absent' %}غائب
+                      {% elif att.status == 'absent' %}غائب{% if att.rejection_reason == 'payment' %} (مُنع — مصروفات){% endif %}
                       {% elif att.status == 'exception' %}استثناء{% if not att.exception_record_id %} (عذر){% endif %}
                       {% else %}— بلا سجل
                       {% endif %}

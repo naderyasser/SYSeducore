@@ -426,6 +426,8 @@ class WhatsAppService:
             # AttendanceService.apply_late_exception) — the student is in the
             # room, so this must not fall through to the absence message.
             return self._get_late_message(student_name, time)
+        if status == 'refused_payment':
+            return self._get_payment_block_message(student_name)
         if status == 'excused':
             # A desk-typed «عذر» (an 'exception' row with no ExceptionRecord):
             # the student was NOT in the room. It used to fall into the 'late'

@@ -72,7 +72,7 @@
     </div>
 
     {% for group, lines in groups.items %}
-    <div class="group-title">{{ group.group_name }} — نسبة المركز الافتراضية {{ group.center_percentage }}%</div>
+    <div class="group-title"><a href="{% url 'teachers:group_detail' group.pk %}" class="text-reset">{{ group.group_name }}</a> — نسبة المركز الافتراضية {{ group.center_percentage }}%</div>
     {% comment %}
     Eleven columns, and the layout gives the content area 260px less as soon
     as the sidebar appears at 993px. Without a scrolling wrapper the sheet was
@@ -101,7 +101,7 @@
         <tbody>
             {% for line in lines %}
             <tr data-line-id="{{ line.line_id }}" class="{% if line.is_excluded %}excluded-row{% endif %}">
-                <td class="name">{{ line.student.full_name }}{% if line.payment.is_exempt %}<br><span class="pay-tag exempt">معفي</span>{% elif not line.collected_amount %}<br><span class="pay-tag unpaid">لم يدفع</span>{% endif %}{% if line.payment.notes %}<div class="pay-note" title="{{ line.payment.notes }}">{{ line.payment.notes|truncatechars:40 }}</div>{% endif %}</td>
+                <td class="name"><a href="{% url 'students:detail' line.student.pk %}" class="text-reset">{{ line.student.full_name }}</a>{% if line.payment.is_exempt %}<br><span class="pay-tag exempt">معفي</span>{% elif not line.collected_amount %}<br><span class="pay-tag unpaid">لم يدفع</span>{% endif %}{% if line.payment.notes %}<div class="pay-note" title="{{ line.payment.notes }}">{{ line.payment.notes|truncatechars:40 }}</div>{% endif %}</td>
                 <td>{{ line.sessions_consumed }}/{{ line.sessions_entitled }}{% if line.cycle %}<br><small class="text-muted">دورة {{ line.cycle.index }}</small>{% endif %}</td>
                 <td><div class="dates">{% for d in line.short_dates %}<span>{{ d }}</span>{% empty %}<span class="text-muted">—</span>{% endfor %}</div></td>
                 <td class="system-value">{{ line.computed_amount|egp }}</td>

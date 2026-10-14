@@ -175,9 +175,7 @@ def auto_mark_absent_sessions():
                 # never reached Payment.sessions_attended — yet an absence counts
                 # toward the billing cycle exactly like an attended session.
                 for attendance in to_create:
-                    AttendanceService.update_payment_sessions(
-                        attendance.student, session.group
-                    )
+                    AttendanceService.count_on_own_cycle(attendance.student, session)
         except Exception:  # noqa: BLE001
             logger.exception('auto-absence failed for session %s', session.session_id)
             continue

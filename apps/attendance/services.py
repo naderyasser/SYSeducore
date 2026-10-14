@@ -397,6 +397,8 @@ class AttendanceService:
                     skip_item['group_id'] = financial_check.get('group_id')
                     skip_item['amount_due'] = financial_check.get('amount_due')
                 skipped.append(skip_item)
+                if financial_check.get('error_type') in ('payment_required', 'sessions_exhausted'):
+                    AttendanceService._record_payment_refusal(student, matching_group, supervisor)
                 continue
 
             # التسجيل النهائي — get_or_create للحصة
@@ -448,7 +450,8 @@ class AttendanceService:
                         attendance.scan_time = timezone.now()
                         attendance.supervisor = supervisor
                         attendance.note = ''
-                        attendance.save(update_fields=['status', 'scan_time', 'supervisor', 'note'])
+                        attendance.rejection_reason = ''
+                        attendance.save(update_fields=['status', 'scan_time', 'supervisor', 'note', 'rejection_reason'])
                         converted = True
                         from .models import ActivityLog
                         ActivityLog.log(
@@ -463,7 +466,7 @@ class AttendanceService:
                         queue_attendance_correction(session.session_id, student.pk)
 
                 if created or converted:
-                    AttendanceService.update_payment_sessions(student, matching_group)
+                    AttendanceService.count_on_own_cycle(student, session)
                 created = created or converted
 
             if created:
@@ -902,7 +905,9 @@ class AttendanceService:
                 # The reason belongs to the excuse: a new excuse writes its
                 # reason, any other status drops a stale one.
                 attendance.note = (note or '')[:255] if status == 'exception' else ''
-                attendance.save(update_fields=['status', 'supervisor', 'note'])
+                # The desk's word replaces the scanner's "refused for fees".
+                attendance.rejection_reason = ''
+                attendance.save(update_fields=['status', 'supervisor', 'note', 'rejection_reason'])
 
             # The parent may already have been told the old status (the
             # 10-minute message) — the correction task decides whether the
@@ -941,6 +946,52 @@ class AttendanceService:
                 'scan_time': attendance.scan_time.isoformat(),
             },
         }
+
+    #: ``Attendance.rejection_reason`` of a student turned away at the door
+    #: for fees — the parent is told that, not «تغيب ابنكم».
+    PAYMENT_REFUSAL = 'payment'
+
+    @staticmethod
+    def _record_payment_refusal(student, group, supervisor):
+        """The student came and was refused for fees: write today's absence
+        now (the 10-minute rule would write the same row) but mark why, so the
+        parent's message says «مُنع من الدخول بسبب المصروفات» instead of an
+        unexplained absence. Never touches an existing row."""
+        with transaction.atomic():
+            session, session_created = Session.objects.get_or_create(
+                group=group, session_date=timezone.localdate(),
+                defaults={'teacher_attended': False},
+            )
+            if session_created:
+                from apps.teachers.cycles import assign_to_cycle
+                assign_to_cycle(session)
+            if session.is_cancelled:
+                return
+            _, created = Attendance.objects.get_or_create(
+                student=student, session=session,
+                defaults={
+                    'status': 'absent', 'scan_time': timezone.now(), 'supervisor': supervisor,
+                    'rejection_reason': AttendanceService.PAYMENT_REFUSAL,
+                },
+            )
+            if created:
+                AttendanceService.count_on_own_cycle(student, session)
+
+    @staticmethod
+    def count_on_own_cycle(student, session):
+        """Count a scan or an automatic absence on the invoice of the
+        lesson's *own* cycle. The last lesson of a cycle closes it the moment
+        it is created, so ``update_payment_sessions`` (which always writes the
+        open cycle) put that lesson on the next cycle's invoice and left the
+        closed one a lesson short — 455 invoices by 2026-10-14."""
+        cycle = session.cycle
+        if cycle is not None and cycle.closed_on is not None:
+            from .entitlement import recount_cycle
+            # Re-counted, never billed: no invoice is created on the new
+            # cycle as a side effect of the old one's last lesson.
+            recount_cycle(cycle, [student.pk])
+        else:
+            AttendanceService.update_payment_sessions(student, session.group)
 
     @staticmethod
     def recount_after_change(student, session):

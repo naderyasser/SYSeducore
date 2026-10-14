@@ -65,7 +65,7 @@
                 <tbody>
                     {% for s in recent_settlements %}
                     <tr>
-                        <td>{{ s.teacher.full_name }}</td>
+                        <td>{% if s.teacher %}<a href="{% url 'teachers:detail' s.teacher.pk %}">{{ s.teacher.full_name }}</a>{% else %}—{% endif %}</td>
                         <td>{{ s.period_start|date:"Y-m-d" }} — {{ s.period_end|date:"Y-m-d" }}</td>
                         <td>
                             {% if s.status == 'approved' %}

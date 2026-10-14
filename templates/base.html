@@ -820,6 +820,9 @@
             .card, .content-card, .detail-container,
             .stat-card { box-shadow: none !important; border: 1px solid #ddd !important; }
             a[href]::after { content: none !important; }
+            /* A scrolling wrapper clipped every column past the screen's
+               width off the paper. */
+            .table-responsive, .table-wrapper, [style*="overflow"] { overflow: visible !important; max-height: none !important; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; }
             thead { display: table-header-group; }
@@ -1202,6 +1205,24 @@
     <script>
     // Back arrow: step back in history when the previous page was ours;
     // opened from a bookmark or another site, the href (dashboard) applies.
+    // A table wider than a portrait A4 prints on a landscape page instead of
+    // losing its right-hand columns.
+    (function () {
+        var style = null;
+        window.addEventListener('beforeprint', function () {
+            var wide = Array.prototype.some.call(document.querySelectorAll('table'), function (t) {
+                return t.scrollWidth > 720 && t.offsetParent !== null;
+            });
+            if (wide && !style) {
+                style = document.createElement('style');
+                style.textContent = '@page { size: A4 landscape; margin: 8mm; }';
+                document.head.appendChild(style);
+            }
+        });
+        window.addEventListener('afterprint', function () {
+            if (style) { style.remove(); style = null; }
+        });
+    })();
     // Print button: a paginated list reopens with every row (?print_all=1)
     // and prints itself — printing the screen gave only the current page.
     (function () {

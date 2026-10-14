@@ -214,7 +214,7 @@
             {% for p in detail_page %}
             <tr>
                 <td class="name"><a href="{% url 'students:detail' p.student.student_id %}#payments">{{ p.student.full_name }}</a></td>
-                <td class="name">{{ p.group.group_name }}</td>
+                <td class="name"><a href="{% url 'teachers:group_detail' p.group.pk %}">{{ p.group.group_name }}</a></td>
                 <td>{% if p.cycle %}دورة {{ p.cycle.index }}{% else %}{{ p.month|date:"Y-m" }}{% endif %}</td>
                 <td>{{ p.amount_due|floatformat:0 }}</td>
                 <td>{{ p.amount_paid|floatformat:0 }}</td>
@@ -231,7 +231,7 @@
             <tr>
                 <td>{{ a.session.session_date|date:"Y-m-d" }}</td>
                 <td class="name"><a href="{% url 'students:detail' a.student.student_id %}">{{ a.student.full_name }}</a></td>
-                <td class="name">{{ a.session.group.group_name }}</td>
+                <td class="name"><a href="{% url 'teachers:group_detail' a.session.group.pk %}">{{ a.session.group.group_name }}</a></td>
                 <td>{% if a.status == 'present' %}<span class="badge bg-success">حاضر</span>{% elif a.status == 'late' %}<span class="badge bg-warning text-dark">متأخر</span>{% elif a.status == 'absent' %}<span class="badge bg-danger">غائب</span>{% else %}<span class="badge bg-info">عذر</span>{% endif %}</td>
             </tr>
             {% empty %}<tr><td colspan="4" class="text-muted py-4">لا توجد سجلات</td></tr>{% endfor %}
@@ -243,8 +243,8 @@
             <tr>
                 <td class="name"><a href="{% url 'students:detail' e.student.student_id %}">{{ e.student.full_name }}</a></td>
                 <td>{{ e.student.student_code }}</td>
-                <td class="name">{{ e.group.group_name }}</td>
-                <td class="name">{{ e.group.teacher.full_name|default:"—" }}</td>
+                <td class="name"><a href="{% url 'teachers:group_detail' e.group.pk %}">{{ e.group.group_name }}</a></td>
+                <td class="name">{% if e.group.teacher %}<a href="{% url 'teachers:detail' e.group.teacher.pk %}">{{ e.group.teacher.full_name }}</a>{% else %}—{% endif %}</td>
                 <td>{{ e.enrolled_at|date:"Y-m-d" }}</td>
             </tr>
             {% empty %}<tr><td colspan="5" class="text-muted py-4">لا يوجد طلاب</td></tr>{% endfor %}

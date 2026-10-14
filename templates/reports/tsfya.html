@@ -263,7 +263,7 @@
                                         </a>
                                     </td>
                                     <td><code class="bg-light px-2 py-1 rounded">{{ p.student.student_code }}</code></td>
-                                    <td class="text-muted">{{ p.group.group_name }}</td>
+                                    <td class="text-muted"><a href="{% url 'teachers:group_detail' p.group.pk %}">{{ p.group.group_name }}</a></td>
                                     <td class="text-center">
                                         {% if p.status == 'paid' %}
                                             <span class="badge bg-success">مدفوع</span>
