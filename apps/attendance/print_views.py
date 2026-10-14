@@ -72,6 +72,9 @@ def group_roster_print(request, group_id):
         'date_from': date_from,
         'date_to': date_to,
         'chunks': chunks,
+        # The «س» cells mean nothing on paper without their reasons — the
+        # group page lists them under its grid, the print now does too.
+        'notes': grid['notes'],
         'printed_at': timezone.localtime(),
     }
     return render(request, 'attendance/roster_print.html', context)

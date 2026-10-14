@@ -1554,9 +1554,20 @@ class AutoAbsenceTaskTest(AuditFixturesMixin, TestCase):
         self.group.schedule_time = time(0, 1)
         self.group.save()
         self.group.schedules.update(start_time=time(0, 1))
+        # Enrolled before the lesson — a mid-lesson enrollee is not marked.
+        StudentGroupEnrollment.objects.filter(pk=self.enrollment.pk).update(
+            enrolled_at=timezone.now() - timedelta(days=7))
         self.session = assign_to_cycle(Session.objects.create(
             group=self.group, session_date=timezone.localdate()
         ))
+
+    def test_student_enrolled_after_lesson_start_is_not_marked_absent(self):
+        from apps.attendance.tasks import auto_mark_absent_sessions
+        StudentGroupEnrollment.objects.filter(pk=self.enrollment.pk).update(enrolled_at=timezone.now())
+        if timezone.localtime().time() < time(0, 2):
+            self.skipTest('enrollment must fall after the 00:01 lesson start')
+        auto_mark_absent_sessions()
+        self.assertFalse(Attendance.objects.filter(student=self.student, session=self.session).exists())
 
     def test_absence_is_recorded_but_does_not_consume_before_first_attendance(self):
         """
@@ -2015,6 +2026,15 @@ class ScanAfterAutoAbsenceTest(AuditFixturesMixin, TestCase):
         attendance = Attendance.objects.get(student=self.student, session=self.session)
         self.assertEqual(attendance.status, 'late')
         self.assertEqual(len(callbacks), 1)
+
+    def test_scan_overrides_a_manual_excuse(self):
+        self._pay()
+        Attendance.objects.filter(student=self.student, session=self.session).update(
+            status='exception', note='مريض')
+        result = AttendanceService.process_scan(self.student.student_code, self.supervisor)
+        self.assertEqual(result.get('status'), 'registered', result.get('message'))
+        attendance = Attendance.objects.get(student=self.student, session=self.session)
+        self.assertEqual((attendance.status, attendance.note), ('late', ''))
 
     def test_unpaid_student_is_still_refused(self):
         # Arriving after the absence was written must not skip the payment check.

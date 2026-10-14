@@ -143,6 +143,17 @@
         </table>
         {% endfor %}
 
+        {% if notes %}
+        <div class="visitor-section">
+            <h5>الأعذار والحصص الملغية وأسبابها</h5>
+            <ul style="margin:0; padding-inline-start:18px; font-size:12px;">
+                {% for n in notes %}
+                <li><b dir="ltr">{{ n.date|date:"d/m" }}</b> — {% if n.student %}{{ n.student.full_name }}: {% endif %}{{ n.text }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
         <div class="visitor-section">
             <h5>زائر / غير مسجَّل بالسيستم</h5>
             <table class="roster">

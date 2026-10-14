@@ -136,11 +136,16 @@ def auto_mark_absent_sessions():
             continue
 
         # Soft-deleted students must not keep generating absence rows.
+        # Nor do students enrolled after the lesson began: the desk often
+        # registers a newcomer mid-lesson and walks them into the room, and
+        # they used to be marked absent from it two minutes later (64 such
+        # rows Sept–Oct 2026).
         enrollments = StudentGroupEnrollment.objects.filter(
             group=session.group,
             is_active=True,
             student__deleted_at__isnull=True,
             student__is_active=True,
+            enrolled_at__lte=session_start,
         ).select_related('student')
 
         existing_attendance = set(

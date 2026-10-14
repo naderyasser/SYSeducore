@@ -266,12 +266,15 @@ def send_attendance_notifications_task():
         if now < trigger_time:
             continue
 
-        # Soft-deleted / deactivated students must not generate messages.
+        # Soft-deleted / deactivated students must not generate messages, and
+        # a student enrolled after the lesson began was never expected in it —
+        # «تغيب ابنكم» would be news to a family that signed up an hour ago.
         enrollments = StudentGroupEnrollment.objects.filter(
             group=session.group,
             is_active=True,
             student__deleted_at__isnull=True,
             student__is_active=True,
+            enrolled_at__lte=_local_datetime(session.session_date, start_time),
         ).select_related('student')
 
         attendance_by_student = {

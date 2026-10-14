@@ -363,9 +363,12 @@ class AttendanceService:
             # used up this lesson in the cycle count, so the financial check
             # is asked as if it did not exist — the same answer an on-time
             # scan would have got — and everything it touched is rolled back.
+            # A desk-typed «عذر» (no ExceptionRecord) is an absence too: the
+            # family called in sick, then the student came anyway.
             todays_absence = Attendance.objects.filter(
+                models.Q(status='absent') | models.Q(status='exception', exception_record__isnull=True),
                 student=student, session__group=matching_group,
-                session__session_date=timezone.localdate(), status='absent',
+                session__session_date=timezone.localdate(),
             )
 
             # الفحص المالي
@@ -430,15 +433,19 @@ class AttendanceService:
                 )
 
                 converted = False
-                if not created and attendance.status == 'absent':
+                def _not_in_room(a):
+                    return a.status == 'absent' or (a.status == 'exception' and a.exception_record_id is None)
+
+                if not created and _not_in_room(attendance):
                     # Used to fall through to «مسجل مسبقاً» and leave the
                     # student absent although they scanned in.
                     attendance = Attendance.objects.select_for_update().get(pk=attendance.pk)
-                    if attendance.status == 'absent':
+                    if _not_in_room(attendance):
                         attendance.status = time_check['status']
                         attendance.scan_time = timezone.now()
                         attendance.supervisor = supervisor
-                        attendance.save(update_fields=['status', 'scan_time', 'supervisor'])
+                        attendance.note = ''
+                        attendance.save(update_fields=['status', 'scan_time', 'supervisor', 'note'])
                         converted = True
                         from apps.notifications.tasks import queue_attendance_correction
                         queue_attendance_correction(session.session_id, student.pk)
