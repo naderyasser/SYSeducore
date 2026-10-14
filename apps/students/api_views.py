@@ -251,9 +251,14 @@ def add_to_group(request):
             request=request,
         )
 
+    from .utils import schedule_clashes
+    clashes = schedule_clashes(student)
+    if clashes:
+        message = message + ' — ' + ' '.join(clashes)
     return JsonResponse({
         'success': True,
         'message': message,
+        'warnings': clashes,
         'enrollment': {
             'id': enrollment.id,
             'group_name': group.group_name,

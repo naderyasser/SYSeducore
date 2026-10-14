@@ -82,3 +82,18 @@ class PagesRenderTest(TestCase):
     def test_refusal_reason_shown_on_lesson_page(self):
         r = self.client.get(reverse('attendance:session_detail', args=[self.session.pk]))
         self.assertContains(r, 'مُنع — مصروفات')
+
+
+class ScheduleClashWarningTest(PagesRenderTest):
+    """Two groups at the same hour: the student page says so."""
+
+    def test_clash_shown_on_student_page(self):
+        other = create_group_with_schedule(
+            group_name='مجموعة متعارضة', teacher=self.teacher,
+            room=Room.objects.create(name='قاعة تانية', capacity=20),
+            schedule_day='Saturday', schedule_time=time(10, 30), standard_fee=200,
+            sessions_per_month=4,
+        )
+        StudentGroupEnrollment.objects.create(student=self.student, group=other)
+        r = self.client.get(reverse('students:detail', args=[self.student.pk]))
+        self.assertContains(r, 'في مجموعتين في نفس الميعاد')

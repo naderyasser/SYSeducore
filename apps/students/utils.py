@@ -240,3 +240,50 @@ def code_lookup_q(term, prefix=''):
     if Student.objects.filter(student_code=term).exists():
         return Q(**{f'{prefix}student_code': term})
     return Q(**{f'{prefix}student_code__icontains': term})
+
+
+def schedule_clashes(student):
+    """
+    Pairs of the student's active groups that meet on the same day at
+    overlapping times, as ready-to-show Arabic warnings.
+
+    A student enrolled in two such groups can only sit in one of them: the
+    other marks them absent every lesson and messages the family «تغيب
+    ابنكم» — found for 3 students on 2026-10-14 (moved to a new group and
+    never taken off the old one). A warning, not a refusal: the desk may
+    have a reason (a one-off swap, alternating weeks).
+    """
+    from datetime import date, datetime, timedelta
+
+    from apps.students.models import StudentGroupEnrollment
+    from apps.teachers.models import WEEK_DAYS_AR
+
+    enrollments = list(
+        StudentGroupEnrollment.objects.filter(
+            student=student, is_active=True,
+            group__is_active=True, group__deleted_at__isnull=True,
+        ).select_related('group').prefetch_related('group__schedules')
+    )
+    slots = []
+    for enr in enrollments:
+        for s in enr.group.schedules.all():
+            if not s.start_time:
+                continue
+            start = datetime.combine(date(2000, 1, 1), s.start_time)
+            slots.append((enr.group, s.day_of_week, start, start + timedelta(minutes=s.duration or 0)))
+
+    warnings, seen = [], set()
+    for i, (g1, day1, s1, e1) in enumerate(slots):
+        for g2, day2, s2, e2 in slots[i + 1:]:
+            if g1.pk == g2.pk or day1 != day2 or not (s1 < e2 and s2 < e1):
+                continue
+            key = (min(g1.pk, g2.pk), max(g1.pk, g2.pk), day1)
+            if key in seen:
+                continue
+            seen.add(key)
+            warnings.append(
+                f'تنبيه: {student.full_name} في مجموعتين في نفس الميعاد يوم '
+                f'{WEEK_DAYS_AR.get(day1, day1)} {s1:%H:%M} — «{g1.group_name}» و«{g2.group_name}». '
+                f'هيتسجل غياب في واحدة منهم كل حصة؛ لو اتنقل شيله من القديمة.'
+            )
+    return warnings
