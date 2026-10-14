@@ -942,6 +942,12 @@
                     <i class="bi bi-clipboard-data-fill"></i>
                     <span>تقرير الحضور</span>
                 </a>
+                {% if user.is_supervisor %}
+                <a href="{% url 'reports:dropouts' %}" class="menu-item {% if request.resolver_match.url_name == 'dropouts' %}active{% endif %}">
+                    <i class="bi bi-person-x-fill"></i>
+                    <span>طلبة منقطعين</span>
+                </a>
+                {% endif %}
                 {% if user.can_collect_payments %}
                 <a href="{% url 'reports:payments' %}" class="menu-item {% if request.resolver_match.url_name == 'payments' %}active{% endif %}">
                     <i class="bi bi-receipt-cutoff"></i>

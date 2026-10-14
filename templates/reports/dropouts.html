@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}طلبة منقطعين{% endblock %}
+{% block page_title %}طلبة منقطعين{% endblock %}
+
+{% block content %}
+<div class="card mb-3">
+    <div class="card-body">
+        <p class="text-muted mb-2">
+            طلبة غابوا آخر {{ min_streak }} حصص أو أكتر ورا بعض في مجموعة لسه متسجلين فيها.
+            ولي الأمر بيوصله «تغيب ابنكم» كل حصة، والغياب بيتحسب على فاتورته — لو الطالب ساب
+            المجموعة أو اتنقل، شيله منها من صفحته.
+        </p>
+        <form method="get" class="d-flex flex-wrap gap-2 align-items-center no-print">
+            <label class="small">غاب آخر</label>
+            <input type="number" name="min" min="2" max="20" value="{{ min_streak }}" class="form-control form-control-sm" style="width:80px">
+            <label class="small">حصص أو أكتر — المجموعة</label>
+            <select name="group" class="form-select form-select-sm w-auto">
+                <option value="">كل المجموعات</option>
+                {% for g in groups %}<option value="{{ g.pk }}"{% if g.pk == selected_group %} selected{% endif %}>{{ g.group_name }}</option>{% endfor %}
+            </select>
+            <button class="btn btn-sm btn-primary">عرض</button>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header d-flex justify-content-between">
+        <strong>{{ rows|length }} تسجيل — {{ students_count }} طالب</strong>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-sm table-hover mb-0 align-middle">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th><th>الطالب</th><th>الكود</th><th>المجموعة</th><th>المدرس</th>
+                    <th>غياب ورا بعض</th><th>غايب من</th><th>آخر حضور</th><th>تليفون ولي الأمر</th><th>عليه</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td><a href="{% url 'students:detail' r.student.pk %}">{{ r.student.full_name }}</a></td>
+                    <td><code>{{ r.student.student_code }}</code></td>
+                    <td><a href="{% url 'teachers:group_detail' r.group.pk %}">{{ r.group.group_name }}</a></td>
+                    <td><a href="{% url 'teachers:detail' r.group.teacher.pk %}">{{ r.group.teacher.full_name }}</a></td>
+                    <td class="text-danger fw-bold">{{ r.streak }}</td>
+                    <td dir="ltr">{{ r.since|date:"Y-m-d" }}</td>
+                    <td dir="ltr">{% if r.last_came %}{{ r.last_came|date:"Y-m-d" }}{% else %}<span class="text-muted">ولا مرة</span>{% endif %}</td>
+                    <td dir="ltr">{{ r.phone|default:"—" }}</td>
+                    <td>{% if r.owed %}{{ r.owed|floatformat:2 }}{% else %}—{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="10" class="text-center text-muted py-4">مفيش طلبة منقطعين بالشرط ده</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

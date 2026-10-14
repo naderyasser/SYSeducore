@@ -1899,3 +1899,76 @@ def comprehensive_report(request):
         'breakdown': breakdown,
     }
     return render(request, 'reports/comprehensive.html', context)
+
+
+# ==================== Drop-outs ====================
+
+@supervisor_required
+def dropouts(request):
+    """
+    طلبة منقطعين — every active enrollment whose last ``min`` (default 3)
+    held lessons were all absences, newest streak first.
+
+    On 2026-10-14 181 enrollments (130 students) had missed every lesson for
+    three weeks: students who left or moved and were never taken off the
+    group. Each still got «تغيب ابنكم» every lesson (289 messages since
+    Oct 8), piled up absences on their invoice and crowded the sheets. This
+    list is where the desk reviews them and removes whoever has left.
+    """
+    min_streak = _parse_int_param(request.GET.get('min')) or 3
+    min_streak = max(2, min(min_streak, 20))
+    group_id = _parse_int_param(request.GET.get('group'))
+    since = timezone.localdate() - timedelta(days=120)
+
+    enrollments = StudentGroupEnrollment.objects.filter(
+        is_active=True, student__deleted_at__isnull=True, student__is_active=True,
+        group__is_active=True, group__deleted_at__isnull=True,
+    ).select_related('student', 'group', 'group__teacher')
+    if group_id is not None:
+        enrollments = enrollments.filter(group_id=group_id)
+    enrollments = list(enrollments)
+
+    # One query: every held lesson's mark for these students, newest first.
+    marks = defaultdict(list)
+    for student_id, group_pk, status, day in (
+        Attendance.objects.filter(
+            student_id__in={e.student_id for e in enrollments},
+            session__session_date__gte=since, session__is_cancelled=False,
+        ).order_by('-session__session_date')
+        .values_list('student_id', 'session__group_id', 'status', 'session__session_date')
+    ):
+        marks[(student_id, group_pk)].append((status, day))
+
+    owed = defaultdict(lambda: 0)
+    for student_id, group_pk, due, paid in Payment.objects.filter(
+        status__in=['unpaid', 'partial'], is_exempt=False,
+        student_id__in={e.student_id for e in enrollments},
+    ).values_list('student_id', 'group_id', 'amount_due', 'amount_paid'):
+        owed[(student_id, group_pk)] += due - paid
+
+    rows = []
+    for e in enrollments:
+        history = marks.get((e.student_id, e.group_id), [])
+        streak = 0
+        for status, _day in history:
+            if status != 'absent':
+                break
+            streak += 1
+        if streak < min_streak:
+            continue
+        last_came = next((day for status, day in history if status != 'absent'), None)
+        rows.append({
+            'student': e.student, 'group': e.group, 'streak': streak,
+            'since': history[streak - 1][1], 'last_came': last_came,
+            'phone': e.student.parent_phone or e.student.student_phone,
+            'owed': owed.get((e.student_id, e.group_id), 0),
+        })
+    rows.sort(key=lambda r: (-r['streak'], r['group'].group_name, r['student'].full_name))
+
+    return render(request, 'reports/dropouts.html', {
+        'rows': rows,
+        'min_streak': min_streak,
+        'groups': Group.objects.filter(is_active=True, deleted_at__isnull=True).order_by('group_name'),
+        'selected_group': group_id,
+        'students_count': len({r['student'].pk for r in rows}),
+    })

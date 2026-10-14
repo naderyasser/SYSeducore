@@ -97,3 +97,22 @@ class ScheduleClashWarningTest(PagesRenderTest):
         StudentGroupEnrollment.objects.create(student=self.student, group=other)
         r = self.client.get(reverse('students:detail', args=[self.student.pk]))
         self.assertContains(r, 'في مجموعتين في نفس الميعاد')
+
+
+class DropoutsReportTest(PagesRenderTest):
+    """A student absent from the last 3 lessons is listed; one who came is not."""
+
+    def test_dropout_listed(self):
+        for days in (8, 15):
+            s = assign_to_cycle(Session.objects.create(
+                group=self.group, session_date=timezone.localdate() - timedelta(days=days)))
+            Attendance.objects.create(student=self.student, session=s, status='absent', scan_time=timezone.now())
+        r = self.client.get(reverse('reports:dropouts'))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual([row['student'] for row in r.context['rows']], [self.student])
+        self.assertEqual(r.context['rows'][0]['streak'], 3)
+
+    def test_attending_student_not_listed(self):
+        Attendance.objects.filter(student=self.student).update(status='present')
+        r = self.client.get(reverse('reports:dropouts') + '?min=1')
+        self.assertEqual(r.context['rows'], [])
