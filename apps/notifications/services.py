@@ -327,7 +327,16 @@ class WhatsAppService:
             # attended. attendance.status was never read before, so every
             # auto-marked absentee (apps.attendance.tasks.auto_mark_absent_sessions
             # writes status='absent') was reported حاضر.
-            if attendance and attendance.status != 'absent':
+            # A desk-typed «عذر» (exception with no ExceptionRecord) is an
+            # excused absence, not an attendance.
+            excused = (
+                attendance is not None and attendance.status == 'exception'
+                and attendance.exception_record_id is None
+            )
+            if excused:
+                message_parts.append(f'📝 {student.full_name} - غائب بعذر')
+                absent_students.append(student)
+            elif attendance and attendance.status != 'absent':
                 scan_time_str = timezone.localtime(attendance.scan_time).strftime('%I:%M %p')
                 message_parts.append(
                     f'✅ {student.full_name} - حاضر ({scan_time_str})'
@@ -396,7 +405,21 @@ class WhatsAppService:
             # AttendanceService.apply_late_exception) — the student is in the
             # room, so this must not fall through to the absence message.
             return self._get_late_message(student_name, time)
+        if status == 'excused':
+            # A desk-typed «عذر» (an 'exception' row with no ExceptionRecord):
+            # the student was NOT in the room. It used to fall into the 'late'
+            # branch above and tell the parent their child had arrived.
+            return self._get_excused_message(student_name)
         return self._get_absent_message(student_name)
+
+    def build_attendance_correction(self, student_name, status, time):
+        """The message sent when a record changes after the parent was told
+        otherwise — e.g. a student marked absent at minute 10 who scans in at
+        minute 15. Same text as a first message, under a correction header."""
+        return (
+            '🔄 *تصحيح للرسالة السابقة*\n\n'
+            + self.build_attendance_message(student_name, status, time)
+        )
 
     def build_monthly_reminder_message(self, student_name, group_name, amount):
         """نص رسالة تذكير المصروفات الشهرية"""
@@ -522,6 +545,18 @@ _نظام الحضور الآلي_'''
 
 _نظام الحضور الآلي_'''
     
+    def _get_excused_message(self, student_name):
+        """Get excused-absence message"""
+        date_str = timezone.localdate().strftime('%Y/%m/%d')
+        return f'''📝 *غياب بعذر*
+
+ابنكم *{student_name}* غائب عن الحصة اليوم بعذر مسجل
+التاريخ: {date_str}
+
+للاستفسار يُرجى التواصل مع الإدارة
+
+_نظام الحضور الآلي_'''
+
     def _get_payment_reminder_message(self, student_name, group_name, amount):
         """Get payment reminder message"""
         return f'''💰 *تذكير بالمصروفات الشهرية*

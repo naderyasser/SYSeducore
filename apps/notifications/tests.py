@@ -441,3 +441,79 @@ class NotificationServiceTest(TestCase):
 
         self.assertTrue(result['success'])
         mock_send.assert_called_once()
+
+
+@override_settings(NOTIFICATION_METHOD='whatsapp', **WAPILOT_TEST_SETTINGS)
+class AttendanceCorrectionTest(TestCase):
+    """The parent told «غياب» at minute 10 is corrected when the student
+    scans in later (or the desk fixes the record) — once per real change."""
+
+    def setUp(self):
+        from apps.students.models import StudentGroupEnrollment
+        from apps.notifications.models import WhatsAppMessage
+        from apps.teachers.models import Room
+        teacher = Teacher.objects.create(
+            full_name='Fix Teacher', phone='01200000000', email='fix@test.com',
+            specialization='Math', hire_date=timezone.now().date(),
+        )
+        self.group = create_group_with_schedule(
+            group_name='Fix Group', teacher=teacher,
+            room=Room.objects.create(name='Fix Room', capacity=30),
+            schedule_day='Saturday', schedule_time=time(10, 0), standard_fee=100,
+        )
+        self.student = Student.objects.create(
+            student_code='FIX001', full_name='Fix Student', parent_phone='01234567891',
+        )
+        StudentGroupEnrollment.objects.create(student=self.student, group=self.group)
+        self.session = Session.objects.create(group=self.group, session_date=timezone.localdate())
+        self.attendance = Attendance.objects.create(
+            student=self.student, session=self.session, status='absent', scan_time=timezone.now(),
+        )
+        WhatsAppMessage.objects.create(
+            dedup_key=f'attendance:{self.session.pk}:{self.student.pk}',
+            phone_number='01234567891', status='sent', message_type='attendance',
+            message_text=WhatsAppService()._get_absent_message('Fix Student'),
+        )
+
+    def _corrections(self):
+        from apps.notifications.models import WhatsAppMessage
+        return WhatsAppMessage.objects.filter(
+            dedup_key__startswith=f'attendance-fix:{self.session.pk}:{self.student.pk}:'
+        )
+
+    @patch('apps.notifications.services.requests.post')
+    def test_absent_then_late_sends_one_correction(self, mock_post):
+        from apps.notifications.tasks import send_attendance_correction
+        mock_post.return_value = _api_success()
+        self.attendance.status = 'late'
+        self.attendance.save()
+        self.assertEqual(send_attendance_correction(self.session.pk, self.student.pk), 'Correction sent')
+        self.assertIn('تصحيح', self._corrections().get().message_text)
+        # Running again (retry / second edit to another "came" status) sends nothing.
+        self.attendance.status = 'present'
+        self.attendance.save()
+        self.assertEqual(send_attendance_correction(self.session.pk, self.student.pk), 'Already consistent')
+        self.assertEqual(self._corrections().count(), 1)
+
+    @patch('apps.notifications.services.requests.post')
+    def test_still_absent_sends_nothing(self, mock_post):
+        from apps.notifications.tasks import send_attendance_correction
+        self.assertEqual(send_attendance_correction(self.session.pk, self.student.pk), 'Already consistent')
+        mock_post.assert_not_called()
+
+    def test_manual_excuse_is_not_reported_as_arrival(self):
+        from apps.notifications.tasks import notice_status
+        self.attendance.status = 'exception'
+        self.assertEqual(notice_status(self.attendance), 'excused')
+        text = WhatsAppService().build_attendance_message('Fix Student', 'excused', timezone.now())
+        self.assertIn('بعذر', text)
+        self.assertNotIn('وصل', text)
+
+    @patch('apps.notifications.services.requests.post')
+    def test_cleared_record_sends_nothing(self, mock_post):
+        from apps.notifications.tasks import send_attendance_correction
+        WhatsAppMessage.objects.filter(dedup_key__startswith='attendance:').update(
+            message_text=WhatsAppService()._get_present_message('Fix Student', timezone.now()))
+        self.attendance.delete()
+        self.assertEqual(send_attendance_correction(self.session.pk, self.student.pk), 'No record')
+        mock_post.assert_not_called()

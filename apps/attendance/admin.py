@@ -57,8 +57,27 @@ class SessionAdmin(admin.ModelAdmin):
 
     def cancel_sessions(self, request, queryset):
         """إلغاء الحصص المحددة"""
-        count = queryset.update(is_cancelled=True)
+        # Same steps as the session page's cancel: the cycle is renumbered
+        # and recounted so the lesson leaves the invoices and the settlement.
+        # ``queryset.update()`` only flipped the flag.
+        from django.db import transaction
+        from apps.teachers.cycles import renumber_cycle
+        from .entitlement import recount_cycle
+        count, refused = 0, []
+        for session in queryset.filter(is_cancelled=False).select_related('group', 'cycle'):
+            try:
+                with transaction.atomic():
+                    session.is_cancelled = True
+                    session.save(update_fields=['is_cancelled'])
+                    if session.cycle_id:
+                        renumber_cycle(session.cycle)
+                        recount_cycle(session.cycle)
+                count += 1
+            except ValueError as exc:
+                refused.append(f'{session}: {exc}')
         self.message_user(request, f'تم إلغاء {count} حصة')
+        if refused:
+            self.message_user(request, 'لم تُلغَ: ' + ' — '.join(refused[:10]), level='WARNING')
     cancel_sessions.short_description = "❌ إلغاء الحصص"
 
     def mark_notified(self, request, queryset):
@@ -100,29 +119,67 @@ class AttendanceAdmin(admin.ModelAdmin):
 
     actions = ['mark_present', 'mark_late', 'mark_absent', 'delete_attendances']
 
+    def save_model(self, request, obj, form, change):
+        # An edit in this form used to change the row and nothing else.
+        old = Attendance.objects.filter(pk=obj.pk).values_list('status', flat=True).first() if change else None
+        super().save_model(request, obj, form, change)
+        self._after_edit(obj, old != obj.status)
+
+    def delete_model(self, request, obj):
+        super().delete_model(request, obj)
+        self._after_edit(obj, True)
+
+    def delete_queryset(self, request, queryset):
+        rows = list(queryset.select_related('student', 'session__group'))
+        super().delete_queryset(request, queryset)
+        for obj in rows:
+            self._after_edit(obj, True)
+
+    @staticmethod
+    def _after_edit(obj, status_changed):
+        from apps.notifications.tasks import queue_attendance_correction
+        from .services import AttendanceService
+        AttendanceService.recount_after_change(obj.student, obj.session)
+        if status_changed:
+            queue_attendance_correction(obj.session_id, obj.student_id)
+
+    def _apply_status(self, request, queryset, status, label):
+        """Every bulk change goes through ``record_manual`` — the same path as
+        the sheet — so the cycle counter, the invoice, the settlement and the
+        parent's correction message follow. ``queryset.update()`` used to
+        change the rows and nothing else."""
+        from .services import AttendanceService
+        done, refused = 0, []
+        for att in queryset.select_related('student', 'session__group'):
+            result = AttendanceService.record_manual(
+                att.student, att.session.group, att.session.session_date, status, request.user,
+            )
+            if result['success']:
+                done += 1
+            else:
+                refused.append(f'{att.student.full_name}: {result["message"]}')
+        self.message_user(request, f'تم تحديد {done} سجل كـ "{label}"')
+        if refused:
+            self.message_user(request, 'لم يتغير: ' + ' — '.join(refused[:10]), level='WARNING')
+
     def mark_present(self, request, queryset):
         """تحديد الحالة: حاضر"""
-        count = queryset.update(status='present', rejection_reason='')
-        self.message_user(request, f'تم تحديد {count} سجل كـ "حاضر"')
+        self._apply_status(request, queryset, 'present', 'حاضر')
     mark_present.short_description = "✅ تحديد: حاضر"
 
     def mark_late(self, request, queryset):
         """تحديد الحالة: متأخر"""
-        count = queryset.update(status='late', rejection_reason='')
-        self.message_user(request, f'تم تحديد {count} سجل كـ "متأخر"')
+        self._apply_status(request, queryset, 'late', 'متأخر')
     mark_late.short_description = "⏰ تحديد: متأخر"
 
     def mark_absent(self, request, queryset):
         """تحديد الحالة: غائب"""
-        count = queryset.update(status='absent')
-        self.message_user(request, f'تم تحديد {count} سجل كـ "غائب"')
+        self._apply_status(request, queryset, 'absent', 'غائب')
     mark_absent.short_description = "❌ تحديد: غائب"
 
     def delete_attendances(self, request, queryset):
         """حذف سجلات الحضور المحددة"""
-        count = queryset.count()
-        queryset.delete()
-        self.message_user(request, f'تم حذف {count} سجل حضور', level='WARNING')
+        self._apply_status(request, queryset, 'clear', 'محذوف')
     delete_attendances.short_description = "🗑️ حذف السجلات"
 
 

@@ -27,6 +27,7 @@
     a.cell-link { display:block; color:inherit; text-decoration:none; min-height:22px; }
     a.cell-link:hover { background:#eef2ff; }
     td.late { color:#b45309; }
+    td.excused { color:#1d4ed8; }
     td.unpaid { color:#b91c1c; font-size:.85rem; }
     .reg-legend { font-size:.85rem; color:#6b7280; margin-top:8px; }
     @page { size: A4 landscape; margin: 10mm; }
@@ -228,10 +229,14 @@
     var GROUP_ID = {{ group.group_id|default:0 }}, menu = null;
     function closeMenu() { if (menu) { menu.remove(); menu = null; } }
     function paint(td, status, date) {
-        td.classList.remove('present', 'late', 'absent', 'exception', 'none');
+        td.classList.remove('present', 'late', 'absent', 'exception', 'excused', 'none');
         var text = '-', d = date.split('-');
-        if (status === 'present' || status === 'late' || status === 'exception') text = (+d[1]) + '/' + (+d[2]);
+        // «عذر» from this menu is always a desk-typed excuse (no approved
+        // exception record) — the server prints it as «عذر», not a date.
+        if (status === 'exception') status = 'excused';
+        if (status === 'present' || status === 'late') text = (+d[1]) + '/' + (+d[2]);
         else if (status === 'absent') text = 'غ';
+        else if (status === 'excused') text = 'عذر';
         td.classList.add(status === 'no_record' ? 'none' : status);
         td.querySelector('.d').textContent = text;
     }

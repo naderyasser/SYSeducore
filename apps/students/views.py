@@ -378,9 +378,11 @@ def _cycle_history(student):
         p.cycle_id: p
         for p in Payment.objects.filter(student=student, cycle__isnull=False).order_by('payment_id')
     }
+    # A desk-typed «عذر» (no ExceptionRecord) is an excused absence — printed
+    # as عذر, as on the group's paper sheet, never as an attendance date.
     marks = {
-        a.session_id: a.status
-        for a in Attendance.objects.filter(student=student).only('session_id', 'status')
+        a.session_id: 'excused' if a.status == 'exception' and a.exception_record_id is None else a.status
+        for a in Attendance.objects.filter(student=student).only('session_id', 'status', 'exception_record_id')
     }
     attended_cycles = set(
         Session.objects.filter(session_id__in=marks.keys(), cycle__isnull=False)
@@ -411,6 +413,8 @@ def _cycle_history(student):
                 cells.append({'text': f'{s.session_date.month}/{s.session_date.day}', 'kind': status})
             elif status == 'absent':
                 cells.append({'text': 'غ', 'kind': 'absent'})
+            elif status == 'excused':
+                cells.append({'text': 'عذر', 'kind': 'excused'})
             else:
                 cells.append({'text': '-', 'kind': 'none'})
         p = payments.get(cycle.cycle_id)

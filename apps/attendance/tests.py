@@ -1976,3 +1976,78 @@ class ExportReportCsvTest(AuditFixturesMixin, TestCase):
             'date': timezone.localdate().isoformat(),
         })
         self.assertEqual(response.status_code, 403)
+
+
+class ScanAfterAutoAbsenceTest(AuditFixturesMixin, TestCase):
+    """A student marked absent at minute 10 who scans in at minute 15 used to
+    get «مسجل مسبقاً» and stay absent; the scan now makes them late."""
+
+    def setUp(self):
+        self.build_fixtures(day=AttendanceService.get_current_day_name())
+        now_local = timezone.localtime()
+        if now_local.time() < time(0, 20):
+            self.skipTest('needs a lesson that started 15 minutes ago today')
+        start = (now_local - timedelta(minutes=15)).time().replace(second=0, microsecond=0)
+        self.group.schedules.update(start_time=start)
+        self.group.schedule_time = start
+        self.group.save()
+        self.session = assign_to_cycle(Session.objects.create(
+            group=self.group, session_date=timezone.localdate(),
+        ))
+        Attendance.objects.create(
+            student=self.student, session=self.session, status='absent',
+            scan_time=timezone.now() - timedelta(minutes=5),
+        )
+
+    def _pay(self):
+        Payment.objects.create(
+            student=self.student, group=self.group, cycle=self.session.cycle,
+            month=timezone.localdate().replace(day=1),
+            amount_due=200, amount_paid=200, status='paid',
+        )
+
+    def test_scan_turns_absent_into_late_and_queues_correction(self):
+        self._pay()
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            result = AttendanceService.process_scan(self.student.student_code, self.supervisor)
+        self.assertTrue(result['success'], result.get('message'))
+        self.assertEqual(result['status'], 'registered')
+        attendance = Attendance.objects.get(student=self.student, session=self.session)
+        self.assertEqual(attendance.status, 'late')
+        self.assertEqual(len(callbacks), 1)
+
+    def test_unpaid_student_is_still_refused(self):
+        # Arriving after the absence was written must not skip the payment check.
+        self.enrollment.grace_until = None
+        self.enrollment.save()
+        with self.settings(BILLING_GRACE_SESSIONS=0):
+            result = AttendanceService.process_scan(self.student.student_code, self.supervisor)
+        self.assertFalse(result['success'])
+        attendance = Attendance.objects.get(student=self.student, session=self.session)
+        self.assertEqual(attendance.status, 'absent')
+
+    def test_second_scan_is_already_registered(self):
+        self._pay()
+        AttendanceService.process_scan(self.student.student_code, self.supervisor)
+        result = AttendanceService.process_scan(self.student.student_code, self.supervisor)
+        self.assertEqual(result.get('status'), 'already_registered', result.get('message'))
+        self.assertEqual(Attendance.objects.filter(student=self.student).count(), 1)
+
+
+class CycleRegisterExcuseTest(AuditFixturesMixin, TestCase):
+    """A desk-typed «عذر» is printed as عذر on the paper sheet (and its
+    Excel), not as an attendance date."""
+
+    def test_manual_excuse_is_not_an_attendance_date(self):
+        from apps.reports.views import _cycle_register_data
+        self.build_fixtures()
+        session = assign_to_cycle(Session.objects.create(
+            group=self.group, session_date=timezone.localdate() - timedelta(days=1),
+        ))
+        Attendance.objects.create(
+            student=self.student, session=session, status='exception',
+            scan_time=timezone.now(), note='مريض',
+        )
+        _, rows = _cycle_register_data(self.group, session.cycle)
+        cell = next(c for c in rows[0]['cells'] if c['session'] == session)
+        self.assertEqual((cell['kind'], cell['text']), ('excused', 'عذر'))

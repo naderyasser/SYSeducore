@@ -357,11 +357,27 @@ class AttendanceService:
                 })
                 continue
 
-            # الفحص المالي
-            financial_check = AttendanceService.check_financial_status(
-                student,
-                matching_group
+            # A student marked absent by the 10-minute rule (or by the desk)
+            # who then walks in and scans is in the room: the scan turns that
+            # row into late/present below. The absent row may already have
+            # used up this lesson in the cycle count, so the financial check
+            # is asked as if it did not exist — the same answer an on-time
+            # scan would have got — and everything it touched is rolled back.
+            todays_absence = Attendance.objects.filter(
+                student=student, session__group=matching_group,
+                session__session_date=timezone.localdate(), status='absent',
             )
+
+            # الفحص المالي
+            if todays_absence.exists():
+                with transaction.atomic():
+                    savepoint = transaction.savepoint()
+                    todays_absence.delete()
+                    AttendanceService.update_payment_sessions(student, matching_group)
+                    financial_check = AttendanceService.check_financial_status(student, matching_group)
+                    transaction.savepoint_rollback(savepoint)
+            else:
+                financial_check = AttendanceService.check_financial_status(student, matching_group)
 
             if not financial_check['allowed']:
                 skip_item = {
@@ -413,8 +429,23 @@ class AttendanceService:
                     }
                 )
 
-                if created:
+                converted = False
+                if not created and attendance.status == 'absent':
+                    # Used to fall through to «مسجل مسبقاً» and leave the
+                    # student absent although they scanned in.
+                    attendance = Attendance.objects.select_for_update().get(pk=attendance.pk)
+                    if attendance.status == 'absent':
+                        attendance.status = time_check['status']
+                        attendance.scan_time = timezone.now()
+                        attendance.supervisor = supervisor
+                        attendance.save(update_fields=['status', 'scan_time', 'supervisor'])
+                        converted = True
+                        from apps.notifications.tasks import queue_attendance_correction
+                        queue_attendance_correction(session.session_id, student.pk)
+
+                if created or converted:
                     AttendanceService.update_payment_sessions(student, matching_group)
+                created = created or converted
 
             if created:
                 newly_registered.append({
@@ -823,6 +854,7 @@ class AttendanceService:
             if attendance is not None and attendance.exception_record_id is not None:
                 return {'success': False,
                         'message': 'هذا اليوم مسجل باستثناء معتمد — ألغِ الاستثناء أولاً ثم سجّل الحضور يدويًا'}
+            old_status = attendance.status if attendance is not None else None
 
             # The row's timestamp is the *lesson's* moment, not the moment the
             # desk typed it: every "recent attendance" list and the student
@@ -853,19 +885,14 @@ class AttendanceService:
                 attendance.note = (note or '')[:255] if status == 'exception' else ''
                 attendance.save(update_fields=['status', 'supervisor', 'note'])
 
-            # The counter lives on the *open* cycle's Payment and
-            # ``update_payment_sessions`` creates that row when missing —
-            # touching it for a lesson in a closed cycle would open a Payment
-            # on the current cycle as a side effect of editing history.
-            cycle = session.cycle
-            if group.sessions_per_month and (cycle is None or cycle.closed_on is None):
-                AttendanceService.update_payment_sessions(student, group)
-            elif cycle is not None:
-                # A correction in a closed cycle still reaches that cycle's own
-                # invoice (its counter, and so the settlement) — re-counted,
-                # never re-billed: no row is created.
-                from .entitlement import recount_cycle
-                recount_cycle(cycle, [student.pk])
+            # The parent may already have been told the old status (the
+            # 10-minute message) — the correction task decides whether the
+            # new one contradicts it.
+            if (attendance.status if attendance is not None else None) != old_status:
+                from apps.notifications.tasks import queue_attendance_correction
+                queue_attendance_correction(session.session_id, student.pk)
+
+            AttendanceService.recount_after_change(student, session)
 
         if attendance is None:
             message = f'تم مسح سجل {student.full_name} ليوم {on_date:%Y-%m-%d}'
@@ -891,6 +918,26 @@ class AttendanceService:
                 'scan_time': attendance.scan_time.isoformat(),
             },
         }
+
+    @staticmethod
+    def recount_after_change(student, session):
+        """Bring the cycle counter (and so the invoice and the settlement) in
+        line after ``student``'s row for ``session`` was written or removed
+        by hand — the sheet, the admin, anything but a scan."""
+        group = session.group
+        # The counter lives on the *open* cycle's Payment and
+        # ``update_payment_sessions`` creates that row when missing —
+        # touching it for a lesson in a closed cycle would open a Payment
+        # on the current cycle as a side effect of editing history.
+        cycle = session.cycle
+        if group.sessions_per_month and (cycle is None or cycle.closed_on is None):
+            AttendanceService.update_payment_sessions(student, group)
+        elif cycle is not None:
+            # A correction in a closed cycle still reaches that cycle's own
+            # invoice (its counter, and so the settlement) — re-counted,
+            # never re-billed: no row is created.
+            from .entitlement import recount_cycle
+            recount_cycle(cycle, [student.pk])
 
     @staticmethod
     def _build_schedule_rejection(student, enrollments, current_day_name, now_local):
@@ -1130,9 +1177,13 @@ class AttendanceService:
             }
         )
         if not created:
+            was_absent = attendance.status == 'absent'
             attendance.status = 'exception'
             attendance.exception_record = exception_record
             attendance.save(update_fields=['status', 'exception_record'])
+            if was_absent:
+                from apps.notifications.tasks import queue_attendance_correction
+                queue_attendance_correction(session.session_id, student.pk)
 
         AttendanceService.update_payment_sessions(student, group)
         return attendance

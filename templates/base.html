@@ -809,9 +809,11 @@
         @page { size: A4; margin: 10mm; }
         @media print {
             .sidebar, .sidebar-overlay, .sidebar-footer,
-            .top-header, .mobile-toggle,
+            .top-header > :not(:first-child), .top-header button, .page-back-btn, .mobile-toggle,
             .alert-dismissible .btn-close, .no-print,
             .new-feature-badge, .feature-notice { display: none !important; }
+            .top-header { position: static !important; box-shadow: none !important; padding: 0 0 6px !important;
+                          border: 0 !important; border-bottom: 1px solid #999 !important; background: #fff !important; }
             .main-wrapper { margin: 0 !important; width: 100% !important; }
             .content-area { padding: 0 !important; }
             body { background: #fff !important; }
@@ -1041,6 +1043,17 @@
                 </a>
                 {% endif %}
                 <h1 class="page-title">{% block page_title %}لوحة التحكم{% endblock %}</h1>
+                {% comment %}
+                Every page prints — the desk kept asking for lists (groups,
+                teachers, settlements, the activity log, one lesson's roster)
+                that had no print button. The print stylesheet below keeps the
+                page title on paper and hides the rest of this bar.
+                {% endcomment %}
+                {% if user.is_authenticated %}
+                <button type="button" class="page-back-btn ms-2" onclick="window.print()" title="طباعة الصفحة" aria-label="طباعة الصفحة">
+                    <i class="bi bi-printer"></i>
+                </button>
+                {% endif %}
             </div>
             {% if user.is_authenticated %}
             {% comment %}

@@ -241,7 +241,7 @@
             {% comment %} Server-built .xlsx over the filtered dates (today when none) —
                the old button scraped one page of this table into a CSV. {% endcomment %}
             <a class="btn-export excel text-decoration-none"
-               href="{% url 'reports:attendance_excel' %}?date_from={{ date_from|default:'' }}&date_to={{ date_to|default:'' }}{% if selected_group %}&group={{ selected_group }}{% endif %}">
+               href="{% url 'reports:attendance_excel' %}?date_from={{ date_from|default:'' }}&date_to={{ date_to|default:'' }}{% if selected_group %}&group={{ selected_group }}{% endif %}{% if selected_status %}&status={{ selected_status }}{% endif %}">
                 <i class="bi bi-file-earmark-excel"></i>
                 تصدير Excel {% include 'includes/_new_badge.html' with lock='self' %}
             </a>
@@ -270,6 +270,10 @@
         <div class="summary-item">
             <div class="summary-number text-danger">{{ absent_count }}</div>
             <div class="summary-label">غائب</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-number text-primary">{{ exception_count }}</div>
+            <div class="summary-label">عذر / استثناء</div>
         </div>
     </div>
 </div>

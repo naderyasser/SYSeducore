@@ -100,9 +100,25 @@ def _title(ws, text, subtitle, ncols):
     ws.cell(row=2, column=1).font = Font(color='64748B')
 
 
-def build_attendance_workbook(date_from, date_to, group_id=None):
+def _attended(att):
+    """In the room: present, late, or an approved exception. A desk-typed
+    «عذر» (no ExceptionRecord) is an excused absence — the group page and the
+    paper sheet show it as عذر, so the file must not count it as attended."""
+    return att.status in ('present', 'late') or (
+        att.status == 'exception' and att.exception_record_id is not None
+    )
+
+
+def _status_label(att):
+    if att.status == 'exception' and att.exception_record_id is not None:
+        return 'استثناء'
+    return STATUS_AR.get(att.status, att.status)
+
+
+def build_attendance_workbook(date_from, date_to, group_id=None, status=None):
     """The report as ``bytes`` (xlsx): a per-lesson summary sheet and a
-    per-student detail sheet over ``[date_from, date_to]``."""
+    per-student detail sheet over ``[date_from, date_to]``. ``status`` narrows
+    the detail sheet the way the report screen's status filter does."""
     sessions = (
         Session.objects.filter(
             session_date__gte=date_from, session_date__lte=date_to, is_cancelled=False,
@@ -136,18 +152,19 @@ def build_attendance_workbook(date_from, date_to, group_id=None):
     ws.title = 'ملخص الحصص'
     headers = [
         'التاريخ', 'اليوم', 'المدرس', 'المجموعة', 'عدد الحاضرين', 'منهم متأخر',
-        'الغائبين', 'مدفوع كامل', 'مدفوع جزئي', 'غير مدفوع', 'معفى',
+        'الغائبين', 'بعذر', 'مدفوع كامل', 'مدفوع جزئي', 'غير مدفوع', 'معفى',
     ]
     _title(ws, 'تقرير الحضور والدفع', f'{period} — الدفع محسوب للحاضرين', len(headers))
     rows, totals = [], Counter()
     for s in sessions:
         atts = by_session.get(s.session_id, [])
-        came = [a for a in atts if a.status in ('present', 'late', 'exception')]
+        came = [a for a in atts if _attended(a)]
         pays = Counter(pay_of(a)[0] for a in came)
         row = {
             'attended': len(came),
             'late': sum(1 for a in came if a.status == 'late'),
             'absent': sum(1 for a in atts if a.status == 'absent'),
+            'excused': sum(1 for a in atts if a.status == 'exception' and not _attended(a)),
             'paid': pays['paid'], 'partial': pays['partial'],
             'unpaid': pays['unpaid'], 'exempt': pays['exempt'],
         }
@@ -157,14 +174,14 @@ def build_attendance_workbook(date_from, date_to, group_id=None):
             WEEK_DAYS_AR.get(_WEEKDAYS[s.session_date.weekday()], ''),
             s.group.teacher.full_name if s.group.teacher_id else '—',
             s.group.group_name,
-            row['attended'], row['late'], row['absent'],
+            row['attended'], row['late'], row['absent'], row['excused'],
             row['paid'], row['partial'], row['unpaid'], row['exempt'],
         ])
     _write_table(
         ws, 4, headers, rows,
-        widths=[13, 10, 24, 30, 13, 11, 10, 12, 12, 12, 8],
+        widths=[13, 10, 24, 30, 13, 11, 10, 8, 12, 12, 12, 8],
         total=['الإجمالي', '', '', f'{len(sessions)} حصة', totals['attended'], totals['late'],
-               totals['absent'], totals['paid'], totals['partial'], totals['unpaid'], totals['exempt']],
+               totals['absent'], totals['excused'], totals['paid'], totals['partial'], totals['unpaid'], totals['exempt']],
     )
 
     # ── Sheet 2: one row per student per lesson ──
@@ -176,15 +193,17 @@ def build_attendance_workbook(date_from, date_to, group_id=None):
     _title(ws2, 'تفاصيل الحضور والدفع لكل طالب', period, len(headers2))
     detail = []
     for a in attendances:
-        status, paid, due = pay_of(a)
+        if status is not None and a.status != status:
+            continue
+        pay_status, paid, due = pay_of(a)
         detail.append([
             a.session.session_date.strftime('%Y-%m-%d'),
             a.session.group.teacher.full_name if a.session.group.teacher_id else '—',
             a.session.group.group_name,
             a.student.full_name,
             a.student.student_code,
-            STATUS_AR.get(a.status, a.status),
-            PAY_AR.get(status, status),
+            _status_label(a),
+            PAY_AR.get(pay_status, pay_status),
             float(paid or 0),
             float(due or 0),
         ])

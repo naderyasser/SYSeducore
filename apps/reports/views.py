@@ -485,9 +485,11 @@ def attendance_report(request):
     status = request.GET.get('status')
 
     # Base queryset
+    # Cancelled lessons are left out exactly as in the Excel export of this
+    # same report — the screen and the file used to give different totals.
     attendances = Attendance.objects.select_related(
         'student', 'session', 'session__group', 'session__group__teacher'
-    ).order_by('-scan_time')
+    ).filter(session__is_cancelled=False).order_by('-scan_time')
 
     # Apply filters — parsed first (unvalidated-get-filters-500): a
     # malformed date or id used to reach ``.filter()`` raw and raise
@@ -520,6 +522,7 @@ def attendance_report(request):
         present=Count('attendance_id', filter=Q(status='present')),
         late=Count('attendance_id', filter=Q(status='late')),
         absent=Count('attendance_id', filter=Q(status='absent')),
+        exception=Count('attendance_id', filter=Q(status='exception')),
     )
 
     # Group filter options
@@ -555,6 +558,7 @@ def attendance_report(request):
                 ('حاضر', stats['present'] or 0),
                 ('متأخر', stats['late'] or 0),
                 ('غائب', stats['absent'] or 0),
+                ('عذر / استثناء', stats['exception'] or 0),
             ],
             columns=['الطالب', 'الكود', 'المجموعة', 'المدرس', 'التاريخ', 'الوقت', 'الحالة'],
             rows=rows,
@@ -574,6 +578,7 @@ def attendance_report(request):
         # window as 'late' (DATA-17).
         'late_count': stats['late'] or 0,
         'absent_count': stats['absent'] or 0,
+        'exception_count': stats['exception'] or 0,
         'groups': groups,
         'date_from': date_from,
         'date_to': date_to,
@@ -605,8 +610,11 @@ def attendance_excel(request):
     if (date_to - date_from).days > 366:
         date_from = date_to - timedelta(days=366)
     group_id = _parse_int_param(request.GET.get('group'))
+    status = request.GET.get('status') or None
+    if status not in dict(Attendance.STATUS_CHOICES):
+        status = None
 
-    content = build_attendance_workbook(date_from, date_to, group_id=group_id)
+    content = build_attendance_workbook(date_from, date_to, group_id=group_id, status=status)
     name = (
         f'attendance_{date_from}.xlsx' if date_from == date_to
         else f'attendance_{date_from}_to_{date_to}.xlsx'
@@ -801,10 +809,15 @@ def _cycle_register_data(group, cycle):
     columns = [{'seq': i, 'session': by_seq.get(i)} for i in range(1, slots + 1)]
 
     attended = defaultdict(dict)
-    for student_id, session_id, status in Attendance.objects.filter(
+    for student_id, session_id, status, record_id in Attendance.objects.filter(
         session__in=sessions
-    ).values_list('student_id', 'session_id', 'status'):
-        attended[student_id][session_id] = status
+    ).values_list('student_id', 'session_id', 'status', 'exception_record_id'):
+        # A desk-typed «عذر» (no ExceptionRecord) is an excused absence; it was
+        # printed as an attendance date, so the paper sheet and its Excel file
+        # said the student came while the group page said عذر.
+        attended[student_id][session_id] = (
+            'excused' if status == 'exception' and record_id is None else status
+        )
 
     payments = {p.student_id: p for p in Payment.objects.filter(cycle=cycle).order_by('payment_id')}
     student_ids = set(payments) | set(attended) | set(
@@ -827,6 +840,8 @@ def _cycle_register_data(group, cycle):
                 text = f'{s.session_date.month}/{s.session_date.day}'
             elif status == 'absent':
                 text = 'غ'
+            elif status == 'excused':
+                text = 'عذر'
             else:
                 status, text = 'none', '-'
             cells.append({'kind': status, 'text': text, 'session': s})

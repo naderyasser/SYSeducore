@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 
 from celery import shared_task
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from .models import WhatsAppMessage
@@ -86,6 +87,119 @@ def _finalize_message(record, result):
     record.error_message = result.get('error', '') or ''
     record.save(update_fields=['status', 'sent_at', 'error_message', 'updated_at'])
     return succeeded
+
+
+def notice_status(attendance):
+    """What the parent is told for ``attendance`` (``None`` = no record yet,
+    reported as absent). A desk-typed «عذر» — ``exception`` with no
+    ExceptionRecord — is an excused *absence*, not a late arrival."""
+    if attendance is None:
+        return 'absent'
+    if attendance.status == 'exception' and attendance.exception_record_id is None:
+        return 'excused'
+    return attendance.status
+
+
+def _told(message_text):
+    """Which of absent / excused / came a sent attendance message announced."""
+    if 'تنبيه غياب' in message_text:
+        return 'absent'
+    if 'غياب بعذر' in message_text:
+        return 'excused'
+    return 'came'
+
+
+#: Corrections are only sent while the parent can still act on them — a desk
+#: fixing last month's sheet must not wake every parent up with old news.
+CORRECTION_MAX_AGE_DAYS = 1
+
+
+@shared_task
+def send_attendance_correction(session_id, student_id):
+    """
+    Tell the parent when a record changed after they were already notified:
+    the 10-minute message said «غياب» and the student scanned in at minute 15
+    (or the desk fixed the sheet), or the other way round.
+
+    Compares what the last delivered message for this (session, student)
+    announced with the record as it stands now and sends a correction only
+    when the two disagree, so flipping a status back and forth costs at most
+    one message per real change. Nothing is sent when no message went out
+    yet: ``send_attendance_notifications_task`` reads the live record and
+    will send the right one itself.
+    """
+    from apps.attendance.models import Attendance, Session
+    from apps.students.models import Student
+
+    notification_service = NotificationService()
+    if notification_service.is_disabled:
+        return 'Notifications disabled'
+
+    session = Session.objects.select_related('group').filter(pk=session_id).first()
+    student = Student.objects.filter(pk=student_id).first()
+    if session is None or student is None:
+        return 'Missing session or student'
+    if session.session_date < timezone.localdate() - timedelta(days=CORRECTION_MAX_AGE_DAYS):
+        return 'Too old to correct'
+
+    prefix = f'attendance:{session_id}:{student_id}'
+    fix_prefix = f'attendance-fix:{session_id}:{student_id}:'
+    history = list(WhatsAppMessage.objects.filter(
+        Q(dedup_key=prefix) | Q(dedup_key__startswith=fix_prefix)
+    ))
+    delivered = sorted(
+        (m for m in history if m.status in ('pending', 'sent', 'delivered')),
+        key=lambda m: m.created_at,
+    )
+    if not delivered:
+        return 'Nothing sent yet'
+
+    attendance = Attendance.objects.filter(session_id=session_id, student_id=student_id).first()
+    if attendance is None:
+        # A cleared record means "unknown", not "absent" — a desk undoing a
+        # wrong mark must not send the family an absence notice.
+        return 'No record'
+    status = notice_status(attendance)
+    now_kind = 'came' if status in ('present', 'late', 'exception') else status
+    if _told(delivered[-1].message_text) == now_kind:
+        return 'Already consistent'
+
+    phone = (student.parent_phone or '').strip()
+    if not phone:
+        return 'No parent phone'
+
+    record = _reserve_message(
+        f'{fix_prefix}{len(history)}',
+        phone_number=phone[:20],
+        message_text=notification_service.whatsapp_service.build_attendance_correction(
+            student.full_name, status, attendance.scan_time,
+        ),
+        message_type='attendance',
+        student=student,
+        group=session.group,
+        status='pending',
+    )
+    if record is None:
+        return 'Already handled'
+    try:
+        result = notification_service.send_text(phone, record.message_text, idempotency_key=record.dedup_key)
+    except Exception:
+        logger.exception('Attendance correction failed for student %s (session %s)', student_id, session_id)
+        result = {'success': False, 'error': 'خطأ غير متوقع أثناء الإرسال'}
+    return 'Correction sent' if _finalize_message(record, result) else 'Correction failed'
+
+
+def queue_attendance_correction(session_id, student_id):
+    """Queue :func:`send_attendance_correction` once the caller's transaction
+    commits (the task must see the new status). Never raises: a broker
+    outage must not fail the scan or the sheet edit that triggered it."""
+    def _send():
+        try:
+            send_attendance_correction.delay(session_id, student_id)
+        except Exception:
+            logger.warning('Could not queue attendance correction for student %s (session %s)',
+                           student_id, session_id, exc_info=True)
+    transaction.on_commit(_send)
 
 
 @shared_task
@@ -173,7 +287,7 @@ def send_attendance_notifications_task():
                 continue
 
             attendance = attendance_by_student.get(student.pk)
-            status = attendance.status if attendance else 'absent'
+            status = notice_status(attendance)
             scan_time = attendance.scan_time if attendance else now
 
             record = _reserve_message(

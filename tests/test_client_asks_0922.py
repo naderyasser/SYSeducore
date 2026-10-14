@@ -236,7 +236,7 @@ class AttendanceExcelTests(AttendanceTestMixin, TestCase):
         self.assertEqual(row[0], today, 'the date is text, never a ###### number')
         self.assertEqual(row[2], self.teacher.full_name)
         self.assertEqual(row[3], self.group.group_name)
-        self.assertEqual(row[4:10], [2, 1, 0, 1, 1, 0])   # attended, late, absent, paid, partial, unpaid
+        self.assertEqual(row[4:11], [2, 1, 0, 0, 1, 1, 0])   # attended, late, absent, excused, paid, partial, unpaid
         self.assertEqual(wb['تفاصيل الطلاب'].max_row, 6)  # title, subtitle, blank, header, 2 students
 
     def today_month(self):
