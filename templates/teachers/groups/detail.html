@@ -778,6 +778,16 @@
                 <a href="{% url 'reports:cycle_register' %}?group={{ group.group_id }}{% if grid_cycle_id %}&cycle={{ grid_cycle_id }}&only=1{% endif %}" class="btn btn-sm btn-dark">
                     <i class="bi bi-table me-1"></i>كشف الدورة (زي الورقة) وطباعته
                 </a>
+                {% comment %} The call-the-names roster (blank columns for unrecorded days) existed but no page linked to it. {% endcomment %}
+                <a href="{% url 'attendance:group_roster_print' group.group_id %}?from={{ grid_from|date:'Y-m-d' }}&to={{ grid_to|date:'Y-m-d' }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-dark">
+                    <i class="bi bi-printer me-1"></i>كشف المناداة للطباعة
+                </a>
+                <a href="{% url 'payments:list' %}?group={{ group.group_id }}" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-wallet2 me-1"></i>مدفوعات المجموعة
+                </a>
+                <a href="{% url 'reports:attendance' %}?group={{ group.group_id }}&date_from={{ grid_from|date:'Y-m-d' }}&date_to={{ grid_to|date:'Y-m-d' }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-clipboard-data me-1"></i>تقرير الحضور
+                </a>
             </form>
             <script>
             (function () {

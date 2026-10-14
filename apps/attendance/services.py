@@ -872,8 +872,12 @@ class AttendanceService:
 
             attendance = Attendance.objects.select_for_update().filter(
                 student=student, session=session,
-            ).first()
-            if attendance is not None and attendance.exception_record_id is not None:
+            ).select_related('exception_record').first()
+            # Only a *live* exception owns the row: once revoked it used to
+            # lock the cell forever («ألغِ الاستثناء أولاً» about an exception
+            # that was already revoked).
+            if (attendance is not None and attendance.exception_record_id is not None
+                    and attendance.exception_record.is_active):
                 return {'success': False,
                         'message': 'هذا اليوم مسجل باستثناء معتمد — ألغِ الاستثناء أولاً ثم سجّل الحضور يدويًا'}
             old_status = attendance.status if attendance is not None else None
@@ -905,9 +909,11 @@ class AttendanceService:
                 # The reason belongs to the excuse: a new excuse writes its
                 # reason, any other status drops a stale one.
                 attendance.note = (note or '')[:255] if status == 'exception' else ''
-                # The desk's word replaces the scanner's "refused for fees".
+                # The desk's word replaces the scanner's "refused for fees" and
+                # any revoked exception the row still pointed at.
                 attendance.rejection_reason = ''
-                attendance.save(update_fields=['status', 'supervisor', 'note', 'rejection_reason'])
+                attendance.exception_record = None
+                attendance.save(update_fields=['status', 'supervisor', 'note', 'rejection_reason', 'exception_record'])
 
             # The parent may already have been told the old status (the
             # 10-minute message) — the correction task decides whether the

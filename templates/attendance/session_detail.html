@@ -47,7 +47,9 @@
           <h5>معلومات الحصة</h5>
           <p><strong>المجموعة:</strong> <a href="{% url 'teachers:group_detail' session.group.pk %}">{{ session.group.group_name }}</a></p>
           <p><strong>المدرس:</strong> {% if session.group.teacher %}<a href="{% url 'teachers:detail' session.group.teacher.pk %}">{{ session.group.teacher.full_name }}</a>{% else %}—{% endif %}</p>
-          <p><strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}</p>
+          <p><strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}
+            {% if session.cycle_id %} — <a href="{% url 'reports:cycle_register' %}?group={{ session.group.pk }}&cycle={{ session.cycle_id }}&only=1">كشف الدورة</a>{% endif %}
+            — <a href="{% url 'reports:attendance_excel' %}?date_from={{ session.session_date|date:'Y-m-d' }}&group={{ session.group.pk }}">Excel الحصة</a></p>
           <p><strong>الوقت:</strong> {% if schedule_entry %}{{ schedule_entry.start_time|time:"H:i" }}{% else %}<span class="text-muted">حصة تعويضية</span>{% endif %}</p>
           <p>
             <strong>حضور المدرس:</strong>

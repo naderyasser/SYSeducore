@@ -40,7 +40,7 @@ def auto_mark_absent_sessions():
     triggered at the right time on each of them instead of always using the
     first day's legacy ``schedule_time``.
     """
-    from apps.attendance.models import Session, Attendance
+    from apps.attendance.models import ActivityLog, Session, Attendance
     from apps.attendance.services import AttendanceService, local_datetime
     from apps.students.models import StudentGroupEnrollment
     from apps.teachers.models import Group
@@ -98,6 +98,15 @@ def auto_mark_absent_sessions():
         for group in candidates:
             # A group created after that day never held a lesson on it.
             if timezone.localtime(group.created_at).date() > past_day:
+                continue
+            # Nor can today's timetable vouch for a day before the group was
+            # last edited: moving a group from Saturday to Monday on Tuesday
+            # used to "recover" a Monday lesson that never happened, which
+            # advanced the cycle (20 empty such sessions, Sept–Oct 2026).
+            if ActivityLog.objects.filter(
+                target_model='Group', target_id=group.pk, action='group_update',
+                created_at__date__gt=past_day,
+            ).exists():
                 continue
             entry = group.get_schedule_for_day(past_day_name)
             if entry is None or not entry.start_time:

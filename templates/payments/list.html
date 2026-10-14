@@ -374,7 +374,7 @@
                     <small>
                         <i class="bi bi-hash"></i>{{ payment.student.student_code }}
                         &nbsp;|&nbsp;
-                        <i class="bi bi-collection"></i>{{ payment.group.group_name }}
+                        <i class="bi bi-collection"></i><a href="{% url 'teachers:group_detail' payment.group.pk %}" class="text-reset">{{ payment.group.group_name }}</a>
                     </small>
                 </div>
             </div>

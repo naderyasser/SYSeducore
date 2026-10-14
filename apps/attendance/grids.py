@@ -91,10 +91,10 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
     cells_by_key = {}
     locked_keys = set()
     exception_keys = {}   # (student, session) -> (exception_record_id, supervisor name)
-    for student_id, session_id, status, exception_record_id, supervisor, note in (
+    for student_id, session_id, status, exception_record_id, record_live, supervisor, note in (
         Attendance.objects.filter(session_id__in=session_ids)
         .values_list('student_id', 'session_id', 'status', 'exception_record_id',
-                     'supervisor__username', 'note')
+                     'exception_record__is_active', 'supervisor__username', 'note')
     ):
         cells_by_key[(student_id, session_id)] = status
         if status == 'exception':
@@ -102,7 +102,7 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
         # A row linked to an approved ExceptionRecord is managed by
         # grant/revoke — the grid must not offer to overwrite it. A manual
         # "عذر" (same status, no record) stays editable.
-        if exception_record_id is not None:
+        if exception_record_id is not None and record_live:
             locked_keys.add((student_id, session_id))
 
     # Q4 — first ACTUAL attendance date per student (present/late/exception)

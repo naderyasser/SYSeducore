@@ -201,6 +201,19 @@ class RecordManualServiceTests(ManualAttendanceBase):
         self.assertEqual(att.status, 'exception')
         self.assertEqual(att.exception_record, exc)
 
+    def test_revoked_exception_no_longer_locks_the_row(self):
+        session = assign_to_cycle(Session.objects.create(group=self.group, session_date=self.today))
+        exc = ExceptionRecord.objects.create(
+            student=self.student, group=self.group, exception_type='payment',
+            reason_type='other', approved_by=self.supervisor, is_active=False,
+        )
+        Attendance.objects.create(student=self.student, session=session, status='exception',
+                                  exception_record=exc, supervisor=self.supervisor)
+        result = self.record(status='absent')
+        self.assertTrue(result['success'], result)
+        att = Attendance.objects.get(student=self.student, session=session)
+        self.assertEqual((att.status, att.exception_record_id), ('absent', None))
+
     def test_status_change_and_clear_recount_payment_sessions(self):
         self.record()
         payment = Payment.objects.get(student=self.student, group=self.group)

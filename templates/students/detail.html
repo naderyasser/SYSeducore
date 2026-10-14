@@ -383,6 +383,9 @@
                     <a href="{% url 'students:report' student_id=student.student_id %}" target="_blank" class="btn btn-outline-success">
                         <i class="bi bi-file-earmark-text me-1"></i>تقرير الطالب
                     </a>
+                    <a href="{% url 'payments:list' %}?search={{ student.student_code|urlencode }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-wallet2 me-1"></i>مدفوعاته
+                    </a>
                 </div>
                 <div class="mt-2">
                     <small class="text-muted">
