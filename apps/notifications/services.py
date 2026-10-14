@@ -5,11 +5,18 @@ Handles SMS and WhatsApp notifications
 
 import logging
 
+import time
+
 import requests
 from django.conf import settings
 from django.utils import timezone
 
 logger = logging.getLogger('notifications')
+
+#: HTTP 429 handling in :meth:`WhatsAppService._post`.
+RATE_LIMIT_RETRIES = 2
+RATE_LIMIT_WAIT_SECONDS = 3
+RATE_LIMIT_MAX_WAIT_SECONDS = 10
 
 
 class WhatsAppService:
@@ -88,12 +95,7 @@ class WhatsAppService:
         }
 
         try:
-            response = requests.post(
-                self.send_url,
-                json=data,
-                headers=self._headers(idempotency_key),
-                timeout=10,
-            )
+            response = self._post(data, idempotency_key)
         except requests.exceptions.RequestException as e:
             return {
                 'success': False,
@@ -101,6 +103,30 @@ class WhatsAppService:
             }
 
         return self._parse_response(response)
+
+    def _post(self, data, idempotency_key):
+        """POST one message, waiting and retrying when Wapilot answers 429.
+
+        429 ("Too Many Attempts") means "slow down", not "refused": 41
+        families missed their message on 2026-10-10 when a busy hour's
+        10-minute run hit it and every 429 was final. A retry is safe — the
+        Idempotency-Key turns a resend into a replay.
+        """
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            response = requests.post(
+                self.send_url,
+                json=data,
+                headers=self._headers(idempotency_key),
+                timeout=10,
+            )
+            if response.status_code != 429 or attempt == RATE_LIMIT_RETRIES:
+                return response
+            try:
+                wait = float(response.headers.get('Retry-After') or RATE_LIMIT_WAIT_SECONDS)
+            except (TypeError, ValueError):
+                wait = RATE_LIMIT_WAIT_SECONDS
+            time.sleep(min(max(wait, 1), RATE_LIMIT_MAX_WAIT_SECONDS))
+        return response
 
     def _parse_response(self, response):
         """
@@ -252,12 +278,7 @@ class WhatsAppService:
         }
 
         try:
-            response = requests.post(
-                self.send_url,
-                json=data,
-                headers=self._headers(idempotency_key),
-                timeout=10,
-            )
+            response = self._post(data, idempotency_key)
         except requests.exceptions.RequestException as e:
             return {
                 'success': False,
@@ -390,7 +411,7 @@ class WhatsAppService:
         from apps.students.utils import whatsapp_number
         return whatsapp_number(phone)
 
-    def build_attendance_message(self, student_name, status, time):
+    def build_attendance_message(self, student_name, status, time, on_date=None):
         """
         نص رسالة الحضور/الغياب
 
@@ -409,16 +430,16 @@ class WhatsAppService:
             # A desk-typed «عذر» (an 'exception' row with no ExceptionRecord):
             # the student was NOT in the room. It used to fall into the 'late'
             # branch above and tell the parent their child had arrived.
-            return self._get_excused_message(student_name)
-        return self._get_absent_message(student_name)
+            return self._get_excused_message(student_name, on_date)
+        return self._get_absent_message(student_name, on_date)
 
-    def build_attendance_correction(self, student_name, status, time):
+    def build_attendance_correction(self, student_name, status, time, on_date=None):
         """The message sent when a record changes after the parent was told
         otherwise — e.g. a student marked absent at minute 10 who scans in at
         minute 15. Same text as a first message, under a correction header."""
         return (
             '🔄 *تصحيح للرسالة السابقة*\n\n'
-            + self.build_attendance_message(student_name, status, time)
+            + self.build_attendance_message(student_name, status, time, on_date)
         )
 
     def build_monthly_reminder_message(self, student_name, group_name, amount):
@@ -531,11 +552,13 @@ _نظام الحضور الآلي_'''
 
 _نظام الحضور الآلي_'''
     
-    def _get_absent_message(self, student_name):
+    def _get_absent_message(self, student_name, on_date=None):
         """Get absence message"""
         # TZ-07: timezone.now() is UTC — between 00:00 and 02:00/03:00 Cairo
         # that prints yesterday's date.
-        date_str = timezone.localdate().strftime('%Y/%m/%d')
+        # ``on_date``: the lesson's own date — a correction sent the next day
+        # must not date yesterday's absence "today".
+        date_str = (on_date or timezone.localdate()).strftime('%Y/%m/%d')
         return f'''❌ *تنبيه غياب*
 
 تغيب ابنكم *{student_name}* عن الحصة اليوم
@@ -545,9 +568,9 @@ _نظام الحضور الآلي_'''
 
 _نظام الحضور الآلي_'''
     
-    def _get_excused_message(self, student_name):
+    def _get_excused_message(self, student_name, on_date=None):
         """Get excused-absence message"""
-        date_str = timezone.localdate().strftime('%Y/%m/%d')
+        date_str = (on_date or timezone.localdate()).strftime('%Y/%m/%d')
         return f'''📝 *غياب بعذر*
 
 ابنكم *{student_name}* غائب عن الحصة اليوم بعذر مسجل

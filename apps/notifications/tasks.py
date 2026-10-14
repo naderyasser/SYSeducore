@@ -172,7 +172,7 @@ def send_attendance_correction(session_id, student_id):
         f'{fix_prefix}{len(history)}',
         phone_number=phone[:20],
         message_text=notification_service.whatsapp_service.build_attendance_correction(
-            student.full_name, status, attendance.scan_time,
+            student.full_name, status, attendance.scan_time, session.session_date,
         ),
         message_type='attendance',
         student=student,
@@ -281,6 +281,13 @@ def send_attendance_notifications_task():
             attendance.student_id: attendance
             for attendance in Attendance.objects.filter(session=session)
         }
+        # A make-up lesson (a day off the group's schedule) is never swept by
+        # the 10-minute absence rule, so "no record" there means "not entered
+        # yet", not "absent": 12 families were told «تغيب ابنكم» about a lesson
+        # nobody had marked them absent from (Sept–Oct 2026).
+        scheduled_day = session.group.get_schedule_for_day(
+            _WEEKDAY_NAMES[session.session_date.weekday()]
+        ) is not None
 
         completed = True
         for enrollment in enrollments:
@@ -290,6 +297,8 @@ def send_attendance_notifications_task():
                 continue
 
             attendance = attendance_by_student.get(student.pk)
+            if attendance is None and not scheduled_day:
+                continue
             status = notice_status(attendance)
             scan_time = attendance.scan_time if attendance else now
 
@@ -297,7 +306,7 @@ def send_attendance_notifications_task():
                 f'attendance:{session.pk}:{student.pk}',
                 phone_number=phone[:20],
                 message_text=notification_service.whatsapp_service
-                .build_attendance_message(student.full_name, status, scan_time),
+                .build_attendance_message(student.full_name, status, scan_time, session.session_date),
                 message_type='attendance',
                 student=student,
                 group=session.group,

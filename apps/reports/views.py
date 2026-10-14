@@ -213,7 +213,9 @@ def dashboard(request):
     status_rows = (
         Attendance.objects
         .filter(session__session_date__gte=week_start,
-                session__session_date__lte=today)
+                session__session_date__lte=today,
+                # Same rule as the attendance report and its Excel file.
+                session__is_cancelled=False)
         .values('session__session_date', 'status')
         .annotate(n=Count('attendance_id'))
         .order_by()
@@ -249,7 +251,7 @@ def dashboard(request):
     today_attendance_rate = _rate(today_present + today_late, today_total_attendance)
 
     absent_today = Attendance.objects.filter(
-        session__session_date=today, status='absent'
+        session__session_date=today, status='absent', session__is_cancelled=False,
     ).select_related('student', 'session__group')[:5]
 
     # ====== FINANCIAL SUMMARY ======
@@ -1100,7 +1102,8 @@ def activity_log(request):
         )
 
     # Pagination
-    paginator = Paginator(logs, 50)
+    from apps.core.paging import page_size
+    paginator = Paginator(logs, page_size(request, 50))
     page = request.GET.get('page', 1)
     logs_page = paginator.get_page(page)
 

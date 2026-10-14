@@ -281,7 +281,8 @@ def payment_list(request):
     # 50 cards a page: the whole month (1,000+ cards) was one 3 MB page that
     # took a second to build and longer to lay out. The stats above still
     # cover every row; search/filters narrow the list server-side.
-    page_obj = Paginator(payments, PAYMENTS_PER_PAGE).get_page(request.GET.get('page'))
+    from apps.core.paging import page_size
+    page_obj = Paginator(payments, page_size(request, PAYMENTS_PER_PAGE)).get_page(request.GET.get('page'))
     page_query = request.GET.copy()
     page_query.pop('page', None)
 

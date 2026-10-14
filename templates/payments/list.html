@@ -485,7 +485,7 @@
 </div>
 
 {% if page_obj.has_other_pages %}
-<nav class="d-flex justify-content-center align-items-center gap-2 my-4" aria-label="صفحات المدفوعات">
+<nav class="pagination d-flex justify-content-center align-items-center gap-2 my-4" aria-label="صفحات المدفوعات">
     {% if page_obj.has_previous %}
     <a class="btn btn-outline-primary btn-sm" href="?{{ page_query }}{% if page_query %}&{% endif %}page={{ page_obj.previous_page_number }}"><i class="bi bi-chevron-right"></i> السابق</a>
     {% endif %}

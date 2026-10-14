@@ -89,6 +89,7 @@ def _count_last_month_attendance(student):
         student=student,
         session__session_date__gte=now - timedelta(days=59),
         session__session_date__lt=now - timedelta(days=29),
+        session__is_cancelled=False,
     ).exclude(status='absent').count()
 
 
@@ -110,6 +111,7 @@ def _calculate_attendance_rate(student):
         group_id__in=enrolled_group_ids,
         session_date__gte=current_month,
         session_date__lte=now,
+        is_cancelled=False,  # a cancelled lesson cannot be attended
     ).count()
     if total_sessions == 0:
         return None
@@ -441,12 +443,22 @@ class AttendanceService:
                     # student absent although they scanned in.
                     attendance = Attendance.objects.select_for_update().get(pk=attendance.pk)
                     if _not_in_room(attendance):
+                        previous_display = attendance.get_status_display()
                         attendance.status = time_check['status']
                         attendance.scan_time = timezone.now()
                         attendance.supervisor = supervisor
                         attendance.note = ''
                         attendance.save(update_fields=['status', 'scan_time', 'supervisor', 'note'])
                         converted = True
+                        from .models import ActivityLog
+                        ActivityLog.log(
+                            user=supervisor, action='attendance_scan',
+                            description=(
+                                f'{student.full_name} — {matching_group.group_name}: '
+                                f'من «{previous_display}» إلى «{attendance.get_status_display()}» بالسكان'
+                            ),
+                            target_model='Attendance', target_id=attendance.pk,
+                        )
                         from apps.notifications.tasks import queue_attendance_correction
                         queue_attendance_correction(session.session_id, student.pk)
 
@@ -901,12 +913,16 @@ class AttendanceService:
 
             AttendanceService.recount_after_change(student, session)
 
+        labels = dict(Attendance.STATUS_CHOICES)
+        was = f' (كان «{labels.get(old_status, old_status)}»)' if old_status else ''
         if attendance is None:
-            message = f'تم مسح سجل {student.full_name} ليوم {on_date:%Y-%m-%d}'
+            message = f'تم مسح سجل {student.full_name} ليوم {on_date:%Y-%m-%d}{was}'
         else:
+            if old_status == attendance.status:
+                was = ''
             message = (
                 f'تم تسجيل {student.full_name} '
-                f'{attendance.get_status_display()} — {group.group_name}{_teacher_suffix(group)} {on_date:%Y-%m-%d}'
+                f'{attendance.get_status_display()} — {group.group_name}{_teacher_suffix(group)} {on_date:%Y-%m-%d}{was}'
             )
         logger.info(
             f"MANUAL_ATTENDANCE student={student.student_code} group={group.pk} "
@@ -1310,6 +1326,7 @@ class AttendanceService:
         total_this_month = Attendance.objects.filter(
             student=student,
             session__session_date__gte=window_start,
+            session__is_cancelled=False,
         ).exclude(status='absent').count()
         last_att = (
             Attendance.objects.filter(student=student)

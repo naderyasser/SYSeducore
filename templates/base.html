@@ -809,7 +809,7 @@
         @page { size: A4; margin: 10mm; }
         @media print {
             .sidebar, .sidebar-overlay, .sidebar-footer,
-            .top-header > :not(:first-child), .top-header button, .page-back-btn, .mobile-toggle,
+            .top-header > :not(:first-child), .top-header button, .page-back-btn, .mobile-toggle, .pagination,
             .alert-dismissible .btn-close, .no-print,
             .new-feature-badge, .feature-notice { display: none !important; }
             .top-header { position: static !important; box-shadow: none !important; padding: 0 0 6px !important;
@@ -1050,7 +1050,7 @@
                 page title on paper and hides the rest of this bar.
                 {% endcomment %}
                 {% if user.is_authenticated %}
-                <button type="button" class="page-back-btn ms-2" onclick="window.print()" title="طباعة الصفحة" aria-label="طباعة الصفحة">
+                <button type="button" class="page-back-btn ms-2 js-print-page" title="طباعة الصفحة" aria-label="طباعة الصفحة">
                     <i class="bi bi-printer"></i>
                 </button>
                 {% endif %}
@@ -1202,6 +1202,25 @@
     <script>
     // Back arrow: step back in history when the previous page was ours;
     // opened from a bookmark or another site, the href (dashboard) applies.
+    // Print button: a paginated list reopens with every row (?print_all=1)
+    // and prints itself — printing the screen gave only the current page.
+    (function () {
+        var btn = document.querySelector('.js-print-page');
+        var params = new URLSearchParams(location.search);
+        if (params.get('print_all') === '1') {
+            window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 300); });
+        }
+        if (!btn) { return; }
+        btn.addEventListener('click', function () {
+            if (document.querySelector('.pagination') && params.get('print_all') !== '1') {
+                params.set('print_all', '1');
+                params.delete('page');
+                window.open(location.pathname + '?' + params.toString(), '_blank');
+            } else {
+                window.print();
+            }
+        });
+    })();
     (function () {
         var btn = document.querySelector('.page-back-btn');
         if (!btn || btn.dataset.historyBack !== '1') { return; }

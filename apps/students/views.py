@@ -113,7 +113,8 @@ def student_list(request):
 
     # Paginate: the view used to materialise EVERY student and then loop over
     # them in Python (and the template renders a barcode per row).
-    paginator = Paginator(students, STUDENTS_PER_PAGE)
+    from apps.core.paging import page_size
+    paginator = Paginator(students, page_size(request, STUDENTS_PER_PAGE))
     page_obj = paginator.get_page(request.GET.get('page'))
 
     # "مدفوع" means paid for what the student is attending *now*: the open
@@ -201,9 +202,11 @@ def student_detail(request, student_id):
     ).order_by('-scan_time')[:20]
 
     # Attendance statistics (single query with conditional aggregation)
+    # Cancelled lessons are not attendance — the sheets and reports skip them.
     attendance_agg = Attendance.objects.filter(
         student=student,
-        scan_time__gte=thirty_days_ago
+        scan_time__gte=thirty_days_ago,
+        session__is_cancelled=False,
     ).aggregate(
         present=Count('pk', filter=Q(status='present')),
         late=Count('pk', filter=Q(status='late')),
@@ -265,13 +268,13 @@ def _student_report(student, active_enrollments):
     from apps.attendance.models import ExceptionRecord
     from apps.teachers.models import GroupCycle
 
-    lifetime = Attendance.objects.filter(student=student).aggregate(
+    lifetime = Attendance.objects.filter(student=student, session__is_cancelled=False).aggregate(
         present=Count('pk', filter=Q(status='present')),
         late=Count('pk', filter=Q(status='late')),
         absent=Count('pk', filter=Q(status='absent')),
         excused=Count('pk', filter=Q(status='exception')),
     )
-    attended_qs = Attendance.objects.filter(student=student).exclude(status='absent')
+    attended_qs = Attendance.objects.filter(student=student, session__is_cancelled=False).exclude(status='absent')
     first_any = attended_qs.order_by('session__session_date').values_list('session__session_date', flat=True).first()
     last_any = attended_qs.order_by('-session__session_date').values_list('session__session_date', flat=True).first()
 
@@ -296,7 +299,7 @@ def _student_report(student, active_enrollments):
             'first': attended.order_by('session__session_date').values_list('session__session_date', flat=True).first(),
             'last': attended.order_by('-session__session_date').values_list('session__session_date', flat=True).first(),
             'attended_count': attended.count(),
-            'absent_count': Attendance.objects.filter(student=student, session__group=group, status='absent').count(),
+            'absent_count': Attendance.objects.filter(student=student, session__group=group, status='absent', session__is_cancelled=False).count(),
             'cycle': cycle,
             'payment': payment,
         })
@@ -452,7 +455,7 @@ def student_report(request, student_id):
     )
 
     thirty_days_ago = timezone.now() - timedelta(days=30)
-    attendance = Attendance.objects.filter(student=student)
+    attendance = Attendance.objects.filter(student=student, session__is_cancelled=False)
     counts = dict(
         present=Count('pk', filter=Q(status='present')),
         late=Count('pk', filter=Q(status='late')),

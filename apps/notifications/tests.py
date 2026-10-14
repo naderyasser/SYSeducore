@@ -517,3 +517,28 @@ class AttendanceCorrectionTest(TestCase):
         self.attendance.delete()
         self.assertEqual(send_attendance_correction(self.session.pk, self.student.pk), 'No record')
         mock_post.assert_not_called()
+
+
+@override_settings(**WAPILOT_TEST_SETTINGS)
+class RateLimitRetryTest(TestCase):
+    """HTTP 429 is "slow down" — the send is retried, not lost."""
+
+    @patch('apps.notifications.services.time.sleep')
+    @patch('apps.notifications.services.requests.post')
+    def test_429_then_success(self, mock_post, mock_sleep):
+        busy = MagicMock(status_code=429, headers={'Retry-After': '2'})
+        mock_post.side_effect = [busy, _api_success()]
+        result = WhatsAppService().send_message('01234567891', 'x', idempotency_key='k1')
+        self.assertTrue(result['success'])
+        self.assertEqual(mock_post.call_count, 2)
+        mock_sleep.assert_called_once_with(2.0)
+
+    @patch('apps.notifications.services.time.sleep')
+    @patch('apps.notifications.services.requests.post')
+    def test_gives_up_after_retries(self, mock_post, mock_sleep):
+        busy = MagicMock(status_code=429, headers={})
+        busy.json.return_value = {'message': 'Too Many Attempts.'}
+        mock_post.return_value = busy
+        result = WhatsAppService().send_message('01234567891', 'x')
+        self.assertFalse(result['success'])
+        self.assertEqual(mock_post.call_count, 3)

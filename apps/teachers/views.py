@@ -54,7 +54,8 @@ GENERIC_ERROR_MESSAGE = 'حدث خطأ غير متوقع، يرجى المحاو
 
 def _paginate(request, queryset, per_page=LIST_PAGE_SIZE):
     """Return the requested page of ``queryset`` (never raises on bad input)."""
-    return Paginator(queryset, per_page).get_page(request.GET.get('page'))
+    from apps.core.paging import page_size
+    return Paginator(queryset, page_size(request, per_page)).get_page(request.GET.get('page'))
 
 
 def _page_context(page_obj, object_name):
