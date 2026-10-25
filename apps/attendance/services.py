@@ -870,7 +870,7 @@ class AttendanceService:
                 reason = session.cancellation_reason or 'تم إلغاء الحصة'
                 return {'success': False, 'message': f'الحصة ملغاة — {reason}'}
 
-            attendance = Attendance.objects.select_for_update().filter(
+            attendance = Attendance.objects.select_for_update(of=('self',)).filter(
                 student=student, session=session,
             ).select_related('exception_record').first()
             # Only a *live* exception owns the row: once revoked it used to

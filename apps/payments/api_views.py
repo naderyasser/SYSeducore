@@ -373,7 +373,7 @@ def adjust_payment(request, payment_id):
         return _error('اكتب سبب الخصم أو الإعفاء')
     try:
         with transaction.atomic():
-            payment = Payment.objects.select_for_update().select_related('student', 'group').get(pk=payment_id)
+            payment = Payment.objects.select_for_update(of=('self',)).select_related('student', 'group').get(pk=payment_id)
             lines = TeacherSettlementLine.objects.filter(payment=payment)
             if kind != 'note' and lines.filter(settlement__status=TeacherSettlement.STATUS_APPROVED).exists():
                 return _error('الدفعة دي في كشف تصفية معتمد — افتح الكشف الأول')
