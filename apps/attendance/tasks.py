@@ -262,13 +262,14 @@ def send_exception_notification(student_id, group_name, exception_type, reason_d
     if notification_service.is_disabled:
         return "Notifications disabled, skipping exception notification"
 
+    from apps.notifications.services import MESSAGE_FOOTER
     if exception_type == 'payment':
         message = (
             f"⚠️ *استثناء دفع*\n\n"
             f"تم السماح للطالب *{student.full_name}* بدخول حصة {group_name}\n"
             f"بالرغم من عدم سداد المصروفات.\n"
             f"السبب: {reason_display}\n\n"
-            f"_نظام الحضور الآلي_"
+            f"{MESSAGE_FOOTER}"
         )
     else:
         message = (
@@ -276,7 +277,7 @@ def send_exception_notification(student_id, group_name, exception_type, reason_d
             f"تم السماح للطالب *{student.full_name}* بدخول حصة {group_name}\n"
             f"بالرغم من الوصول متأخراً.\n"
             f"السبب: {reason_display}\n\n"
-            f"_نظام الحضور الآلي_"
+            f"{MESSAGE_FOOTER}"
         )
 
     if student.parent_phone:

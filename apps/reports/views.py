@@ -799,6 +799,34 @@ def _cycle_cancelled(group, cycle):
     ).order_by('session_date'))
 
 
+def _cycle_settlement(group, rows):
+    """تصفية الدورة — the teacher's account for one paper sheet, from the
+    sheet's own rows: what was actually collected per student, the centre's
+    percentage taken per student (rounded per line exactly like
+    ``TeacherSettlementLine.apply``) and the remainder as the teacher's share.
+
+    Client, 2026-10-27: «تصحيح حساب المدرسين على الطلبه بالكشوفات بتاعتهم» —
+    the settlement screen works on a date range, the desk works on the sheet;
+    four overlapping ranges had been tried for one teacher to make them meet.
+    """
+    from decimal import ROUND_HALF_UP, Decimal
+    pct = Decimal(group.center_percentage or 0)
+    collected = center = Decimal('0')
+    paying = 0
+    for r in rows:
+        p = r['payment']
+        if p is None or p.is_exempt or not p.amount_paid:
+            continue
+        paid = Decimal(p.amount_paid)
+        collected += paid
+        center += (paid * pct / Decimal('100')).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        paying += 1
+    return {
+        'collected': collected, 'percentage': pct, 'center': center,
+        'teacher': collected - center, 'paying': paying, 'students': len(rows),
+    }
+
+
 def _cycle_register_data(group, cycle):
     """Columns (one per lesson slot of ``cycle``) and one row per student:
     the cycle's payment date and, per lesson, the date attended / «غ» / «-»."""
@@ -925,6 +953,7 @@ def cycle_register(request):
             'rows': rows,
             'cancelled': cancelled,
             'blank_rows': range(max(2, 17 - len(rows))),
+            'settlement': _cycle_settlement(group, rows),
             'paid_count': sum(1 for r in rows if r['pay_status'] in ('paid', 'exempt')),
             'unpaid_count': sum(1 for r in rows if r['pay_status'] not in ('paid', 'exempt')),
         })

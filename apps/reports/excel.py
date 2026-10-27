@@ -289,6 +289,12 @@ def build_cycle_register_workbook(group, cycles_data):
             for col in range(1, ncols + 1):
                 ws.cell(row=6 + len(rows) + extra, column=col).border = border
         last = 6 + len(rows) + 3
+        from .views import _cycle_settlement
+        st = _cycle_settlement(group, rows)
+        ws.cell(row=last, column=1, value=(
+            f'تصفية الدورة: المحصّل {st["collected"]:.2f} من {st["paying"]} طالب — '
+            f'نسبة المركز {st["percentage"]:g}%: {st["center"]:.2f} — نصيب المدرس {st["teacher"]:.2f}'
+        )).font = Font(bold=True)
         if cycle.notes:
             ws.cell(row=last + 1, column=1, value=f'ملاحظات المجموعة: {cycle.notes}').font = Font(bold=True)
         cancelled = [s for s in getattr(cycle, '_cancelled', [])]

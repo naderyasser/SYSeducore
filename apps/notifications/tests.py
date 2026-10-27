@@ -554,3 +554,23 @@ class RateLimitRetryTest(TestCase):
         self.assertFalse(result['success'])
         self.assertEqual(mock_post.call_count, 3)
 
+
+
+class MessageContentTest(TestCase):
+    """Client, 2026-10-27: the message names the group and the teacher and is
+    signed «نظام الحضور الآلي — سنتر بدايه»."""
+
+    def test_group_teacher_and_signature(self):
+        from apps.teachers.models import Room
+        teacher = Teacher.objects.create(full_name='مستر الرسايل', phone='01200000009', email='m@t.com',
+                                         specialization='Math', hire_date=timezone.now().date())
+        group = create_group_with_schedule(group_name='مجموعة الرسايل', teacher=teacher,
+                                           room=Room.objects.create(name='قاعة الرسايل', capacity=10),
+                                           schedule_day='Saturday', schedule_time=time(10, 0), standard_fee=100)
+        service = WhatsAppService()
+        for status in ('present', 'late', 'absent', 'excused', 'refused_payment'):
+            text = service.build_attendance_message('طالب', status, timezone.now(), group=group)
+            self.assertIn('المجموعة: مجموعة الرسايل', text, status)
+            self.assertIn('المدرس: مستر الرسايل', text, status)
+            self.assertIn('سنتر بدايه', text, status)
+            self.assertNotIn('_نظام الحضور الآلي_', text, status)

@@ -898,7 +898,18 @@
         tabs.querySelectorAll('button').forEach(function (b) { b.classList.toggle('active', b.dataset.view === view); });
         try { localStorage.setItem('groupGridView', view); } catch (e) {}
     }
-    tabs.addEventListener('click', function (e) { var b = e.target.closest('button'); if (b) show(b.dataset.view); });
+    tabs.addEventListener('click', function (e) {
+        var b = e.target.closest('button');
+        if (!b) return;
+        // A change in the paper sheet added a column the grid does not have
+        // (a new lesson, a cancellation): rebuild the grid from the server.
+        if (b.dataset.view === 'classic' && window.__gridStale) {
+            try { localStorage.setItem('groupGridView', 'classic'); } catch (err) {}
+            location.reload();
+            return;
+        }
+        show(b.dataset.view);
+    });
     try { if (localStorage.getItem('groupGridView') === 'classic') show('classic'); } catch (e) {}
     // The sheet grows (menus, notes, cancelled lessons): keep the frame as tall as its page.
     frame.addEventListener('load', function () {
@@ -926,6 +937,20 @@
         if (chooser) { chooser.remove(); chooser = null; }
     }
 
+    // The paper sheet (iframe in the other tab) and this grid show the same
+    // rows: an edit in either now reaches the other without a page reload.
+    function refreshPaper() {
+        var f = document.getElementById('paper-frame');
+        try { if (f && f.contentWindow && f.contentDocument && f.contentDocument.readyState !== 'uninitialized') f.contentWindow.location.reload(); } catch (e) {}
+    }
+    window.addEventListener('message', function (e) {
+        if (e.origin !== location.origin || !e.data || e.data.type !== 'attendance-changed') { return; }
+        if (e.data.reload) { window.__gridStale = true; return; }
+        var row = grid && grid.querySelector('tr[data-student-id="' + e.data.studentId + '"]');
+        var cell = row && row.querySelector('[data-date="' + e.data.date + '"]');
+        if (cell) { paint(cell, e.data.status); } else { window.__gridStale = true; }
+    });
+
     function paint(cell, state) {
         cell.className = 'cell cell-' + state;
         cell.dataset.state = state;
@@ -945,6 +970,7 @@
                 if (!data.success) { alert(data.message || 'فشل التسجيل'); return; }
                 if (data.session_id) { cell.dataset.sessionId = data.session_id; }
                 paint(cell, data.attendance ? data.attendance.status : 'no_record');
+                refreshPaper();
                 cell.title = status === 'exception' ? 'عذر — ' + (note || 'بدون سبب مكتوب') : '';
                 cell.classList.toggle('has-note', status === 'exception');
             })

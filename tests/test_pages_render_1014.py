@@ -116,3 +116,18 @@ class DropoutsReportTest(PagesRenderTest):
         Attendance.objects.filter(student=self.student).update(status='present')
         r = self.client.get(reverse('reports:dropouts') + '?min=1')
         self.assertEqual(r.context['rows'], [])
+
+
+class CycleSettlementBoxTest(PagesRenderTest):
+    """The paper sheet carries its own teacher's account (client, 2026-10-27)."""
+
+    def test_cycle_settlement_matches_payments(self):
+        from apps.reports.views import _cycle_register_data, _cycle_settlement
+        self.group.center_percentage = 30
+        self.group.save()
+        _, rows = _cycle_register_data(self.group, self.session.cycle)
+        st = _cycle_settlement(self.group, rows)
+        self.assertEqual((st['collected'], st['center'], st['teacher'], st['paying']),
+                         (200, 60, 140, 1))
+        r = self.client.get(reverse('reports:cycle_register') + f'?group={self.group.pk}')
+        self.assertContains(r, 'تصفية الدورة')

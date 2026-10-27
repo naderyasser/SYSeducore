@@ -14,6 +14,10 @@ from django.utils import timezone
 logger = logging.getLogger('notifications')
 
 #: HTTP 429 handling in :meth:`WhatsAppService._post`.
+#: Signature under every automatic message (client, 2026-10-27: «بدل نظام
+#: الحضور الالى يبقى نظام الحضور الالى سنتر بدايه»).
+MESSAGE_FOOTER = '_' + getattr(settings, 'MESSAGE_SIGNATURE', 'نظام الحضور الآلي — سنتر بدايه') + '_'
+
 RATE_LIMIT_RETRIES = 2
 RATE_LIMIT_WAIT_SECONDS = 3
 RATE_LIMIT_MAX_WAIT_SECONDS = 10
@@ -374,7 +378,7 @@ class WhatsAppService:
         message_parts.append('')
         message_parts.append(f'📊 الإجمالي: {present_count} حاضر / {len(absent_students)} غائب')
         message_parts.append('')
-        message_parts.append('_نظام الحضور الآلي_')
+        message_parts.append(MESSAGE_FOOTER)
 
         return '\n'.join(message_parts), recipients
 
@@ -411,7 +415,17 @@ class WhatsAppService:
         from apps.students.utils import whatsapp_number
         return whatsapp_number(phone)
 
-    def build_attendance_message(self, student_name, status, time, on_date=None):
+    def build_attendance_message(self, student_name, status, time, on_date=None, group=None):
+        text = self._attendance_text(student_name, status, time, on_date)
+        if group is not None:
+            # Client, 2026-10-27: the family must see which lesson the message
+            # is about — a student in three groups got three identical texts.
+            teacher = group.teacher.full_name if getattr(group, 'teacher_id', None) else ''
+            line = f'المجموعة: {group.group_name}' + (f'\nالمدرس: {teacher}' if teacher else '')
+            text = text.replace(MESSAGE_FOOTER, f'{line}\n\n{MESSAGE_FOOTER}', 1)
+        return text
+
+    def _attendance_text(self, student_name, status, time, on_date=None):
         """
         نص رسالة الحضور/الغياب
 
@@ -435,13 +449,13 @@ class WhatsAppService:
             return self._get_excused_message(student_name, on_date)
         return self._get_absent_message(student_name, on_date)
 
-    def build_attendance_correction(self, student_name, status, time, on_date=None):
+    def build_attendance_correction(self, student_name, status, time, on_date=None, group=None):
         """The message sent when a record changes after the parent was told
         otherwise — e.g. a student marked absent at minute 10 who scans in at
         minute 15. Same text as a first message, under a correction header."""
         return (
             '🔄 *تصحيح للرسالة السابقة*\n\n'
-            + self.build_attendance_message(student_name, status, time, on_date)
+            + self.build_attendance_message(student_name, status, time, on_date, group)
         )
 
     def build_monthly_reminder_message(self, student_name, group_name, amount):
@@ -514,7 +528,7 @@ class WhatsAppService:
 
 يُرجى الالتزام بمواعيد الحصص
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
 
     def _get_payment_block_message(self, student_name):
         """Get payment block message"""
@@ -525,7 +539,7 @@ _نظام الحضور الآلي_'''
 
 يُرجى مراجعة الإدارة لسداد المصروفات
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
     
     def _get_present_message(self, student_name, time):
         """Get present attendance message"""
@@ -538,7 +552,7 @@ _نظام الحضور الآلي_'''
 الوقت: {time_str}
 الحالة: حاضر في الموعد ⏰
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
     
     def _get_late_message(self, student_name, time):
         """Get late attendance message"""
@@ -552,7 +566,7 @@ _نظام الحضور الآلي_'''
 
 يُرجى الالتزام بالمواعيد المحددة
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
     
     def _get_absent_message(self, student_name, on_date=None):
         """Get absence message"""
@@ -568,7 +582,7 @@ _نظام الحضور الآلي_'''
 
 للاستفسار يُرجى التواصل مع الإدارة
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
     
     def _get_excused_message(self, student_name, on_date=None):
         """Get excused-absence message"""
@@ -580,7 +594,7 @@ _نظام الحضور الآلي_'''
 
 للاستفسار يُرجى التواصل مع الإدارة
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
 
     def _get_payment_reminder_message(self, student_name, group_name, amount):
         """Get payment reminder message"""
@@ -595,7 +609,7 @@ _نظام الحضور الآلي_'''
 
 للدفع أو الاستفسار يُرجى التواصل مع الإدارة
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
     
     def _get_warning_message(self, student_name, amount):
         """Get warning before blocking message"""
@@ -610,7 +624,7 @@ _نظام الحضور الآلي_'''
 
 يُرجى سرعة السداد
 
-_نظام الحضور الآلي_'''
+{MESSAGE_FOOTER}'''
 
 
 class NotificationService:

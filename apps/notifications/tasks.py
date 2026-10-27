@@ -20,7 +20,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from .models import WhatsAppMessage
-from .services import NotificationService
+from .services import MESSAGE_FOOTER, NotificationService
 
 logger = logging.getLogger('notifications')
 
@@ -137,7 +137,7 @@ def send_attendance_correction(session_id, student_id):
     if notification_service.is_disabled:
         return 'Notifications disabled'
 
-    session = Session.objects.select_related('group').filter(pk=session_id).first()
+    session = Session.objects.select_related('group', 'group__teacher').filter(pk=session_id).first()
     student = Student.objects.filter(pk=student_id).first()
     if session is None or student is None:
         return 'Missing session or student'
@@ -175,7 +175,7 @@ def send_attendance_correction(session_id, student_id):
         f'{fix_prefix}{len(history)}',
         phone_number=phone[:20],
         message_text=notification_service.whatsapp_service.build_attendance_correction(
-            student.full_name, status, attendance.scan_time, session.session_date,
+            student.full_name, status, attendance.scan_time, session.session_date, session.group,
         ),
         message_type='attendance',
         student=student,
@@ -221,7 +221,7 @@ def send_cancellation_corrections(session_id):
             message_text=(
                 '🔄 *تصحيح للرسالة السابقة*\n\n'
                 f'حصة *{session.group.group_name}* يوم {session.session_date:%Y/%m/%d} اتلغت — '
-                f'ابنكم *{message.student.full_name}* مش غايب.\n\n_نظام الحضور الآلي_'
+                f'ابنكم *{message.student.full_name}* مش غايب.\n\n{MESSAGE_FOOTER}'
             ),
             message_type='attendance', student=message.student, group=session.group, status='pending',
         )
@@ -295,7 +295,7 @@ def send_attendance_notifications_task():
             group__deleted_at__isnull=True,
             notification_sent=False,  # BUG-05: the flag is finally read
         )
-        .select_related('group')
+        .select_related('group', 'group__teacher')
         .prefetch_related('group__schedules')
     )
 
@@ -317,13 +317,17 @@ def send_attendance_notifications_task():
         # Soft-deleted / deactivated students must not generate messages, and
         # a student enrolled after the lesson began was never expected in it —
         # «تغيب ابنكم» would be news to a family that signed up an hour ago.
+        # ...unless they did come: a newcomer registered at the desk as the
+        # lesson starts and then scanned in still gets «حضر» (the first
+        # students of new groups were left out, Oct 16–17).
+        lesson_start = _local_datetime(session.session_date, start_time)
         enrollments = StudentGroupEnrollment.objects.filter(
+            Q(enrolled_at__lte=lesson_start) | Q(student__attendances__session=session),
             group=session.group,
             is_active=True,
             student__deleted_at__isnull=True,
             student__is_active=True,
-            enrolled_at__lte=_local_datetime(session.session_date, start_time),
-        ).select_related('student')
+        ).select_related('student').distinct()
 
         attendance_by_student = {
             attendance.student_id: attendance
@@ -354,7 +358,8 @@ def send_attendance_notifications_task():
                 f'attendance:{session.pk}:{student.pk}',
                 phone_number=phone[:20],
                 message_text=notification_service.whatsapp_service
-                .build_attendance_message(student.full_name, status, scan_time, session.session_date),
+                .build_attendance_message(student.full_name, status, scan_time, session.session_date,
+                                          group=session.group),
                 message_type='attendance',
                 student=student,
                 group=session.group,

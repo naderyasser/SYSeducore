@@ -153,6 +153,15 @@
     </table>
     </div>
 
+    {% with st=sh.settlement %}
+    <div class="cyc-settle" style="margin:8px 0;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;display:flex;flex-wrap:wrap;gap:18px;font-size:.92rem">
+        <strong>تصفية الدورة:</strong>
+        <span>المحصّل: <b>{{ st.collected|floatformat:2 }}</b> من {{ st.paying }} طالب</span>
+        <span>نسبة المركز {{ st.percentage|floatformat:"-2" }}%: <b>{{ st.center|floatformat:2 }}</b></span>
+        <span>نصيب المدرس: <b>{{ st.teacher|floatformat:2 }}</b></span>
+    </div>
+    {% endwith %}
+
     <div class="cyc-notes">
         <div class="box">
             <h6>ملاحظات المجموعة — دورة {{ sh.cycle.index }}</h6>
@@ -222,11 +231,19 @@
             var url = sid ? '/attendance/api/cancel-session/' + sid + '/'
                           : '{% if group %}{% url "attendance:cancel_upcoming_lesson" group.group_id %}{% endif %}';
             post(url, { date: date, reason: reason, notify: '0' }).then(function (res) {
-                if (res.success) location.reload(); else alert(res.error || res.message || 'ما اتلغتش');
+                if (res.success) { tellParent({reload: true}); location.reload(); } else alert(res.error || res.message || 'ما اتلغتش');
             });
         });
     });
     var GROUP_ID = {{ group.group_id|default:0 }}, menu = null;
+    // Embedded in the group page next to its absence grid: every change made
+    // here is reported up so the grid shows it too (client, 2026-10-27:
+    // «اللي يحصل في الورقي يحصل في الكشف»).
+    function tellParent(change) {
+        if (window.parent === window) { return; }
+        change.type = 'attendance-changed';
+        try { window.parent.postMessage(change, location.origin); } catch (e) {}
+    }
     function closeMenu() { if (menu) { menu.remove(); menu = null; } }
     function paint(td, status, date) {
         td.classList.remove('present', 'late', 'absent', 'exception', 'excused', 'none');
@@ -259,6 +276,8 @@
                     .then(function (data) {
                         if (!data.success) { alert(data.message || 'ما اتسجلش'); return; }
                         paint(td, data.attendance ? data.attendance.status : 'no_record', td.dataset.date);
+                        tellParent({studentId: td.dataset.student, date: td.dataset.date,
+                                    status: data.attendance ? data.attendance.status : 'no_record'});
                     })
                     .catch(function () { alert('فشل الاتصال بالخادم'); })
                     .finally(function () { td.classList.remove('is-saving'); });
@@ -276,7 +295,7 @@
         btn.addEventListener('click', function () {
             if (!confirm('ترجع الحصة دي تتحسب تاني؟')) return;
             post('/attendance/api/restore-lesson/' + btn.dataset.id + '/', {}).then(function (res) {
-                if (res.success) location.reload(); else alert(res.error || res.message || 'ما رجعتش');
+                if (res.success) { tellParent({reload: true}); location.reload(); } else alert(res.error || res.message || 'ما رجعتش');
             });
         });
     });
