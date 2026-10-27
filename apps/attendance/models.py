@@ -35,10 +35,18 @@ class Session(models.Model):
 
     notification_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
+    #: 1 = the day's lesson. 2 = its second hour, for a double lesson that
+    #: counts as two sessions (client, 2026-10-27: «تكرار نفس التاريخ بحيث بدل
+    #: الحصه تتحسب حصتين بساعتين»). The second row exists only to be counted —
+    #: cycles, invoices and settlements count rows — and its attendance always
+    #: mirrors slot 1 (``AttendanceService.sync_twins``); scans, the absence
+    #: rule's notification and every per-date lookup use slot 1.
+    slot = models.PositiveSmallIntegerField(default=1, verbose_name="رقم الحصة في اليوم")
+
     class Meta:
         db_table = 'sessions'
-        unique_together = ['group', 'session_date']
+        unique_together = ['group', 'session_date', 'slot']
         ordering = ['-session_date']
     
     def __str__(self):

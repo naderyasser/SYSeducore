@@ -66,7 +66,7 @@ def auto_mark_absent_sessions():
         if now < local_datetime(today, entry.start_time):
             continue
         session, created = Session.objects.get_or_create(
-            group=group, session_date=today, defaults={'teacher_attended': False},
+            group=group, session_date=today, slot=1, defaults={'teacher_attended': False},
         )
         if created:
             assign_to_cycle(session)
@@ -112,7 +112,7 @@ def auto_mark_absent_sessions():
             if entry is None or not entry.start_time:
                 continue
             session, created = Session.objects.get_or_create(
-                group=group, session_date=past_day,
+                group=group, session_date=past_day, slot=1,
                 defaults={'teacher_attended': False},
             )
             if created:

@@ -67,7 +67,8 @@
     }
 
     function addSession(opts) {
-        return post({group_id: opts.groupId, date: opts.date || ''});
+        // ``double``: the lesson counts as two sessions (a two-hour lesson).
+        return post({group_id: opts.groupId, date: opts.date || '', double: opts.double ? '1' : ''});
     }
 
     window.ManualAttendance = {

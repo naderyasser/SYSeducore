@@ -218,7 +218,7 @@
         });
     });
     var sessionsByDate = {
-        {% for sh in sheets %}{% for col in sh.columns %}{% if col.session %}'{{ col.session.session_date|date:"Y-m-d" }}': {{ col.session.session_id }},{% endif %}{% endfor %}{% endfor %}
+        {% for sh in sheets %}{% for col in sh.columns %}{% if col.session and col.session.slot == 1 %}'{{ col.session.session_date|date:"Y-m-d" }}': {{ col.session.session_id }},{% endif %}{% endfor %}{% endfor %}
     };
     document.querySelectorAll('.js-cancel').forEach(function (btn) {
         btn.addEventListener('click', function () {
@@ -275,7 +275,10 @@
                 ManualAttendance.mark({groupId: GROUP_ID, studentId: td.dataset.student, date: td.dataset.date, status: o[0], note: note})
                     .then(function (data) {
                         if (!data.success) { alert(data.message || 'ما اتسجلش'); return; }
-                        paint(td, data.attendance ? data.attendance.status : 'no_record', td.dataset.date);
+                        // A double lesson is two columns on one date: both follow.
+                        td.closest('tr').querySelectorAll('td[data-date="' + td.dataset.date + '"]').forEach(function (c) {
+                            paint(c, data.attendance ? data.attendance.status : 'no_record', td.dataset.date);
+                        });
                         tellParent({studentId: td.dataset.student, date: td.dataset.date,
                                     status: data.attendance ? data.attendance.status : 'no_record'});
                     })

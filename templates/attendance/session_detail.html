@@ -35,6 +35,12 @@
           <i class="bi bi-slash-circle me-1"></i>إلغاء الحصة
         </button>
         {% endif %}
+        {% if not session.is_cancelled %}
+        <button type="button" class="btn btn-sm btn-outline-info" id="double-session-btn" data-action="{% if is_double %}undo{% else %}make{% endif %}"
+                title="حصة بساعتين تتحسب حصتين في الدورة والفاتورة والتصفية">
+          <i class="bi bi-layers me-1"></i>{% if is_double %}رجّعها حصة واحدة{% else %}تتحسب حصتين{% endif %}
+        </button>
+        {% endif %}
         <button type="button" class="btn btn-sm btn-outline-danger" id="delete-session-btn" data-count="{{ attendances|length }}">
           <i class="bi bi-trash me-1"></i>حذف الحصة
         </button>
@@ -47,6 +53,7 @@
           <h5>معلومات الحصة</h5>
           <p><strong>المجموعة:</strong> <a href="{% url 'teachers:group_detail' session.group.pk %}">{{ session.group.group_name }}</a></p>
           <p><strong>المدرس:</strong> {% if session.group.teacher %}<a href="{% url 'teachers:detail' session.group.teacher.pk %}">{{ session.group.teacher.full_name }}</a>{% else %}—{% endif %}</p>
+          {% if is_double %}<p><span class="badge bg-info text-dark"><i class="bi bi-layers me-1"></i>حصة مزدوجة — بتتحسب حصتين</span></p>{% endif %}
           <p><strong>التاريخ:</strong> {{ session.session_date|date:"Y-m-d" }}
             {% if session.cycle_id %} — <a href="{% url 'reports:cycle_register' %}?group={{ session.group.pk }}&cycle={{ session.cycle_id }}&only=1">كشف الدورة</a>{% endif %}
             — <a href="{% url 'reports:attendance_excel' %}?date_from={{ session.session_date|date:'Y-m-d' }}&group={{ session.group.pk }}">Excel الحصة</a></p>
@@ -169,6 +176,18 @@
         });
     }
 
+    var doubleBtn = document.getElementById('double-session-btn');
+    if (doubleBtn) {
+        doubleBtn.addEventListener('click', function () {
+            var undo = doubleBtn.dataset.action === 'undo';
+            if (!confirm(undo ? 'ترجع الحصة دي حصة واحدة؟' : 'الحصة دي تتحسب حصتين (حصة بساعتين)؟')) { return; }
+            doubleBtn.disabled = true;
+            var body = new FormData(); body.append('action', doubleBtn.dataset.action);
+            post('{% url "attendance:toggle_double_session" session_id=session.session_id %}', body)
+                .then(function (res) { if (res.success) { location.reload(); } else { alert(res.message || 'ما اتعملش'); doubleBtn.disabled = false; } })
+                .catch(function () { alert('فشل الاتصال بالخادم'); doubleBtn.disabled = false; });
+        });
+    }
     var cancelBtn = document.getElementById('cancel-session-btn');
     if (cancelBtn) {
         cancelBtn.addEventListener('click', function () {

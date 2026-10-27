@@ -72,6 +72,8 @@ class SessionAdmin(admin.ModelAdmin):
                     if session.cycle_id:
                         renumber_cycle(session.cycle)
                         recount_cycle(session.cycle)
+                    from .services import AttendanceService
+                    AttendanceService.follow_cancellation(session)
                 count += 1
             except ValueError as exc:
                 refused.append(f'{session}: {exc}')

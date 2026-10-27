@@ -317,7 +317,7 @@ class WhatsAppService:
 
         # Get session
         try:
-            session = Session.objects.get(group=group, session_date=session_date)
+            session = Session.objects.get(group=group, session_date=session_date, slot=1)
         except Session.DoesNotExist:
             raise LookupError('لا توجد حصة لهذا التاريخ')
 

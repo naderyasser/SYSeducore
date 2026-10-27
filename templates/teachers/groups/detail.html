@@ -829,6 +829,9 @@
             <form class="d-flex flex-wrap gap-2 align-items-center ms-auto" id="add-session-form">
                 <label class="small text-muted mb-0" for="add-session-date">إضافة حصة بتاريخ</label>
                 <input type="date" id="add-session-date" value="{{ today|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}" class="form-control form-control-sm w-auto" required>
+                <label class="small mb-0 d-flex align-items-center gap-1" title="حصة بساعتين تتحسب حصتين في الدورة والفاتورة والتصفية">
+                    <input type="checkbox" id="add-session-double"> تتحسب حصتين
+                </label>
                 <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg me-1"></i>إضافة</button>
             </form>
         </div>
@@ -840,7 +843,7 @@
                     <tr>
                         <th class="sticky-name">الطالب</th>
                         {% for col in session_columns %}
-                        <th>{% if col.session_id %}<a href="{% url 'attendance:session_detail' session_id=col.session_id %}" class="text-reset text-decoration-none" title="تفاصيل الحصة">{{ col.date|date:"d/m" }}</a>{% else %}{{ col.date|date:"d/m" }}{% endif %}</th>
+                        <th>{% if col.session_id %}<a href="{% url 'attendance:session_detail' session_id=col.session_id %}" class="text-reset text-decoration-none" title="تفاصيل الحصة">{{ col.date|date:"d/m" }}{% if col.slot > 1 %} <small title="الساعة التانية من حصة مزدوجة">(2)</small>{% endif %}</a>{% else %}{{ col.date|date:"d/m" }}{% endif %}</th>
                         {% endfor %}
                     </tr>
                 </thead>
@@ -947,8 +950,8 @@
         if (e.origin !== location.origin || !e.data || e.data.type !== 'attendance-changed') { return; }
         if (e.data.reload) { window.__gridStale = true; return; }
         var row = grid && grid.querySelector('tr[data-student-id="' + e.data.studentId + '"]');
-        var cell = row && row.querySelector('[data-date="' + e.data.date + '"]');
-        if (cell) { paint(cell, e.data.status); } else { window.__gridStale = true; }
+        var cells = row ? row.querySelectorAll('[data-date="' + e.data.date + '"]') : [];
+        if (cells.length) { cells.forEach(function (c) { paint(c, e.data.status); }); } else { window.__gridStale = true; }
     });
 
     function paint(cell, state) {
@@ -969,7 +972,10 @@
             .then(function (data) {
                 if (!data.success) { alert(data.message || 'فشل التسجيل'); return; }
                 if (data.session_id) { cell.dataset.sessionId = data.session_id; }
-                paint(cell, data.attendance ? data.attendance.status : 'no_record');
+                // A double lesson has two columns on one date: both follow.
+                row.querySelectorAll('[data-date="' + cell.dataset.date + '"]').forEach(function (c) {
+                    paint(c, data.attendance ? data.attendance.status : 'no_record');
+                });
                 refreshPaper();
                 cell.title = status === 'exception' ? 'عذر — ' + (note || 'بدون سبب مكتوب') : '';
                 cell.classList.toggle('has-note', status === 'exception');
@@ -1041,7 +1047,8 @@
             if (!date) { return; }
             var button = addForm.querySelector('button');
             button.disabled = true;
-            ManualAttendance.addSession({groupId: GROUP_ID, date: date})
+            var dbl = document.getElementById('add-session-double');
+            ManualAttendance.addSession({groupId: GROUP_ID, date: date, double: dbl && dbl.checked})
                 .then(function (data) {
                     if (!data.success) { alert(data.message || 'تعذّر إضافة الحصة'); return; }
                     // Reload with the new date inside the visible range.

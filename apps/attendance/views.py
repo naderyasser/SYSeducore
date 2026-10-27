@@ -138,6 +138,16 @@ def manual_attendance(request):
         session, created, error = AttendanceService.ensure_manual_session(group, on_date)
         if error:
             return JsonResponse({'success': False, 'message': error}, status=400)
+        if str(data.get('double') or '') in ('1', 'true', 'True') \
+                and not AttendanceService.twins_of(session).exists():
+            _, double_error = AttendanceService.make_double(session)
+            if double_error:
+                return JsonResponse({'success': False, 'message': double_error}, status=400)
+            ActivityLog.log(
+                user=request.user, action='attendance_manual',
+                description=f'حصة مزدوجة (تتحسب حصتين) لمجموعة {group.group_name} بتاريخ {on_date}',
+                target_model='Session', target_id=session.pk, request=request,
+            )
         if created:
             ActivityLog.log(
                 user=request.user, action='attendance_manual',
@@ -219,6 +229,7 @@ def session_detail(request, session_id):
 
     return render(request, 'attendance/session_detail.html', {
         'session': session,
+        'is_double': session.slot != 1 or AttendanceService.twins_of(session).exists(),
         'attendances': attendances,
         'roster': roster,
         'counts': counts,
@@ -289,6 +300,7 @@ def cancel_session(request, session_id):
                 renumber_cycle(session.cycle)
                 # Whoever attended it gets the lesson back on their invoice.
                 recount_cycle(session.cycle)
+            AttendanceService.follow_cancellation(session)
     except ValueError as exc:
         return JsonResponse({'success': False, 'error': str(exc)}, status=409)
 
@@ -397,6 +409,35 @@ def restore_upcoming_lesson(request, session_id):
         target_model='Session', target_id=session_id, request=request,
     )
     return JsonResponse({'success': True})
+
+
+@ajax_supervisor_required
+@require_http_methods(["POST"])
+def toggle_double_session(request, session_id):
+    """``POST action=make|undo`` — make a lesson count as two sessions (a
+    two-hour lesson) or turn it back into one."""
+    try:
+        session = Session.objects.select_related('group', 'cycle').get(pk=session_id)
+    except Session.DoesNotExist:
+        return JsonResponse({'success': False, 'message': 'الحصة غير موجودة'}, status=404)
+    if session.slot != 1:
+        session = Session.objects.select_related('group', 'cycle').get(
+            group_id=session.group_id, session_date=session.session_date, slot=1)
+    try:
+        if request.POST.get('action') == 'undo':
+            ok, message = AttendanceService.undo_double(session)
+        else:
+            twin, error = AttendanceService.make_double(session)
+            ok, message = twin is not None, error or 'الحصة بقت تتحسب حصتين'
+    except ValueError as exc:   # renumbering a closed cycle
+        return JsonResponse({'success': False, 'message': str(exc)}, status=409)
+    if ok:
+        ActivityLog.log(
+            user=request.user, action='attendance_manual',
+            description=f'{message} — {session.group.group_name} بتاريخ {session.session_date}',
+            target_model='Session', target_id=session.pk, request=request,
+        )
+    return JsonResponse({'success': ok, 'message': message}, status=200 if ok else 400)
 
 
 @ajax_supervisor_required

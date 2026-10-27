@@ -55,8 +55,8 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
         Session.objects.filter(
             group=group, session_date__gte=date_from, session_date__lte=date_to,
         )
-        .order_by('session_date')
-        .values('session_id', 'session_date', 'is_cancelled', 'cancellation_reason')
+        .order_by('session_date', 'slot')
+        .values('session_id', 'session_date', 'is_cancelled', 'cancellation_reason', 'slot')
     )
     session_ids = [s['session_id'] for s in sessions]
     real_dates = {s['session_date'] for s in sessions}
@@ -64,7 +64,7 @@ def build_group_attendance_grid(group, date_from, date_to, include_expected=Fals
     columns = [
         {'session_id': s['session_id'], 'date': s['session_date'],
          'is_cancelled': s['is_cancelled'], 'unrecorded': False,
-         'cancellation_reason': s['cancellation_reason']}
+         'cancellation_reason': s['cancellation_reason'], 'slot': s['slot']}
         for s in sessions
     ]
 

@@ -287,6 +287,14 @@ class AttendanceService:
             # covered by the same helper.
             entry = group.get_schedule_for_day(current_day_name)
             if entry is None or not entry.start_time:
+                # An extra lesson the desk added for today on a day off the
+                # timetable («إضافة حصة بتاريخ»): scannable all day, recorded
+                # present — it has no start time to be late against. It used
+                # to be refused with «لا توجد حصة متاحة».
+                if Session.objects.filter(
+                    group=group, session_date=current_time_local.date(), slot=1, is_cancelled=False,
+                ).exists():
+                    matching_entries.append((group, enr, {'time': None, 'duration': None}))
                 continue
 
             schedule_time = entry.start_time
@@ -344,11 +352,14 @@ class AttendanceService:
             combined_instant_status[matching_group.group_name] = instant_status
 
             # قاعدة الـ 10 دقائق الصارمة
-            time_check = AttendanceService.check_strict_time(
-                current_time,
-                matched_schedule['time'],
-                matched_schedule['duration']
-            )
+            if matched_schedule['time'] is None:   # extra lesson, no timetable slot
+                time_check = {'allowed': True, 'status': 'present', 'minutes_late': 0}
+            else:
+                time_check = AttendanceService.check_strict_time(
+                    current_time,
+                    matched_schedule['time'],
+                    matched_schedule['duration']
+                )
 
             if not time_check['allowed']:
                 skipped.append({
@@ -410,6 +421,7 @@ class AttendanceService:
                 session, session_created = Session.objects.get_or_create(
                     group=matching_group,
                     session_date=timezone.localdate(),
+                    slot=1,
                     defaults={'teacher_attended': False}
                 )
                 if session_created:
@@ -467,6 +479,7 @@ class AttendanceService:
 
                 if created or converted:
                     AttendanceService.count_on_own_cycle(student, session)
+                    AttendanceService.sync_twins(student, session)
                 created = created or converted
 
             if created:
@@ -642,7 +655,7 @@ class AttendanceService:
             return None, 'لا توجد حصة لهذه المجموعة في هذا اليوم'
         with transaction.atomic():
             session, created = Session.objects.get_or_create(
-                group=group, session_date=on_date,
+                group=group, session_date=on_date, slot=1,
                 defaults={
                     'teacher_attended': False,
                     'is_cancelled': True,
@@ -662,6 +675,7 @@ class AttendanceService:
                     # A student scanned in before the call-off got the lesson
                     # counted; it stops counting now.
                     recount_cycle(session.cycle)
+                AttendanceService.follow_cancellation(session)
         return session, None
 
     @staticmethod
@@ -696,6 +710,7 @@ class AttendanceService:
                 assign_to_cycle(session)
             # Its attendance rows count again.
             recount_cycle(session.cycle)
+            AttendanceService.follow_cancellation(session)
         return None
 
     @staticmethod
@@ -728,7 +743,7 @@ class AttendanceService:
             return None, False, 'لا يمكن إضافة حصة بتاريخ مستقبلي'
 
         with transaction.atomic():
-            session = Session.objects.filter(group=group, session_date=on_date).first()
+            session = Session.objects.filter(group=group, session_date=on_date, slot=1).first()
             if session is not None:
                 return session, False, None
 
@@ -762,6 +777,109 @@ class AttendanceService:
                 assign_to_cycle(session)
         return session, True, None
 
+    # ── Double lessons ────────────────────────────────────────────────────
+    # A two-hour lesson that counts as two sessions is stored as two Session
+    # rows on the same date (slot 1 and slot 2). Everything that counts
+    # lessons — cycles, invoices, settlements, the sheets — counts rows, so
+    # nothing there needed to learn about "weights". Slot 2 is a shadow: its
+    # attendance always mirrors slot 1 (``sync_twins``), and every per-date
+    # lookup (scanner, absence rule, desk edits, messages) works on slot 1.
+
+    @staticmethod
+    def twins_of(session):
+        """The extra hour(s) of ``session``'s double lesson (none for a
+        single lesson, and none when ``session`` is itself a twin)."""
+        if session.slot != 1:
+            return Session.objects.none()
+        return Session.objects.filter(
+            group_id=session.group_id, session_date=session.session_date, slot__gt=1,
+        ).select_related('cycle', 'group')
+
+    @staticmethod
+    def sync_twins(student, session):
+        """Copy ``student``'s row on ``session`` (slot 1) onto its twins —
+        created, changed or removed — and re-count each twin's invoice."""
+        twins = list(AttendanceService.twins_of(session))
+        if not twins:
+            return
+        source = Attendance.objects.filter(student=student, session=session).first()
+        for twin in twins:
+            if twin.is_cancelled:
+                continue
+            target = Attendance.objects.filter(student=student, session=twin).first()
+            if source is None:
+                if target is not None:
+                    target.delete()
+            else:
+                fields = {
+                    'status': source.status, 'scan_time': source.scan_time,
+                    'supervisor_id': source.supervisor_id, 'note': source.note,
+                    'rejection_reason': source.rejection_reason,
+                    'exception_record_id': source.exception_record_id,
+                }
+                if target is None:
+                    Attendance.objects.create(student=student, session=twin, **fields)
+                else:
+                    Attendance.objects.filter(pk=target.pk).update(**fields)
+            AttendanceService.count_on_own_cycle(student, twin)
+
+    @staticmethod
+    def follow_cancellation(session):
+        """After ``session`` (slot 1) was cancelled or restored, give its
+        twins the same state so the second hour stops (or starts) counting."""
+        from apps.teachers.cycles import renumber_cycle
+        from .entitlement import recount_cycle
+        cycles = set()
+        for twin in AttendanceService.twins_of(session):
+            if twin.is_cancelled != session.is_cancelled:
+                twin.is_cancelled = session.is_cancelled
+                twin.cancellation_reason = session.cancellation_reason
+                twin.save(update_fields=['is_cancelled', 'cancellation_reason'])
+                if twin.cycle_id:
+                    cycles.add(twin.cycle)
+        for cycle in cycles:
+            renumber_cycle(cycle)
+            recount_cycle(cycle)
+
+    @staticmethod
+    def make_double(session):
+        """Make ``session`` count as two lessons: add its slot-2 twin in the
+        same cycle, copy every attendance row onto it and re-count. Returns
+        ``(twin, error)``."""
+        from apps.teachers.cycles import _renumber
+        if session.slot != 1:
+            return None, 'دي الساعة التانية من حصة مزدوجة بالفعل'
+        if session.is_cancelled:
+            return None, 'الحصة ملغية'
+        if AttendanceService.twins_of(session).exists():
+            return None, 'الحصة دي متسجلة حصتين بالفعل'
+        with transaction.atomic():
+            twin = Session.objects.create(
+                group=session.group, session_date=session.session_date, slot=2,
+                teacher_attended=session.teacher_attended, cycle=session.cycle,
+                notification_sent=True,  # the family hears about the lesson once
+            )
+            if session.cycle_id:
+                _renumber(session.cycle)
+            for student in Student.objects.filter(
+                pk__in=Attendance.objects.filter(session=session).values('student_id')
+            ):
+                AttendanceService.sync_twins(student, session)
+        return twin, None
+
+    @staticmethod
+    def undo_double(session):
+        """Back to one lesson: delete the twins of ``session`` (or ``session``
+        itself when it is the twin). Returns ``(ok, message)``."""
+        targets = [session] if session.slot != 1 else list(AttendanceService.twins_of(session))
+        if not targets:
+            return False, 'الحصة دي مش مزدوجة'
+        for twin in targets:
+            ok, info = AttendanceService.delete_session(twin)
+            if not ok:
+                return False, info
+        return True, 'رجعت حصة واحدة'
+
     @staticmethod
     def delete_session(session):
         """
@@ -784,13 +902,19 @@ class AttendanceService:
         group = session.group
         today = timezone.localdate()
         age = (today - session.session_date).days
-        if 0 <= age <= SESSION_BACKFILL_DAYS and group.get_schedule_for_day(session.session_date.strftime('%A')):
+        # A double lesson's second hour (slot 2) is never recreated by the
+        # absence task, so it can always go; the first hour takes its twins
+        # with it.
+        if (session.slot == 1 and 0 <= age <= SESSION_BACKFILL_DAYS
+                and group.get_schedule_for_day(session.session_date.strftime('%A'))):
             return False, (
                 'هذه الحصة في موعد المجموعة خلال الأيام الأخيرة — النظام سيعيد إنشاءها تلقائيًا. '
                 'استخدم "إلغاء الحصة" بدلاً من الحذف.'
             )
 
         with transaction.atomic():
+            for twin in AttendanceService.twins_of(session):
+                AttendanceService.delete_session(twin)
             student_ids = list(
                 Attendance.objects.filter(session=session).values_list('student_id', flat=True)
             )
@@ -923,6 +1047,7 @@ class AttendanceService:
                 queue_attendance_correction(session.session_id, student.pk)
 
             AttendanceService.recount_after_change(student, session)
+            AttendanceService.sync_twins(student, session)
 
         labels = dict(Attendance.STATUS_CHOICES)
         was = f' (كان «{labels.get(old_status, old_status)}»)' if old_status else ''
@@ -965,7 +1090,7 @@ class AttendanceService:
         unexplained absence. Never touches an existing row."""
         with transaction.atomic():
             session, session_created = Session.objects.get_or_create(
-                group=group, session_date=timezone.localdate(),
+                group=group, session_date=timezone.localdate(), slot=1,
                 defaults={'teacher_attended': False},
             )
             if session_created:
@@ -982,6 +1107,7 @@ class AttendanceService:
             )
             if created:
                 AttendanceService.count_on_own_cycle(student, session)
+                AttendanceService.sync_twins(student, session)
 
     @staticmethod
     def count_on_own_cycle(student, session):
@@ -1266,6 +1392,7 @@ class AttendanceService:
                 queue_attendance_correction(session.session_id, student.pk)
 
         AttendanceService.update_payment_sessions(student, group)
+        AttendanceService.sync_twins(student, session)
         return attendance
     
     @staticmethod

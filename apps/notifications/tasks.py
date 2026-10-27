@@ -294,6 +294,7 @@ def send_attendance_notifications_task():
             group__is_active=True,
             group__deleted_at__isnull=True,
             notification_sent=False,  # BUG-05: the flag is finally read
+            slot=1,  # a double lesson's second hour is not a second message
         )
         .select_related('group', 'group__teacher')
         .prefetch_related('group__schedules')

@@ -113,7 +113,7 @@ class Command(BaseCommand):
         with transaction.atomic():
             for d, group in missing:
                 session, was_created = Session.objects.get_or_create(
-                    group=group, session_date=d,
+                    group=group, session_date=d, slot=1,
                     defaults={'teacher_attended': False},
                 )
                 if was_created:
